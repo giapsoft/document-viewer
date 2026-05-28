@@ -1,5 +1,4 @@
-import { useRef, useEffect, type CSSProperties, type ReactNode } from 'react';
-import type { AppStyles, Component, LoadedProject, SelectionState } from '../types';
+import { useRef, useEffect, type CSSProperties, type ReactNode } from 'react';import type { AppStyles, Component, LoadedProject, SelectionState } from '../types';
 import { resolveComponentForDisplay, isTextType, getRefTargetId } from '../lib/resolveRef';
 import { formatPageName } from '../lib/formatPageName';
 import { scrollElementIntoContainer } from '../lib/scrollIntoContainer';
@@ -211,6 +210,7 @@ export function PagePanel({
 }: PagePanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const componentRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const handledScrollNonceRef = useRef(0);
   const page = project.pages.find((p) => p.fileName === pageFile);
 
   const registerRef = (id: string, el: HTMLElement | null) => {
@@ -227,7 +227,10 @@ export function PagePanel({
 
   useEffect(() => {
     if (!scrollToComponentId || scrollNonce === 0 || !expanded) return;
+    if (handledScrollNonceRef.current === scrollNonce) return;
     if (!page?.components.some((c) => c.id === scrollToComponentId)) return;
+
+    handledScrollNonceRef.current = scrollNonce;
 
     let cancelled = false;
 
@@ -249,7 +252,7 @@ export function PagePanel({
       cancelled = true;
       cancelAnimationFrame(frame);
     };
-  }, [scrollToComponentId, scrollNonce, expanded, page]);
+  }, [scrollToComponentId, scrollNonce, expanded, pageFile]);
 
   if (!page) return null;
 
