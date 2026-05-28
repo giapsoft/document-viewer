@@ -8,6 +8,8 @@ import type {
 } from '../types';
 import { findComponent } from '../lib/projectMutations';
 import { formatPageName } from '../lib/formatPageName';
+import type { ImportImageResult } from '../lib/importImage';
+import { ImagePickerDialog } from './ImagePickerDialog';
 import { RefTargetPickerDialog } from './RefTargetPickerDialog';
 
 const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'ref'];
@@ -23,6 +25,8 @@ interface EditBarProps {
   ) => void;
   onInsertAbove: (pageFile: string, anchorComponentId: string) => void;
   onInsertBelow: (pageFile: string, anchorComponentId: string) => void;
+  onImportImage?: () => Promise<ImportImageResult>;
+  onImportImageFromClipboard?: () => Promise<ImportImageResult>;
 }
 
 export function EditBar({
@@ -31,7 +35,11 @@ export function EditBar({
   onUpdate,
   onInsertAbove,
   onInsertBelow,
+  onImportImage,
+  onImportImageFromClipboard,
 }: EditBarProps) {
+  const [expanded, setExpanded] = useState(true);
+
   if (!selection) {
     return (
       <footer className="edit-bar edit-bar-empty">
@@ -50,6 +58,52 @@ export function EditBar({
   }
 
   const { pageFile, component } = located;
+
+  return (
+    <EditBarForm
+      key={component.id}
+      project={project}
+      selection={selection}
+      pageFile={pageFile}
+      component={component}
+      expanded={expanded}
+      onToggleExpanded={() => setExpanded((value) => !value)}
+      onUpdate={onUpdate}
+      onInsertAbove={onInsertAbove}
+      onInsertBelow={onInsertBelow}
+      onImportImage={onImportImage}
+      onImportImageFromClipboard={onImportImageFromClipboard}
+    />
+  );
+}
+
+interface EditBarFormProps {
+  project: LoadedProject;
+  selection: SelectionState;
+  pageFile: string;
+  component: Component;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  onUpdate: EditBarProps['onUpdate'];
+  onInsertAbove: EditBarProps['onInsertAbove'];
+  onInsertBelow: EditBarProps['onInsertBelow'];
+  onImportImage?: EditBarProps['onImportImage'];
+  onImportImageFromClipboard?: EditBarProps['onImportImageFromClipboard'];
+}
+
+function EditBarForm({
+  project,
+  selection,
+  pageFile,
+  component,
+  expanded,
+  onToggleExpanded,
+  onUpdate,
+  onInsertAbove,
+  onInsertBelow,
+  onImportImage,
+  onImportImageFromClipboard,
+}: EditBarFormProps) {
   const [idDraft, setIdDraft] = useState(component.id);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -67,117 +121,158 @@ export function EditBar({
     : null;
   const refTargetLabel = refTargetValid ? refTargetId : 'Select component';
 
+  const imgFilename = component.content.trim();
+  const imgLabel = imgFilename || 'select image';
+
+  const listBadge =
+    selection.matchingGroupIndices.length > 1 ? (
+      <span className="edit-bar-list-badge">{selection.matchingGroupIndices.length} lists</span>
+    ) : null;
+
   return (
-    <footer className="edit-bar">
-      <div className="edit-bar-header">
-        <strong>Edit</strong>
-        <span className="edit-bar-context">
-          <span className="edit-bar-page">{formatPageName(pageFile)}</span>
-          <code className="edit-bar-component-id">{component.id}</code>
-          {selection.matchingGroupIndices.length > 1 && (
-            <span className="edit-bar-list-badge">
-              In {selection.matchingGroupIndices.length} lists
-            </span>
-          )}
-          {selection.matchingGroupIndices.length === 1 && (
-            <span className="edit-bar-list-badge edit-bar-list-badge-single">
-              In 1 list
-            </span>
-          )}
-        </span>
-      </div>
-
-      <div className="edit-bar-actions">
-        <button
-          type="button"
-          className="edit-bar-btn"
-          onClick={() => onInsertAbove(pageFile, component.id)}
-          title="Insert new component above"
-        >
-          ↑ Insert above
-        </button>
-        <button
-          type="button"
-          className="edit-bar-btn"
-          onClick={() => onInsertBelow(pageFile, component.id)}
-          title="Insert new component below"
-        >
-          ↓ Insert below
-        </button>
-      </div>
-
-      <div className="edit-bar-fields">
-        <label className="edit-field edit-field-id">
-          <span>ID</span>
-          <input
-            type="text"
-            value={idDraft}
-            onChange={(e) => setIdDraft(e.target.value)}
-            onBlur={() => {
-              if (idDraft.trim() && idDraft !== component.id) {
-                patch({ id: idDraft.trim() });
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') e.currentTarget.blur();
-            }}
-          />
-        </label>
-
-        <label className="edit-field">
-          <span>Type</span>
-          <select
-            value={component.type}
-            onChange={(e) => patch({ type: e.target.value as ComponentType })}
+    <footer className={`edit-bar ${expanded ? 'edit-bar-expanded' : 'edit-bar-collapsed'}`}>
+      {!expanded ? (
+        <div className="edit-bar-top">
+          <button
+            type="button"
+            className="edit-bar-toggle"
+            onClick={onToggleExpanded}
+            aria-expanded={false}
+            title="Expand editor"
           >
-            {TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="edit-field">
-          <span>Status</span>
-          <select
-            value={component.status}
-            onChange={(e) => patch({ status: e.target.value as ComponentStatus })}
+            ▶
+          </button>
+          <button
+            type="button"
+            className="edit-bar-collapsed-summary"
+            onClick={onToggleExpanded}
+            title="Expand editor"
           >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="edit-field edit-field-content">
-          <span>
-            {component.type === 'img'
-              ? 'Image file'
-              : component.type === 'ref'
-                ? 'Target'
-                : 'Content'}
-          </span>
-          {component.type === 'ref' ? (
+            <span className="edit-bar-icon" aria-hidden>
+              ✎
+            </span>
+            <span className="edit-bar-page">{formatPageName(pageFile)}</span>
+            <span className="edit-bar-sep">·</span>
+            <code className="edit-bar-component-id">{component.id}</code>
+            <span className="edit-bar-sep">·</span>
+            <span>{component.type}</span>
+            <span className="edit-bar-sep">·</span>
+            <span>{component.status}</span>
+          </button>
+        </div>
+      ) : (
+        <div className="edit-bar-expanded-inner">
+          <div className="edit-bar-row">
             <button
               type="button"
-              className="ref-target-picker-btn"
-              onClick={() => setPickerOpen(true)}
+              className="edit-bar-toggle"
+              onClick={onToggleExpanded}
+              aria-expanded
+              title="Collapse editor"
             >
-              {refTargetLabel}
+              ▼
             </button>
-          ) : (
+            <span className="edit-bar-icon" title="Edit component" aria-hidden>
+              ✎
+            </span>
+            <span className="edit-bar-meta">
+              <span className="edit-bar-page">{formatPageName(pageFile)}</span>
+              <code className="edit-bar-component-id">{component.id}</code>
+              {listBadge}
+            </span>
+            <div className="edit-bar-actions">
+              <button
+                type="button"
+                className="edit-bar-icon-btn"
+                onClick={() => onInsertAbove(pageFile, component.id)}
+                title="Insert above"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="edit-bar-icon-btn"
+                onClick={() => onInsertBelow(pageFile, component.id)}
+                title="Insert below"
+              >
+                ↓
+              </button>
+            </div>
+            <div className="edit-bar-fields">
+              <input
+                className="edit-bar-input edit-bar-input-id"
+                type="text"
+                value={idDraft}
+                title="ID"
+                placeholder="ID"
+                onChange={(e) => setIdDraft(e.target.value)}
+                onBlur={() => {
+                  if (idDraft.trim() && idDraft !== component.id) {
+                    patch({ id: idDraft.trim() });
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                }}
+              />
+              <select
+                className="edit-bar-input edit-bar-input-type"
+                value={component.type}
+                title="Type"
+                onChange={(e) => patch({ type: e.target.value as ComponentType })}
+              >
+                {TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="edit-bar-input edit-bar-input-status"
+                value={component.status}
+                title="Status"
+                onChange={(e) => patch({ status: e.target.value as ComponentStatus })}
+              >
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              {component.type === 'ref' && (
+                <button
+                  type="button"
+                  className="edit-bar-input edit-bar-ref-target"
+                  onClick={() => setPickerOpen(true)}
+                  title="Ref target"
+                >
+                  {refTargetLabel}
+                </button>
+              )}
+              {component.type === 'img' && (
+                <button
+                  type="button"
+                  className="edit-bar-input edit-bar-ref-target"
+                  onClick={() => setPickerOpen(true)}
+                  title="Image file"
+                >
+                  {imgLabel}
+                </button>
+              )}
+            </div>
+          </div>
+          {component.type !== 'ref' && component.type !== 'img' && (
             <textarea
-              rows={2}
+              className="edit-bar-input edit-bar-input-content"
+              rows={3}
               value={component.content}
-              placeholder={component.type === 'img' ? 'image.png' : 'Text content…'}
+              title="Content"
+              placeholder="Content…"
               onChange={(e) => patch({ content: e.target.value })}
             />
           )}
-        </label>
-      </div>
+        </div>
+      )}
 
       {pickerOpen && component.type === 'ref' && (
         <RefTargetPickerDialog
@@ -186,6 +281,17 @@ export function EditBar({
           targetId={component.content}
           onSelect={(targetId) => patch({ content: targetId })}
           onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {pickerOpen && component.type === 'img' && (
+        <ImagePickerDialog
+          project={project}
+          selectedFilename={component.content}
+          onSelect={(filename) => patch({ content: filename })}
+          onClose={() => setPickerOpen(false)}
+          onImport={onImportImage}
+          onImportFromClipboard={onImportImageFromClipboard}
         />
       )}
     </footer>

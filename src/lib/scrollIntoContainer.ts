@@ -20,43 +20,66 @@ export function scrollToComponentInContainer(
   container: HTMLElement | null,
   componentRefs: Map<string, HTMLElement>,
   componentId: string,
-): void {
+): boolean {
   const element = componentRefs.get(componentId);
   if (container && element) {
     scrollElementIntoContainer(container, element);
+    return true;
   }
+  return false;
 }
+
+const SCROLL_RETRY_DELAYS_MS = [0, 0, 0, 50, 100, 200, 350, 500];
 
 export function scheduleScrollToComponent(
   scrollRef: { current: HTMLDivElement | null },
   componentRefs: { current: Map<string, HTMLElement> },
   componentId: string,
   panelRef?: { current: HTMLElement | null },
+  onDone?: (success: boolean) => void,
 ): () => void {
   let cancelled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
-  const runScroll = () => {
-    if (cancelled) return;
+  const runScrollWithRetry = () => {
+    let attempt = 0;
+
     const tryScroll = () => {
       if (cancelled) return;
-      scrollToComponentInContainer(
+
+      if (scrollToComponentInContainer(
         scrollRef.current,
         componentRefs.current,
         componentId,
-      );
+      )) {
+        if (!cancelled) onDone?.(true);
+        return;
+      }
+
+      attempt += 1;
+      if (attempt >= SCROLL_RETRY_DELAYS_MS.length) {
+        if (!cancelled) onDone?.(false);
+        return;
+      }
+
+      const delay = SCROLL_RETRY_DELAYS_MS[attempt];
+      if (delay === 0) {
+        requestAnimationFrame(tryScroll);
+      } else {
+        timer = setTimeout(tryScroll, delay);
+      }
     };
-    requestAnimationFrame(() => {
-      tryScroll();
-      requestAnimationFrame(tryScroll);
-    });
+
+    tryScroll();
   };
 
   const panel = panelRef?.current;
   // Shrunk panels are 36px wide; wait for the expand transition before measuring layout.
   if (!panel || panel.offsetWidth > 48) {
-    runScroll();
+    runScrollWithRetry();
     return () => {
       cancelled = true;
+      if (timer !== undefined) clearTimeout(timer);
     };
   }
 
@@ -66,7 +89,7 @@ export function scheduleScrollToComponent(
     finished = true;
     panel.removeEventListener('transitionend', onTransitionEnd);
     clearTimeout(fallbackTimer);
-    runScroll();
+    runScrollWithRetry();
   };
 
   const onTransitionEnd = (e: TransitionEvent) => {
@@ -82,5 +105,6 @@ export function scheduleScrollToComponent(
     finished = true;
     panel.removeEventListener('transitionend', onTransitionEnd);
     clearTimeout(fallbackTimer);
+    if (timer !== undefined) clearTimeout(timer);
   };
 }

@@ -15,7 +15,7 @@
     "id": "i-intro",
     "type": "img",
     "status": "done",
-    "content": "overview.png"
+    "content": "clipboard.png"
   },
   {
     "id": "intro-f01",

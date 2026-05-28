@@ -120,6 +120,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...applied,
         selectionHistory: history,
         selectionHistoryIndex: index,
+        scrollToComponent: null,
         selectionScrollNonce: state.selectionScrollNonce + 1,
       };
     }
@@ -136,6 +137,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         ...applied,
         currentPage: state.currentPage,
+        scrollToComponent: null,
         selectionScrollNonce: state.selectionScrollNonce + 1,
       };
     }
@@ -452,6 +454,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         linkFocusComponentId: componentId,
         currentPage: pageFile,
         selection: null,
+      };
+    }
+
+    case 'ADD_IMAGE': {
+      if (!state.project) return state;
+      const imageUrls = new Map(state.project.imageUrls);
+      imageUrls.set(action.filename, action.objectUrl);
+      return {
+        ...state,
+        project: { ...state.project, imageUrls },
       };
     }
 

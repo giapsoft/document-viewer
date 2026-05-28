@@ -237,7 +237,7 @@ export function PagePanel({
   const componentRefs = useRef<Map<string, HTMLElement>>(new Map());
   const handledScrollNonceRef = useRef(0);
   const handledSelectionScrollRef = useRef(0);
-  const wasExpandedRef = useRef(expanded);
+  const wasExpandedRef = useRef(false);
   const page = project.pages.find((p) => p.fileName === pageFile);
 
   const registerRef = (id: string, el: HTMLElement | null) => {
@@ -257,30 +257,24 @@ export function PagePanel({
     if (handledScrollNonceRef.current === scrollNonce) return;
     if (!page?.components.some((c) => c.id === scrollToComponentId)) return;
 
-    handledScrollNonceRef.current = scrollNonce;
     return scheduleScrollToComponent(
       scrollRef,
       componentRefs,
       scrollToComponentId,
       panelRef,
+      () => {
+        handledScrollNonceRef.current = scrollNonce;
+      },
     );
   }, [scrollToComponentId, scrollNonce, expanded, pageFile]);
 
   useEffect(() => {
     if (!expanded || selectionScrollNonce === 0 || linkMode) return;
-    if (handledSelectionScrollRef.current === selectionScrollNonce) return;
     if (isCurrent) {
       handledSelectionScrollRef.current = selectionScrollNonce;
       return;
     }
-    if (
-      scrollToComponentId &&
-      scrollNonce > 0 &&
-      page?.components.some((c) => c.id === scrollToComponentId)
-    ) {
-      handledSelectionScrollRef.current = selectionScrollNonce;
-      return;
-    }
+    if (handledSelectionScrollRef.current === selectionScrollNonce) return;
     if (!page) return;
 
     const targetId = getFirstSelectedComponentId(
@@ -294,8 +288,15 @@ export function PagePanel({
       return;
     }
 
-    handledSelectionScrollRef.current = selectionScrollNonce;
-    return scheduleScrollToComponent(scrollRef, componentRefs, targetId, panelRef);
+    return scheduleScrollToComponent(
+      scrollRef,
+      componentRefs,
+      targetId,
+      panelRef,
+      () => {
+        handledSelectionScrollRef.current = selectionScrollNonce;
+      },
+    );
   }, [
     selectionScrollNonce,
     expanded,
@@ -305,8 +306,6 @@ export function PagePanel({
     selection,
     linkMode,
     linkGroupMembers,
-    scrollToComponentId,
-    scrollNonce,
   ]);
 
   useEffect(() => {
@@ -317,7 +316,7 @@ export function PagePanel({
 
     const justExpanded = !wasExpandedRef.current;
     wasExpandedRef.current = true;
-    if (!justExpanded || !page) return;
+    if (!justExpanded || !page || isCurrent || linkMode) return;
 
     const targetId = getFirstSelectedComponentId(
       page,
@@ -328,7 +327,7 @@ export function PagePanel({
     if (!targetId) return;
 
     return scheduleScrollToComponent(scrollRef, componentRefs, targetId, panelRef);
-  }, [expanded, pageFile, page, selection, linkMode, linkGroupMembers]);
+  }, [expanded, pageFile, page, selection, linkMode, linkGroupMembers, isCurrent]);
 
   if (!page) return null;
 

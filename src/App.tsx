@@ -31,6 +31,8 @@ export default function App() {
     goNextGroup,
     goPrevLinkGroup,
     goNextLinkGroup,
+    importImage,
+    importImageFromClipboard,
   } = useAppStore();
 
   const canGoBack = state.selectionHistoryIndex > 0;
@@ -168,6 +170,8 @@ export default function App() {
           onUpdate={updateComponent}
           onInsertAbove={insertComponentAbove}
           onInsertBelow={insertComponentBelow}
+          onImportImage={importImage}
+          onImportImageFromClipboard={importImageFromClipboard}
         />
       </main>
     </div>

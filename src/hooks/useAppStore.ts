@@ -7,6 +7,7 @@ import {
   cancelAutoSave,
   type SaveStatus,
 } from '../lib/saveProject';
+import { importImageFromComputer, importImageFromClipboard, type ImportImageResult } from '../lib/importImage';
 
 const PERSIST_ACTIONS = new Set<AppAction['type']>([
   'UPDATE_COMPONENT',
@@ -154,6 +155,40 @@ export function useAppStore() {
     dispatch({ type: 'GO_NEXT_LINK_GROUP' });
   }, [dispatch]);
 
+  const importImage = useCallback(async (): Promise<ImportImageResult> => {
+    const project = projectRef.current;
+    if (!project) {
+      return { ok: false, error: 'No project is open.' };
+    }
+
+    const result = await importImageFromComputer(project);
+    if (result.ok) {
+      dispatch({
+        type: 'ADD_IMAGE',
+        filename: result.filename,
+        objectUrl: result.objectUrl,
+      });
+    }
+    return result;
+  }, [dispatch]);
+
+  const importImageFromClipboardAction = useCallback(async (): Promise<ImportImageResult> => {
+    const project = projectRef.current;
+    if (!project) {
+      return { ok: false, error: 'No project is open.' };
+    }
+
+    const result = await importImageFromClipboard(project);
+    if (result.ok) {
+      dispatch({
+        type: 'ADD_IMAGE',
+        filename: result.filename,
+        objectUrl: result.objectUrl,
+      });
+    }
+    return result;
+  }, [dispatch]);
+
   return {
     state,
     saveStatus,
@@ -176,5 +211,7 @@ export function useAppStore() {
     goNextGroup,
     goPrevLinkGroup,
     goNextLinkGroup,
+    importImage,
+    importImageFromClipboard: importImageFromClipboardAction,
   };
 }
