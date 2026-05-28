@@ -165,7 +165,7 @@
     "id": "b8",
     "type": "body",
     "status": "working",
-    "content": "★ b8 — linked to b2 on detail.p"
+    "content": "★ b8 — linked to 2lists-bridge on detail.p"
   },
   {
     "id": "specs-f25",

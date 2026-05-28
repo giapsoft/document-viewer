@@ -74,6 +74,16 @@ export function EditBar({
         <span className="edit-bar-context">
           <span className="edit-bar-page">{formatPageName(pageFile)}</span>
           <code className="edit-bar-component-id">{component.id}</code>
+          {selection.matchingGroupIndices.length > 1 && (
+            <span className="edit-bar-list-badge">
+              In {selection.matchingGroupIndices.length} lists
+            </span>
+          )}
+          {selection.matchingGroupIndices.length === 1 && (
+            <span className="edit-bar-list-badge edit-bar-list-badge-single">
+              In 1 list
+            </span>
+          )}
         </span>
       </div>
 

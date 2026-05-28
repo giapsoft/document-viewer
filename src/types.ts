@@ -93,9 +93,13 @@ export interface AppState {
   linkMode: boolean;
   /** Which relations.groups entry is being edited in link mode */
   linkTargetGroupIndex: number | null;
+  /** Component whose containing lists are used for link list navigation */
+  linkFocusComponentId: string | null;
   selectionHistory: SelectionHistoryEntry[];
   selectionHistoryIndex: number;
   scrollToComponent: { componentId: string; nonce: number } | null;
+  /** Bumped when selection/group changes — each panel scrolls to first related component */
+  selectionScrollNonce: number;
 }
 
 export interface SelectionHistoryEntry {

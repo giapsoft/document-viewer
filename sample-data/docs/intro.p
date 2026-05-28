@@ -69,7 +69,7 @@
     "id": "b1",
     "type": "body",
     "status": "done",
-    "content": "★ HUB b1 — trace to b2 (detail), b4 (appendix), b6 (detail page)"
+    "content": "★ HUB b1 — trace to 2lists-bridge (detail), b4 (appendix), b6 (detail page)"
   },
   {
     "id": "intro-f09",
@@ -255,7 +255,7 @@
     "id": "r1",
     "type": "ref",
     "status": "pending",
-    "content": "b2"
+    "content": "2lists-bridge"
   },
   {
     "id": "intro-f35",

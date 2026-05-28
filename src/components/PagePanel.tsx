@@ -214,6 +214,7 @@ interface PagePanelProps {
   onClearSelection: () => void;
   scrollToComponentId?: string | null;
   scrollNonce?: number;
+  selectionScrollNonce?: number;
 }
 
 export function PagePanel({
@@ -229,11 +230,13 @@ export function PagePanel({
   onClearSelection,
   scrollToComponentId = null,
   scrollNonce = 0,
+  selectionScrollNonce = 0,
 }: PagePanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const componentRefs = useRef<Map<string, HTMLElement>>(new Map());
   const handledScrollNonceRef = useRef(0);
+  const handledSelectionScrollRef = useRef(0);
   const wasExpandedRef = useRef(expanded);
   const page = project.pages.find((p) => p.fileName === pageFile);
 
@@ -262,6 +265,49 @@ export function PagePanel({
       panelRef,
     );
   }, [scrollToComponentId, scrollNonce, expanded, pageFile]);
+
+  useEffect(() => {
+    if (!expanded || selectionScrollNonce === 0 || linkMode) return;
+    if (handledSelectionScrollRef.current === selectionScrollNonce) return;
+    if (isCurrent) {
+      handledSelectionScrollRef.current = selectionScrollNonce;
+      return;
+    }
+    if (
+      scrollToComponentId &&
+      scrollNonce > 0 &&
+      page?.components.some((c) => c.id === scrollToComponentId)
+    ) {
+      handledSelectionScrollRef.current = selectionScrollNonce;
+      return;
+    }
+    if (!page) return;
+
+    const targetId = getFirstSelectedComponentId(
+      page,
+      selection,
+      linkMode,
+      linkGroupMembers,
+    );
+    if (!targetId) {
+      handledSelectionScrollRef.current = selectionScrollNonce;
+      return;
+    }
+
+    handledSelectionScrollRef.current = selectionScrollNonce;
+    return scheduleScrollToComponent(scrollRef, componentRefs, targetId, panelRef);
+  }, [
+    selectionScrollNonce,
+    expanded,
+    isCurrent,
+    pageFile,
+    page,
+    selection,
+    linkMode,
+    linkGroupMembers,
+    scrollToComponentId,
+    scrollNonce,
+  ]);
 
   useEffect(() => {
     if (!expanded) {

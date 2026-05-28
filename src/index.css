@@ -244,11 +244,30 @@ code {
 .link-mode-bar {
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   padding: 0.45rem 0.75rem;
   background: #fff;
   border-bottom: 1px solid #dee2e6;
+}
+
+.link-list-nav {
+  background: #e7f1ff;
+  border: 1px solid #86b7fe;
+  border-radius: 6px;
+  padding: 0.2rem 0.35rem;
+}
+
+.link-focus-badge {
+  font-size: 0.78rem;
+  color: #495057;
+  white-space: nowrap;
+}
+
+.link-focus-badge code {
+  font-size: 0.78rem;
+  color: #0d6efd;
 }
 
 .sidebar-expand-btn {
@@ -659,6 +678,24 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.edit-bar-list-badge {
+  display: inline-block;
+  margin-top: 0.15rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #e7f1ff;
+  color: #0d6efd;
+  width: fit-content;
+}
+
+.edit-bar-list-badge-single {
+  background: #f1f3f5;
+  color: #6c757d;
+  font-weight: 500;
 }
 
 .edit-bar-actions {

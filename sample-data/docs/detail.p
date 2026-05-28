@@ -66,10 +66,10 @@
     "content": "[DETAIL 10] Filler — extends the page to test scrollbar markers.\nSecond line adds block height."
   },
   {
-    "id": "b2",
+    "id": "2lists-bridge",
     "type": "body",
     "status": "working",
-    "content": "★ HUB b2 — 4 pages: intro, detail, appendix, specs"
+    "content": "★ 2 LISTS — bridge node (in group A with b1,b4,b6 AND group B with b3,b7,b8,b9)"
   },
   {
     "id": "detail-f11",
@@ -249,7 +249,7 @@
     "id": "b6",
     "type": "body",
     "status": "done",
-    "content": "★ b6 — linked to b1 and b2 (same page as b2)"
+    "content": "★ b6 — linked to b1 and 2lists-bridge (same page)"
   },
   {
     "id": "detail-f37",

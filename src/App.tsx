@@ -6,6 +6,7 @@ import { LinkModeToggle } from './components/LinkModeToggle';
 import { SaveIndicator } from './components/SaveIndicator';
 import { useAppStore } from './hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from './hooks/useSelectionNavigationShortcuts';
+import { getGroupIndicesForComponent } from './lib/groupRelations';
 
 export default function App() {
   const {
@@ -57,20 +58,31 @@ export default function App() {
   const matchingGroupPosition =
     activeGroupIndex === null ? -1 : matchingGroupIndices.indexOf(activeGroupIndex);
   const showGroupNav = !state.linkMode && matchingGroupIndices.length > 1;
-  const groupNavLabel =
-    showGroupNav && matchingGroupPosition >= 0
-      ? `Group ${matchingGroupPosition + 1}/${matchingGroupIndices.length}`
-      : null;
+  const groupNavLabel = showGroupNav
+    ? `Group ${(matchingGroupPosition >= 0 ? matchingGroupPosition : 0) + 1}/${matchingGroupIndices.length}`
+    : null;
 
   const groups = state.project.relations.groups;
   const linkTargetGroupIndex = state.linkTargetGroupIndex;
+  const linkMatchingGroupIndices = state.linkFocusComponentId
+    ? getGroupIndicesForComponent(groups, state.linkFocusComponentId)
+    : [];
+  const resolvedLinkTargetIndex =
+    linkTargetGroupIndex !== null &&
+    linkMatchingGroupIndices.includes(linkTargetGroupIndex)
+      ? linkTargetGroupIndex
+      : (linkMatchingGroupIndices[0] ?? null);
   const linkGroupMembers =
-    state.linkMode && linkTargetGroupIndex !== null
-      ? new Set(groups[linkTargetGroupIndex] ?? [])
+    state.linkMode && resolvedLinkTargetIndex !== null
+      ? new Set(groups[resolvedLinkTargetIndex] ?? [])
       : new Set<string>();
-  const showLinkGroupNav = state.linkMode && groups.length > 0;
+  const showLinkGroupNav = state.linkMode && linkMatchingGroupIndices.length > 1;
+  const linkTargetPosition =
+    resolvedLinkTargetIndex !== null
+      ? linkMatchingGroupIndices.indexOf(resolvedLinkTargetIndex)
+      : -1;
   const linkGroupNavLabel = showLinkGroupNav
-    ? `List ${(linkTargetGroupIndex ?? 0) + 1}/${groups.length}`
+    ? `List ${linkTargetPosition + 1}/${linkMatchingGroupIndices.length}`
     : null;
 
   return (
@@ -120,6 +132,7 @@ export default function App() {
           canGoPrevLinkGroup={showLinkGroupNav}
           canGoNextLinkGroup={showLinkGroupNav}
           linkGroupNavLabel={linkGroupNavLabel}
+          linkFocusComponentId={state.linkFocusComponentId}
           onLinkGroupPrev={goPrevLinkGroup}
           onLinkGroupNext={goNextLinkGroup}
           linkTargetMemberCount={linkGroupMembers.size}
@@ -144,6 +157,7 @@ export default function App() {
               onClearSelection={clearSelection}
               scrollToComponentId={state.scrollToComponent?.componentId ?? null}
               scrollNonce={state.scrollToComponent?.nonce ?? 0}
+              selectionScrollNonce={state.selectionScrollNonce}
             />
           ))}
         </div>

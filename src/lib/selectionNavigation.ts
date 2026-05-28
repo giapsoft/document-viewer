@@ -63,10 +63,11 @@ export function buildSelectionForComponent(
     resolvedGroupIndex = matchingGroupIndices[0];
   }
 
+  const activeGroup = resolvedGroupIndex === null ? [] : (index.groups[resolvedGroupIndex] ?? []);
   const relatedIds =
-    resolvedGroupIndex === null
+    matchingGroupIndices.length === 0
       ? new Set([componentId])
-      : getRelatedIdsForGroup(componentId, index.groups[resolvedGroupIndex] ?? []);
+      : getRelatedIdsForGroup(componentId, activeGroup);
 
   const hasLinks = relatedIds.size > 1;
 
@@ -83,8 +84,7 @@ export function buildSelectionForComponent(
     };
   }
 
-  const groupMemberOrder =
-    resolvedGroupIndex === null ? [] : (index.groups[resolvedGroupIndex] ?? []);
+  const groupMemberOrder = activeGroup;
 
   const orderedPages = orderPagesForSelection(
     pageFile,

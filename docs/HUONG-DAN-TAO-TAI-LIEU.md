@@ -68,10 +68,11 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 - Một id **có thể nằm ở nhiều nhóm** (node trung gian phục vụ nhiều cụm).
 - Id trong nhóm có thể **khác trang**.
 - Thêm id vào nhóm: append vào **một** mảng nhóm — không cần nối từng cặp.
+- Sample data: id bắt đầu `2lists-` = node thuộc **nhiều nhóm** (vd. `2lists-bridge`).
 
-**Nhiều nhóm:** app có nút ← Group / Group → trên toolbar để đổi nhóm đang xem khi component thuộc >1 nhóm.
+**Nhiều nhóm:** click → highlight **một nhóm** (list đầu tiên chứa component). Nút ← Group / Group → xoay giữa các nhóm — mỗi lần chỉ highlight + mở panel của nhóm đang chọn.
 
-**Link mode:** sửa **một list** tại một thời điểm; dùng ← List / List → để chọn list đang add/remove.
+**Link mode:** sửa **một list** tại một thời điểm; ← List / List → xoay giữa các list **chứa component vừa chọn** (ẩn nếu chỉ thuộc 0–1 list).
 
 ## `ref` vs nhóm
 

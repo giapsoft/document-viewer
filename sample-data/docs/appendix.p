@@ -195,7 +195,7 @@
     "id": "b7",
     "type": "body",
     "status": "working",
-    "content": "★ b7 — linked to b2, b9; referenced by b3"
+    "content": "★ b7 — linked to 2lists-bridge, b9; referenced by b3"
   },
   {
     "id": "appendix-f29",

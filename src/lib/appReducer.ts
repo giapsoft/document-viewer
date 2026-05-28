@@ -11,6 +11,7 @@ import {
   createGroup,
   renameComponentInGroups,
   adjustGroupIndexAfterRemoval,
+  getGroupIndicesForComponent,
 } from './groupRelations';
 import {
   appendSelectionHistory,
@@ -29,15 +30,52 @@ export const initialAppState: AppState = {
   selection: null,
   linkMode: false,
   linkTargetGroupIndex: null,
+  linkFocusComponentId: null,
   selectionHistory: [],
   selectionHistoryIndex: -1,
   scrollToComponent: null,
+  selectionScrollNonce: 0,
 };
 
 function clampLinkTargetIndex(groupsLength: number, index: number | null): number | null {
   if (groupsLength === 0) return null;
   if (index === null || index < 0 || index >= groupsLength) return 0;
   return index;
+}
+
+function resolveLinkTargetForComponent(
+  groups: string[][],
+  componentId: string | null,
+  preferredIndex: number | null,
+): number | null {
+  if (!componentId) return preferredIndex;
+  const matching = getGroupIndicesForComponent(groups, componentId);
+  if (matching.length === 0) return preferredIndex;
+  if (preferredIndex !== null && matching.includes(preferredIndex)) {
+    return preferredIndex;
+  }
+  return matching[0];
+}
+
+function cycleLinkTargetAmongMatching(
+  groups: string[][],
+  componentId: string | null,
+  currentTarget: number | null,
+  direction: 'prev' | 'next',
+): number | null {
+  if (!componentId) return currentTarget;
+  const matching = getGroupIndicesForComponent(groups, componentId);
+  if (matching.length <= 1) return matching[0] ?? currentTarget;
+
+  let pos = currentTarget !== null ? matching.indexOf(currentTarget) : -1;
+  if (pos < 0) pos = 0;
+
+  const nextPos =
+    direction === 'prev'
+      ? (pos - 1 + matching.length) % matching.length
+      : (pos + 1) % matching.length;
+
+  return matching[nextPos];
 }
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -82,6 +120,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...applied,
         selectionHistory: history,
         selectionHistoryIndex: index,
+        selectionScrollNonce: state.selectionScrollNonce + 1,
       };
     }
 
@@ -97,20 +136,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         ...applied,
         currentPage: state.currentPage,
+        selectionScrollNonce: state.selectionScrollNonce + 1,
       };
     }
 
     case 'GO_PREV_LINK_GROUP':
     case 'GO_NEXT_LINK_GROUP': {
       if (!state.linkMode || !state.project) return state;
-      const groupsLength = state.project.relations.groups.length;
-      if (groupsLength === 0) return state;
 
-      const current = clampLinkTargetIndex(groupsLength, state.linkTargetGroupIndex) ?? 0;
-      const next =
-        action.type === 'GO_PREV_LINK_GROUP'
-          ? (current - 1 + groupsLength) % groupsLength
-          : (current + 1) % groupsLength;
+      const next = cycleLinkTargetAmongMatching(
+        state.project.relations.groups,
+        state.linkFocusComponentId,
+        state.linkTargetGroupIndex,
+        action.type === 'GO_PREV_LINK_GROUP' ? 'prev' : 'next',
+      );
 
       return { ...state, linkTargetGroupIndex: next };
     }
@@ -170,7 +209,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'CLEAR_SELECTION':
       if (state.linkMode) {
-        return { ...state, linkTargetGroupIndex: null };
+        return {
+          ...state,
+          linkTargetGroupIndex: null,
+          linkFocusComponentId: null,
+        };
       }
       return { ...state, selection: null };
 
@@ -291,6 +334,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           currentPage: pageFile,
           selection: null,
           linkTargetGroupIndex,
+          linkFocusComponentId: newComponent.id,
         };
       }
 
@@ -324,22 +368,30 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           ...state,
           linkMode: false,
           linkTargetGroupIndex: null,
+          linkFocusComponentId: null,
           selection: state.selection,
         };
       }
 
-      const groupsLength = state.project?.relations.groups.length ?? 0;
-      let linkTargetGroupIndex: number | null = null;
-      if (state.selection?.activeGroupIndex != null) {
-        linkTargetGroupIndex = state.selection.activeGroupIndex;
-      } else if (groupsLength > 0) {
-        linkTargetGroupIndex = 0;
-      }
+      const groups = state.project?.relations.groups ?? [];
+      const linkFocusComponentId = state.selection?.componentId ?? null;
+      const matching = linkFocusComponentId
+        ? getGroupIndicesForComponent(groups, linkFocusComponentId)
+        : [];
+      const preferred =
+        state.selection?.activeGroupIndex !== null &&
+        state.selection?.activeGroupIndex !== undefined &&
+        matching.includes(state.selection.activeGroupIndex)
+          ? state.selection.activeGroupIndex
+          : (matching[0] ?? null);
+      const linkTargetGroupIndex =
+        matching.length > 0 ? preferred : null;
 
       return {
         ...state,
         linkMode: true,
         linkTargetGroupIndex,
+        linkFocusComponentId,
         selection: null,
       };
     }
@@ -351,7 +403,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       if (!state.project.index.componentData.has(componentId)) return state;
 
       let groups = state.project.relations.groups;
-      let linkTargetGroupIndex = state.linkTargetGroupIndex;
+      let linkTargetGroupIndex = resolveLinkTargetForComponent(
+        groups,
+        componentId,
+        state.linkTargetGroupIndex,
+      );
       let removedGroupIndex: number | null = null;
 
       if (linkTargetGroupIndex === null) {
@@ -383,15 +439,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         relations: { groups },
       });
 
-      linkTargetGroupIndex = clampLinkTargetIndex(
-        project.relations.groups.length,
-        linkTargetGroupIndex,
+      linkTargetGroupIndex = resolveLinkTargetForComponent(
+        project.relations.groups,
+        componentId,
+        clampLinkTargetIndex(project.relations.groups.length, linkTargetGroupIndex),
       );
 
       return {
         ...state,
         project,
         linkTargetGroupIndex,
+        linkFocusComponentId: componentId,
         currentPage: pageFile,
         selection: null,
       };

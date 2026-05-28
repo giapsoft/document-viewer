@@ -15,6 +15,7 @@ interface LinkModeToggleProps {
   canGoPrevLinkGroup?: boolean;
   canGoNextLinkGroup?: boolean;
   linkGroupNavLabel?: string | null;
+  linkFocusComponentId?: string | null;
   onLinkGroupPrev?: () => void;
   onLinkGroupNext?: () => void;
   linkTargetMemberCount?: number;
@@ -30,13 +31,14 @@ export function LinkModeToggle({
   onSelectionBack,
   onSelectionNext,
   canGoPrevGroup = false,
-  canGoNextGroup = false,
+  canGoNextGroup: _canGoNextGroup = false,
   groupNavLabel = null,
   onGroupPrev,
   onGroupNext,
   canGoPrevLinkGroup = false,
-  canGoNextLinkGroup = false,
+  canGoNextLinkGroup: _canGoNextLinkGroup = false,
   linkGroupNavLabel = null,
+  linkFocusComponentId = null,
   onLinkGroupPrev,
   onLinkGroupNext,
   linkTargetMemberCount = 0,
@@ -74,26 +76,45 @@ export function LinkModeToggle({
           </button>
         </div>
       )}
-      {!enabled && groupNavLabel && onGroupPrev && onGroupNext && (
+      {!enabled && canGoPrevGroup && onGroupPrev && onGroupNext && (
         <div className="selection-nav-group">
           <button
             type="button"
             className="selection-nav-btn"
             onClick={onGroupPrev}
-            disabled={!canGoPrevGroup}
             title="Previous linked group"
           >
             ← Group
           </button>
-          <span className="group-nav-label">{groupNavLabel}</span>
+          <span className="group-nav-label">{groupNavLabel ?? 'Group'}</span>
           <button
             type="button"
             className="selection-nav-btn"
             onClick={onGroupNext}
-            disabled={!canGoNextGroup}
             title="Next linked group"
           >
             Group →
+          </button>
+        </div>
+      )}
+      {enabled && canGoPrevLinkGroup && onLinkGroupPrev && onLinkGroupNext && (
+        <div className="selection-nav-group link-list-nav">
+          <button
+            type="button"
+            className="selection-nav-btn"
+            onClick={onLinkGroupPrev}
+            title="Previous list (add target)"
+          >
+            ← List
+          </button>
+          <span className="group-nav-label">{linkGroupNavLabel ?? 'List'}</span>
+          <button
+            type="button"
+            className="selection-nav-btn"
+            onClick={onLinkGroupNext}
+            title="Next list (add target)"
+          >
+            List →
           </button>
         </div>
       )}
@@ -111,34 +132,18 @@ export function LinkModeToggle({
           {enabled ? 'ON' : 'OFF'}
         </span>
       </button>
-      {enabled && linkGroupNavLabel && onLinkGroupPrev && onLinkGroupNext && (
-        <div className="selection-nav-group">
-          <button
-            type="button"
-            className="selection-nav-btn"
-            onClick={onLinkGroupPrev}
-            disabled={!canGoPrevLinkGroup}
-            title="Previous list (add target)"
-          >
-            ← List
-          </button>
-          <span className="group-nav-label">{linkGroupNavLabel}</span>
-          <button
-            type="button"
-            className="selection-nav-btn"
-            onClick={onLinkGroupNext}
-            disabled={!canGoNextLinkGroup}
-            title="Next list (add target)"
-          >
-            List →
-          </button>
-        </div>
+      {enabled && linkFocusComponentId && (
+        <span className="link-focus-badge">
+          Focus: <code>{linkFocusComponentId}</code>
+        </span>
       )}
       {enabled && (
         <span className="link-mode-hint">
-          {linkGroupNavLabel
-            ? `Tap components to add/remove from current list (${linkTargetMemberCount} members).`
-            : 'Tap a component to start a new list.'}
+          {canGoPrevLinkGroup && linkGroupNavLabel
+            ? `Add/remove in ${linkGroupNavLabel} (${linkTargetMemberCount} members).`
+            : linkFocusComponentId
+              ? 'Focus node is in 1 list — no list switcher.'
+              : 'Select a component, then toggle lists with ← List / List →.'}
         </span>
       )}
     </div>
