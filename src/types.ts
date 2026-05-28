@@ -9,7 +9,7 @@ export interface Component {
 }
 
 export interface RelationsFile {
-  connectors: Record<string, string[]>;
+  groups: string[][];
 }
 
 export interface TypeStyle {
@@ -55,8 +55,8 @@ export interface PageData {
 export interface ProjectIndex {
   componentToPage: Map<string, string>;
   componentData: Map<string, Component>;
-  graph: Map<string, Set<string>>;
-  connectors: Record<string, string[]>;
+  groups: string[][];
+  componentToGroups: Map<string, number[]>;
 }
 
 export interface LoadedProject {
@@ -78,6 +78,10 @@ export interface PanelState {
 export interface SelectionState {
   componentId: string;
   relatedIds: Set<string>;
+  /** Active group index in relations.groups */
+  activeGroupIndex: number | null;
+  /** Group indices that contain the selected component */
+  matchingGroupIndices: number[];
 }
 
 export interface AppState {
@@ -87,7 +91,8 @@ export interface AppState {
   currentPage: string | null;
   selection: SelectionState | null;
   linkMode: boolean;
-  linkSelection: string[];
+  /** Which relations.groups entry is being edited in link mode */
+  linkTargetGroupIndex: number | null;
   selectionHistory: SelectionHistoryEntry[];
   selectionHistoryIndex: number;
   scrollToComponent: { componentId: string; nonce: number } | null;
@@ -121,6 +126,10 @@ export type AppAction =
     }
   | { type: 'TOGGLE_LINK_MODE' }
   | { type: 'TOGGLE_LINK_COMPONENT'; componentId: string; pageFile: string }
+  | { type: 'GO_PREV_GROUP' }
+  | { type: 'GO_NEXT_GROUP' }
+  | { type: 'GO_PREV_LINK_GROUP' }
+  | { type: 'GO_NEXT_LINK_GROUP' }
   | { type: 'GO_BACK_SELECTION' }
   | { type: 'GO_NEXT_SELECTION' };
 

@@ -58,7 +58,12 @@ export function RefTargetPickerDialog({
     : null;
 
   const pickerSelection: SelectionState | null = highlightId
-    ? { componentId: highlightId, relatedIds: new Set([highlightId]) }
+    ? {
+        componentId: highlightId,
+        relatedIds: new Set([highlightId]),
+        activeGroupIndex: null,
+        matchingGroupIndices: [],
+      }
     : null;
 
   useEffect(() => {

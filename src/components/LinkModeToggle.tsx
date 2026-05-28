@@ -1,6 +1,5 @@
 interface LinkModeToggleProps {
   enabled: boolean;
-  selectedCount: number;
   onToggle: () => void;
   sidebarCollapsed?: boolean;
   onExpandSidebar?: () => void;
@@ -8,11 +7,21 @@ interface LinkModeToggleProps {
   canGoNext?: boolean;
   onSelectionBack?: () => void;
   onSelectionNext?: () => void;
+  canGoPrevGroup?: boolean;
+  canGoNextGroup?: boolean;
+  groupNavLabel?: string | null;
+  onGroupPrev?: () => void;
+  onGroupNext?: () => void;
+  canGoPrevLinkGroup?: boolean;
+  canGoNextLinkGroup?: boolean;
+  linkGroupNavLabel?: string | null;
+  onLinkGroupPrev?: () => void;
+  onLinkGroupNext?: () => void;
+  linkTargetMemberCount?: number;
 }
 
 export function LinkModeToggle({
   enabled,
-  selectedCount,
   onToggle,
   sidebarCollapsed = false,
   onExpandSidebar,
@@ -20,6 +29,17 @@ export function LinkModeToggle({
   canGoNext = false,
   onSelectionBack,
   onSelectionNext,
+  canGoPrevGroup = false,
+  canGoNextGroup = false,
+  groupNavLabel = null,
+  onGroupPrev,
+  onGroupNext,
+  canGoPrevLinkGroup = false,
+  canGoNextLinkGroup = false,
+  linkGroupNavLabel = null,
+  onLinkGroupPrev,
+  onLinkGroupNext,
+  linkTargetMemberCount = 0,
 }: LinkModeToggleProps) {
   return (
     <div className="link-mode-bar">
@@ -54,6 +74,29 @@ export function LinkModeToggle({
           </button>
         </div>
       )}
+      {!enabled && groupNavLabel && onGroupPrev && onGroupNext && (
+        <div className="selection-nav-group">
+          <button
+            type="button"
+            className="selection-nav-btn"
+            onClick={onGroupPrev}
+            disabled={!canGoPrevGroup}
+            title="Previous linked group"
+          >
+            ← Group
+          </button>
+          <span className="group-nav-label">{groupNavLabel}</span>
+          <button
+            type="button"
+            className="selection-nav-btn"
+            onClick={onGroupNext}
+            disabled={!canGoNextGroup}
+            title="Next linked group"
+          >
+            Group →
+          </button>
+        </div>
+      )}
       <button
         type="button"
         className={`link-mode-toggle ${enabled ? 'active' : ''}`}
@@ -68,15 +111,34 @@ export function LinkModeToggle({
           {enabled ? 'ON' : 'OFF'}
         </span>
       </button>
+      {enabled && linkGroupNavLabel && onLinkGroupPrev && onLinkGroupNext && (
+        <div className="selection-nav-group">
+          <button
+            type="button"
+            className="selection-nav-btn"
+            onClick={onLinkGroupPrev}
+            disabled={!canGoPrevLinkGroup}
+            title="Previous list (add target)"
+          >
+            ← List
+          </button>
+          <span className="group-nav-label">{linkGroupNavLabel}</span>
+          <button
+            type="button"
+            className="selection-nav-btn"
+            onClick={onLinkGroupNext}
+            disabled={!canGoNextLinkGroup}
+            title="Next list (add target)"
+          >
+            List →
+          </button>
+        </div>
+      )}
       {enabled && (
         <span className="link-mode-hint">
-          Tap components to link or unlink them.
-          {selectedCount > 0 && (
-            <>
-              {' '}
-              <strong>{selectedCount}</strong> selected
-            </>
-          )}
+          {linkGroupNavLabel
+            ? `Tap components to add/remove from current list (${linkTargetMemberCount} members).`
+            : 'Tap a component to start a new list.'}
         </span>
       )}
     </div>

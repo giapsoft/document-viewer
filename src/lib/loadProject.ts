@@ -24,15 +24,8 @@ function parseComponents(raw: unknown, fileName: string): Component[] {
     const c = item as Record<string, unknown>;
     const typeRaw = String(c.type ?? '');
     const status = String(c.status ?? '');
-    let type = typeRaw;
-    let content = String(c.content ?? '');
-
-    // Legacy: field `ref` → type `ref`, content = target id
-    const legacyRef = c.ref != null ? String(c.ref).trim() : '';
-    if (legacyRef && type !== 'ref') {
-      type = 'ref';
-      content = legacyRef;
-    }
+    const type = typeRaw;
+    const content = String(c.content ?? '');
 
     if (!isValidType(type)) {
       throw new Error(`${fileName}[${i}]: invalid type "${type}"`);
@@ -111,11 +104,11 @@ export async function loadFromDirectoryHandle(
     const relHandle = await root.getFileHandle('relations.json');
     const relFile = await relHandle.getFile();
     relations = await readJsonFile<RelationsFile>(relFile);
-    if (!relations.connectors || typeof relations.connectors !== 'object') {
-      throw new Error('relations.json: missing connectors');
+    if (!Array.isArray(relations.groups)) {
+      throw new Error('relations.json: missing groups');
     }
   } catch (err) {
-    if (err instanceof Error && err.message.includes('connectors')) throw err;
+    if (err instanceof Error && err.message.includes('groups')) throw err;
     throw new Error('Missing or invalid relations.json');
   }
 

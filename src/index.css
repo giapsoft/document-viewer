@@ -291,6 +291,15 @@ code {
   cursor: not-allowed;
 }
 
+.group-nav-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #495057;
+  min-width: 5.5rem;
+  text-align: center;
+  user-select: none;
+}
+
 .link-mode-toggle {
   display: inline-flex;
   align-items: center;

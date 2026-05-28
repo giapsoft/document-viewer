@@ -1,8 +1,9 @@
 import type { AppState, PanelState, SelectionState, SelectionHistoryEntry } from '../types';
 import {
-  getRelatedIds,
+  getRelatedIdsForGroup,
   orderPagesForSelection,
   buildPanelsForPages,
+  getGroupIndicesForComponent,
 } from './index';
 
 export const MAX_SELECTION_HISTORY = 20;
@@ -37,6 +38,73 @@ export function appendSelectionHistory(
   return { history: nextHistory, index: nextIndex };
 }
 
+export function buildSelectionForComponent(
+  state: AppState,
+  componentId: string,
+  pageFile: string,
+  activeGroupIndex: number | null = null,
+): {
+  panels: PanelState[];
+  currentPage: string;
+  selection: SelectionState;
+} | null {
+  if (!state.project) return null;
+
+  const { index } = state.project;
+  const matchingGroupIndices = getGroupIndicesForComponent(index.groups, componentId);
+
+  let resolvedGroupIndex = activeGroupIndex;
+  if (matchingGroupIndices.length === 0) {
+    resolvedGroupIndex = null;
+  } else if (
+    resolvedGroupIndex === null ||
+    !matchingGroupIndices.includes(resolvedGroupIndex)
+  ) {
+    resolvedGroupIndex = matchingGroupIndices[0];
+  }
+
+  const relatedIds =
+    resolvedGroupIndex === null
+      ? new Set([componentId])
+      : getRelatedIdsForGroup(componentId, index.groups[resolvedGroupIndex] ?? []);
+
+  const hasLinks = relatedIds.size > 1;
+
+  if (!hasLinks) {
+    return {
+      panels: [{ pageFile, expanded: true }],
+      currentPage: pageFile,
+      selection: {
+        componentId,
+        relatedIds,
+        activeGroupIndex: resolvedGroupIndex,
+        matchingGroupIndices,
+      },
+    };
+  }
+
+  const groupMemberOrder =
+    resolvedGroupIndex === null ? [] : (index.groups[resolvedGroupIndex] ?? []);
+
+  const orderedPages = orderPagesForSelection(
+    pageFile,
+    relatedIds,
+    index,
+    groupMemberOrder,
+  );
+
+  return {
+    panels: buildPanelsForPages(orderedPages, pageFile),
+    currentPage: pageFile,
+    selection: {
+      componentId,
+      relatedIds,
+      activeGroupIndex: resolvedGroupIndex,
+      matchingGroupIndices,
+    },
+  };
+}
+
 export function applyComponentSelection(
   state: AppState,
   componentId: string,
@@ -46,32 +114,40 @@ export function applyComponentSelection(
   currentPage: string;
   selection: SelectionState;
 } | null {
-  if (!state.project) return null;
+  return buildSelectionForComponent(state, componentId, pageFile);
+}
 
-  const { index } = state.project;
-  const relatedIds = getRelatedIds(componentId, index.graph);
-  const hasLinks = relatedIds.size > 1;
+export function cycleSelectionGroup(
+  state: AppState,
+  direction: 'prev' | 'next',
+): {
+  panels: PanelState[];
+  currentPage: string;
+  selection: SelectionState;
+} | null {
+  if (!state.project || !state.selection) return null;
 
-  if (!hasLinks) {
-    return {
-      panels: [{ pageFile, expanded: true }],
-      currentPage: pageFile,
-      selection: { componentId, relatedIds },
-    };
-  }
+  const { componentId, matchingGroupIndices, activeGroupIndex } = state.selection;
+  if (matchingGroupIndices.length <= 1 || activeGroupIndex === null) return null;
 
-  const orderedPages = orderPagesForSelection(
+  const currentPos = matchingGroupIndices.indexOf(activeGroupIndex);
+  if (currentPos < 0) return null;
+
+  const nextPos =
+    direction === 'prev'
+      ? (currentPos - 1 + matchingGroupIndices.length) % matchingGroupIndices.length
+      : (currentPos + 1) % matchingGroupIndices.length;
+
+  const pageFile =
+    state.project.index.componentToPage.get(componentId) ?? state.currentPage;
+  if (!pageFile) return null;
+
+  return buildSelectionForComponent(
+    state,
     componentId,
     pageFile,
-    relatedIds,
-    index,
+    matchingGroupIndices[nextPos],
   );
-
-  return {
-    panels: buildPanelsForPages(orderedPages, pageFile),
-    currentPage: pageFile,
-    selection: { componentId, relatedIds },
-  };
 }
 
 export function remapSelectionHistoryId(

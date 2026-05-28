@@ -169,32 +169,14 @@ const pages = {
 };
 
 const relations = {
-  connectors: {
-    b1: ['b2', 'b4', 'b6'],
-    b2: ['b1', 'b7', 'b8'],
-    b3: ['b7'],
-    b4: ['b1', 'b9'],
-    b6: ['b1', 'b2'],
-    b7: ['b2', 'b9', 'b3'],
-    b8: ['b2'],
-    b9: ['b4', 'b7'],
-    l1: ['l10'],
-    l10: ['l1'],
-    mega5: ['m-detail', 'm-integration', 'm-workflow', 'm-reference'],
-    'm-detail': ['mega5'],
-    'm-integration': ['mega5'],
-    'm-workflow': ['mega5'],
-    'm-reference': ['mega5'],
-    'chain-a': ['chain-b'],
-    'chain-b': ['chain-a', 'chain-c'],
-    'chain-c': ['chain-b', 'chain-d'],
-    'chain-d': ['chain-c', 'chain-e'],
-    'chain-e': ['chain-d'],
-    'specs-hub': ['q-integration', 'q-workflow', 'q-reference'],
-    'q-integration': ['specs-hub'],
-    'q-workflow': ['specs-hub'],
-    'q-reference': ['specs-hub'],
-  },
+  groups: [
+    ['b1', 'b2', 'b4', 'b6'],
+    ['b2', 'b3', 'b7', 'b8', 'b9'],
+    ['l1', 'l10'],
+    ['mega5', 'm-detail', 'm-integration', 'm-workflow', 'm-reference'],
+    ['chain-a', 'chain-b', 'chain-c', 'chain-d', 'chain-e'],
+    ['specs-hub', 'q-integration', 'q-workflow', 'q-reference'],
+  ],
 };
 
 const targets = [

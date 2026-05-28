@@ -1,35 +1,14 @@
 import type { Component, PageData, ProjectIndex, RelationsFile } from '../types';
+import { getGroupIndicesForComponent } from './groupRelations';
 
-export function buildBidirectionalGraph(
-  connectors: Record<string, string[]>,
-): Map<string, Set<string>> {
-  const graph = new Map<string, Set<string>>();
-
-  const addEdge = (from: string, to: string) => {
-    if (!graph.has(from)) graph.set(from, new Set());
-    graph.get(from)!.add(to);
-  };
-
-  for (const [from, targets] of Object.entries(connectors)) {
-    for (const to of targets) {
-      addEdge(from, to);
-      addEdge(to, from);
-    }
-  }
-
-  return graph;
-}
-
-export function getRelatedIds(
+export function getRelatedIdsForGroup(
   componentId: string,
-  graph: Map<string, Set<string>>,
+  group: string[],
 ): Set<string> {
-  const related = new Set<string>([componentId]);
-  const neighbors = graph.get(componentId);
-  if (neighbors) {
-    for (const id of neighbors) related.add(id);
+  if (!group.includes(componentId)) {
+    return new Set([componentId]);
   }
-  return related;
+  return new Set(group);
 }
 
 export function buildIndex(
@@ -53,24 +32,39 @@ export function buildIndex(
     }
   }
 
-  const graph = buildBidirectionalGraph(relations.connectors);
+  const groups = relations.groups.map((group) => [...group]);
+  const componentToGroups = new Map<string, number[]>();
+
+  groups.forEach((group, groupIndex) => {
+    const seenInGroup = new Set<string>();
+    for (const id of group) {
+      if (seenInGroup.has(id)) {
+        warnings.push(`Duplicate ID "${id}" in group ${groupIndex} — ignored`);
+        continue;
+      }
+      seenInGroup.add(id);
+      const existing = componentToGroups.get(id) ?? [];
+      existing.push(groupIndex);
+      componentToGroups.set(id, existing);
+    }
+  });
 
   return {
     index: {
       componentToPage,
       componentData,
-      graph,
-      connectors: relations.connectors,
+      groups,
+      componentToGroups,
     },
     warnings,
   };
 }
 
 export function orderPagesForSelection(
-  componentId: string,
   currentPage: string,
   relatedIds: Set<string>,
   index: ProjectIndex,
+  groupMemberOrder: string[] = [],
 ): string[] {
   const pagesNeeded = new Set<string>();
   for (const id of relatedIds) {
@@ -86,8 +80,8 @@ export function orderPagesForSelection(
     seen.add(currentPage);
   }
 
-  const outgoing = index.connectors[componentId] ?? [];
-  for (const id of outgoing) {
+  for (const id of groupMemberOrder) {
+    if (!relatedIds.has(id)) continue;
     const page = index.componentToPage.get(id);
     if (page && pagesNeeded.has(page) && !seen.has(page)) {
       ordered.push(page);
@@ -95,18 +89,9 @@ export function orderPagesForSelection(
     }
   }
 
-  for (const [key, values] of Object.entries(index.connectors)) {
-    if (values.includes(componentId)) {
-      const page = index.componentToPage.get(key);
-      if (page && pagesNeeded.has(page) && !seen.has(page)) {
-        ordered.push(page);
-        seen.add(page);
-      }
-    }
-  }
-
-  for (const page of pagesNeeded) {
-    if (!seen.has(page)) {
+  for (const id of relatedIds) {
+    const page = index.componentToPage.get(id);
+    if (page && pagesNeeded.has(page) && !seen.has(page)) {
       ordered.push(page);
       seen.add(page);
     }
@@ -208,3 +193,5 @@ export function shrinkFarthestExpanded(
     return p;
   });
 }
+
+export { getGroupIndicesForComponent };

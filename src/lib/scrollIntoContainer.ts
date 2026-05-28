@@ -31,25 +31,56 @@ export function scheduleScrollToComponent(
   scrollRef: { current: HTMLDivElement | null },
   componentRefs: { current: Map<string, HTMLElement> },
   componentId: string,
+  panelRef?: { current: HTMLElement | null },
 ): () => void {
   let cancelled = false;
 
-  const tryScroll = () => {
+  const runScroll = () => {
     if (cancelled) return;
-    scrollToComponentInContainer(
-      scrollRef.current,
-      componentRefs.current,
-      componentId,
-    );
+    const tryScroll = () => {
+      if (cancelled) return;
+      scrollToComponentInContainer(
+        scrollRef.current,
+        componentRefs.current,
+        componentId,
+      );
+    };
+    requestAnimationFrame(() => {
+      tryScroll();
+      requestAnimationFrame(tryScroll);
+    });
   };
 
-  const frame = requestAnimationFrame(() => {
-    tryScroll();
-    requestAnimationFrame(tryScroll);
-  });
+  const panel = panelRef?.current;
+  // Shrunk panels are 36px wide; wait for the expand transition before measuring layout.
+  if (!panel || panel.offsetWidth > 48) {
+    runScroll();
+    return () => {
+      cancelled = true;
+    };
+  }
+
+  let finished = false;
+  const finish = () => {
+    if (finished || cancelled) return;
+    finished = true;
+    panel.removeEventListener('transitionend', onTransitionEnd);
+    clearTimeout(fallbackTimer);
+    runScroll();
+  };
+
+  const onTransitionEnd = (e: TransitionEvent) => {
+    if (e.target !== panel) return;
+    finish();
+  };
+
+  panel.addEventListener('transitionend', onTransitionEnd);
+  const fallbackTimer = setTimeout(finish, 280);
 
   return () => {
     cancelled = true;
-    cancelAnimationFrame(frame);
+    finished = true;
+    panel.removeEventListener('transitionend', onTransitionEnd);
+    clearTimeout(fallbackTimer);
   };
 }

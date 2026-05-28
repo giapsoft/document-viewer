@@ -6,6 +6,7 @@ import { LinkModeToggle } from './components/LinkModeToggle';
 import { SaveIndicator } from './components/SaveIndicator';
 import { useAppStore } from './hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from './hooks/useSelectionNavigationShortcuts';
+
 export default function App() {
   const {
     state,
@@ -25,6 +26,10 @@ export default function App() {
     toggleLinkComponent,
     goBackSelection,
     goNextSelection,
+    goPrevGroup,
+    goNextGroup,
+    goPrevLinkGroup,
+    goNextLinkGroup,
   } = useAppStore();
 
   const canGoBack = state.selectionHistoryIndex > 0;
@@ -45,8 +50,28 @@ export default function App() {
   }
 
   const pageNames = state.project.pages.map((p) => p.fileName);
-  const linkSelectionSet = new Set(state.linkSelection);
   const handleComponentClick = state.linkMode ? toggleLinkComponent : selectComponent;
+
+  const matchingGroupIndices = state.selection?.matchingGroupIndices ?? [];
+  const activeGroupIndex = state.selection?.activeGroupIndex ?? null;
+  const matchingGroupPosition =
+    activeGroupIndex === null ? -1 : matchingGroupIndices.indexOf(activeGroupIndex);
+  const showGroupNav = !state.linkMode && matchingGroupIndices.length > 1;
+  const groupNavLabel =
+    showGroupNav && matchingGroupPosition >= 0
+      ? `Group ${matchingGroupPosition + 1}/${matchingGroupIndices.length}`
+      : null;
+
+  const groups = state.project.relations.groups;
+  const linkTargetGroupIndex = state.linkTargetGroupIndex;
+  const linkGroupMembers =
+    state.linkMode && linkTargetGroupIndex !== null
+      ? new Set(groups[linkTargetGroupIndex] ?? [])
+      : new Set<string>();
+  const showLinkGroupNav = state.linkMode && groups.length > 0;
+  const linkGroupNavLabel = showLinkGroupNav
+    ? `List ${(linkTargetGroupIndex ?? 0) + 1}/${groups.length}`
+    : null;
 
   return (
     <>
@@ -80,7 +105,6 @@ export default function App() {
 
         <LinkModeToggle
           enabled={state.linkMode}
-          selectedCount={state.linkSelection.length}
           onToggle={toggleLinkMode}
           sidebarCollapsed={!state.sidebarExpanded}
           onExpandSidebar={expandSidebar}
@@ -88,6 +112,17 @@ export default function App() {
           canGoNext={canGoNext}
           onSelectionBack={goBackSelection}
           onSelectionNext={goNextSelection}
+          canGoPrevGroup={showGroupNav}
+          canGoNextGroup={showGroupNav}
+          groupNavLabel={groupNavLabel}
+          onGroupPrev={goPrevGroup}
+          onGroupNext={goNextGroup}
+          canGoPrevLinkGroup={showLinkGroupNav}
+          canGoNextLinkGroup={showLinkGroupNav}
+          linkGroupNavLabel={linkGroupNavLabel}
+          onLinkGroupPrev={goPrevLinkGroup}
+          onLinkGroupNext={goNextLinkGroup}
+          linkTargetMemberCount={linkGroupMembers.size}
         />
 
         <div className="panel-row">
@@ -103,7 +138,7 @@ export default function App() {
               isCurrent={state.currentPage === panel.pageFile}
               selection={state.selection}
               linkMode={state.linkMode}
-              linkSelection={linkSelectionSet}
+              linkGroupMembers={linkGroupMembers}
               onToggle={() => togglePanel(panel.pageFile)}
               onSelect={handleComponentClick}
               onClearSelection={clearSelection}

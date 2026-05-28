@@ -138,6 +138,22 @@ export function useAppStore() {
     dispatch({ type: 'GO_NEXT_SELECTION' });
   }, [dispatch]);
 
+  const goPrevGroup = useCallback(() => {
+    dispatch({ type: 'GO_PREV_GROUP' });
+  }, [dispatch]);
+
+  const goNextGroup = useCallback(() => {
+    dispatch({ type: 'GO_NEXT_GROUP' });
+  }, [dispatch]);
+
+  const goPrevLinkGroup = useCallback(() => {
+    dispatch({ type: 'GO_PREV_LINK_GROUP' });
+  }, [dispatch]);
+
+  const goNextLinkGroup = useCallback(() => {
+    dispatch({ type: 'GO_NEXT_LINK_GROUP' });
+  }, [dispatch]);
+
   return {
     state,
     saveStatus,
@@ -156,5 +172,9 @@ export function useAppStore() {
     toggleLinkComponent,
     goBackSelection,
     goNextSelection,
+    goPrevGroup,
+    goNextGroup,
+    goPrevLinkGroup,
+    goNextLinkGroup,
   };
 }

@@ -13,7 +13,7 @@ interface ComponentBlockProps {
   pageFile: string;
   selection: SelectionState | null;
   linkMode?: boolean;
-  linkSelection?: Set<string>;
+  linkGroupMembers?: Set<string>;
   onSelect: (componentId: string, pageFile: string) => void;
   registerRef: (id: string, el: HTMLElement | null) => void;
 }
@@ -85,7 +85,7 @@ export function ComponentBlock({
   pageFile,
   selection,
   linkMode = false,
-  linkSelection,
+  linkGroupMembers,
   onSelect,
   registerRef,
 }: ComponentBlockProps) {
@@ -93,12 +93,12 @@ export function ComponentBlock({
   const isRefType = component.type === 'ref';
   const refTargetId = isRefType ? getRefTargetId(component) : null;
 
-  const isLinkSelected = linkMode && (linkSelection?.has(component.id) ?? false);
+  const isLinkSelected = linkMode && (linkGroupMembers?.has(component.id) ?? false);
   const isSelected = linkMode
     ? isLinkSelected
     : (selection?.relatedIds.has(component.id) ?? false);
   const isDimmed = linkMode
-    ? linkSelection != null && linkSelection.size > 0 && !isLinkSelected
+    ? linkGroupMembers != null && linkGroupMembers.size > 0 && !isLinkSelected
     : selection !== null && !selection.relatedIds.has(component.id);
   const selectedStyle = isSelected ? styles.selectedComponent : null;
   const statusStyle = styles.statuses[resolved.status];
@@ -184,12 +184,12 @@ function getFirstSelectedComponentId(
   page: PageData,
   selection: SelectionState | null,
   linkMode: boolean,
-  linkSelection?: Set<string>,
+  linkGroupMembers?: Set<string>,
 ): string | null {
   if (linkMode) {
-    if (!linkSelection?.size) return null;
+    if (!linkGroupMembers?.size) return null;
     for (const component of page.components) {
-      if (linkSelection.has(component.id)) return component.id;
+      if (linkGroupMembers.has(component.id)) return component.id;
     }
     return null;
   }
@@ -208,7 +208,7 @@ interface PagePanelProps {
   isCurrent: boolean;
   selection: SelectionState | null;
   linkMode?: boolean;
-  linkSelection?: Set<string>;
+  linkGroupMembers?: Set<string>;
   onToggle: () => void;
   onSelect: (componentId: string, pageFile: string) => void;
   onClearSelection: () => void;
@@ -223,7 +223,7 @@ export function PagePanel({
   isCurrent,
   selection,
   linkMode = false,
-  linkSelection,
+  linkGroupMembers,
   onToggle,
   onSelect,
   onClearSelection,
@@ -231,6 +231,7 @@ export function PagePanel({
   scrollNonce = 0,
 }: PagePanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const componentRefs = useRef<Map<string, HTMLElement>>(new Map());
   const handledScrollNonceRef = useRef(0);
   const wasExpandedRef = useRef(expanded);
@@ -254,7 +255,12 @@ export function PagePanel({
     if (!page?.components.some((c) => c.id === scrollToComponentId)) return;
 
     handledScrollNonceRef.current = scrollNonce;
-    return scheduleScrollToComponent(scrollRef, componentRefs, scrollToComponentId);
+    return scheduleScrollToComponent(
+      scrollRef,
+      componentRefs,
+      scrollToComponentId,
+      panelRef,
+    );
   }, [scrollToComponentId, scrollNonce, expanded, pageFile]);
 
   useEffect(() => {
@@ -271,17 +277,18 @@ export function PagePanel({
       page,
       selection,
       linkMode,
-      linkSelection,
+      linkGroupMembers,
     );
     if (!targetId) return;
 
-    return scheduleScrollToComponent(scrollRef, componentRefs, targetId);
-  }, [expanded, pageFile, page, selection, linkMode, linkSelection]);
+    return scheduleScrollToComponent(scrollRef, componentRefs, targetId, panelRef);
+  }, [expanded, pageFile, page, selection, linkMode, linkGroupMembers]);
 
   if (!page) return null;
 
   return (
     <div
+      ref={panelRef}
       className={`page-panel ${expanded ? 'expanded' : 'shrunk'} ${isCurrent ? 'current' : ''}`}
       data-page={pageFile}
     >
@@ -339,7 +346,7 @@ export function PagePanel({
                   pageFile={pageFile}
                   selection={selection}
                   linkMode={linkMode}
-                  linkSelection={linkSelection}
+                  linkGroupMembers={linkGroupMembers}
                   onSelect={onSelect}
                   registerRef={registerRef}
                 />

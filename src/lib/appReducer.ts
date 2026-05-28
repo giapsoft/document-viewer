@@ -6,12 +6,17 @@ import {
   rebuildProject,
 } from './projectMutations';
 import {
-  linkComponentToGroup,
-  unlinkComponentFromGroup,
-} from './relationMutations';
+  addComponentToGroup,
+  removeComponentFromGroup,
+  createGroup,
+  renameComponentInGroups,
+  adjustGroupIndexAfterRemoval,
+} from './groupRelations';
 import {
   appendSelectionHistory,
   applyComponentSelection,
+  buildSelectionForComponent,
+  cycleSelectionGroup,
   remapSelectionHistoryId,
   scrollToHistoryEntry,
 } from './selectionNavigation';
@@ -23,11 +28,17 @@ export const initialAppState: AppState = {
   currentPage: null,
   selection: null,
   linkMode: false,
-  linkSelection: [],
+  linkTargetGroupIndex: null,
   selectionHistory: [],
   selectionHistoryIndex: -1,
   scrollToComponent: null,
 };
+
+function clampLinkTargetIndex(groupsLength: number, index: number | null): number | null {
+  if (groupsLength === 0) return null;
+  if (index === null || index < 0 || index >= groupsLength) return 0;
+  return index;
+}
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -72,6 +83,36 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selectionHistory: history,
         selectionHistoryIndex: index,
       };
+    }
+
+    case 'GO_PREV_GROUP':
+    case 'GO_NEXT_GROUP': {
+      if (state.linkMode || !state.project || !state.selection) return state;
+      const applied = cycleSelectionGroup(
+        state,
+        action.type === 'GO_PREV_GROUP' ? 'prev' : 'next',
+      );
+      if (!applied || !state.currentPage) return state;
+      return {
+        ...state,
+        ...applied,
+        currentPage: state.currentPage,
+      };
+    }
+
+    case 'GO_PREV_LINK_GROUP':
+    case 'GO_NEXT_LINK_GROUP': {
+      if (!state.linkMode || !state.project) return state;
+      const groupsLength = state.project.relations.groups.length;
+      if (groupsLength === 0) return state;
+
+      const current = clampLinkTargetIndex(groupsLength, state.linkTargetGroupIndex) ?? 0;
+      const next =
+        action.type === 'GO_PREV_LINK_GROUP'
+          ? (current - 1 + groupsLength) % groupsLength
+          : (current + 1) % groupsLength;
+
+      return { ...state, linkTargetGroupIndex: next };
     }
 
     case 'GO_BACK_SELECTION': {
@@ -129,7 +170,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'CLEAR_SELECTION':
       if (state.linkMode) {
-        return { ...state, linkSelection: [] };
+        return { ...state, linkTargetGroupIndex: null };
       }
       return { ...state, selection: null };
 
@@ -181,21 +222,23 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         patch,
       );
 
+      let relations = project.relations;
+      if (newComponentId !== componentId) {
+        relations = {
+          groups: renameComponentInGroups(relations.groups, componentId, newComponentId),
+        };
+      }
+      const rebuilt = rebuildProject({ ...project, relations });
+
       let selection = state.selection;
       if (selection?.componentId === componentId) {
-        const relatedIds = new Set(selection.relatedIds);
-        if (newComponentId !== componentId) {
-          relatedIds.delete(componentId);
-          relatedIds.add(newComponentId);
-        }
-        selection = { componentId: newComponentId, relatedIds };
-      }
-
-      let linkSelection = state.linkSelection;
-      if (newComponentId !== componentId && linkSelection.includes(componentId)) {
-        linkSelection = linkSelection.map((id) =>
-          id === componentId ? newComponentId : id,
+        const remapped = buildSelectionForComponent(
+          { ...state, project: rebuilt },
+          newComponentId,
+          pageFile,
+          selection.activeGroupIndex,
         );
+        selection = remapped?.selection ?? selection;
       }
 
       const selectionHistory = remapSelectionHistoryId(
@@ -204,7 +247,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         newComponentId,
       );
 
-      return { ...state, project, selection, linkSelection, selectionHistory };
+      return {
+        ...state,
+        project: rebuilt,
+        selection,
+        selectionHistory,
+      };
     }
 
     case 'INSERT_COMPONENT': {
@@ -218,13 +266,31 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       );
 
       if (state.linkMode) {
+        let relations = project.relations;
+        let linkTargetGroupIndex = state.linkTargetGroupIndex;
+
+        if (linkTargetGroupIndex === null) {
+          relations = { groups: createGroup(relations.groups, [newComponent.id]) };
+          linkTargetGroupIndex = relations.groups.length - 1;
+        } else {
+          relations = {
+            groups: addComponentToGroup(
+              relations.groups,
+              linkTargetGroupIndex,
+              newComponent.id,
+            ),
+          };
+        }
+
+        const rebuilt = rebuildProject({ ...project, relations });
+
         return {
           ...state,
-          project,
+          project: rebuilt,
           panels: [{ pageFile, expanded: true }],
           currentPage: pageFile,
           selection: null,
-          linkSelection: [...state.linkSelection, newComponent.id],
+          linkTargetGroupIndex,
         };
       }
 
@@ -243,6 +309,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selection: {
           componentId: newComponent.id,
           relatedIds: new Set([newComponent.id]),
+          activeGroupIndex: null,
+          matchingGroupIndices: [],
         },
         selectionHistory: history,
         selectionHistoryIndex: index,
@@ -251,11 +319,28 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'TOGGLE_LINK_MODE': {
       const linkMode = !state.linkMode;
+      if (!linkMode) {
+        return {
+          ...state,
+          linkMode: false,
+          linkTargetGroupIndex: null,
+          selection: state.selection,
+        };
+      }
+
+      const groupsLength = state.project?.relations.groups.length ?? 0;
+      let linkTargetGroupIndex: number | null = null;
+      if (state.selection?.activeGroupIndex != null) {
+        linkTargetGroupIndex = state.selection.activeGroupIndex;
+      } else if (groupsLength > 0) {
+        linkTargetGroupIndex = 0;
+      }
+
       return {
         ...state,
-        linkMode,
-        linkSelection: linkMode ? state.linkSelection : [],
-        selection: linkMode ? null : state.selection,
+        linkMode: true,
+        linkTargetGroupIndex,
+        selection: null,
       };
     }
 
@@ -265,28 +350,48 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { componentId, pageFile } = action;
       if (!state.project.index.componentData.has(componentId)) return state;
 
-      const linkSelection = [...state.linkSelection];
-      const isSelected = linkSelection.includes(componentId);
-      let relations = state.project.relations;
+      let groups = state.project.relations.groups;
+      let linkTargetGroupIndex = state.linkTargetGroupIndex;
+      let removedGroupIndex: number | null = null;
 
-      if (isSelected) {
-        relations = unlinkComponentFromGroup(relations, componentId, linkSelection);
-        const index = linkSelection.indexOf(componentId);
-        if (index >= 0) linkSelection.splice(index, 1);
+      if (linkTargetGroupIndex === null) {
+        groups = createGroup(groups, [componentId]);
+        linkTargetGroupIndex = groups.length - 1;
       } else {
-        relations = linkComponentToGroup(relations, componentId, linkSelection);
-        linkSelection.push(componentId);
+        const group = groups[linkTargetGroupIndex] ?? [];
+        if (group.includes(componentId)) {
+          const result = removeComponentFromGroup(
+            groups,
+            linkTargetGroupIndex,
+            componentId,
+          );
+          groups = result.groups;
+          removedGroupIndex = result.removedGroupIndex;
+          if (removedGroupIndex !== null) {
+            linkTargetGroupIndex = adjustGroupIndexAfterRemoval(
+              linkTargetGroupIndex,
+              removedGroupIndex,
+            );
+          }
+        } else {
+          groups = addComponentToGroup(groups, linkTargetGroupIndex, componentId);
+        }
       }
 
       const project = rebuildProject({
         ...state.project,
-        relations,
+        relations: { groups },
       });
+
+      linkTargetGroupIndex = clampLinkTargetIndex(
+        project.relations.groups.length,
+        linkTargetGroupIndex,
+      );
 
       return {
         ...state,
         project,
-        linkSelection,
+        linkTargetGroupIndex,
         currentPage: pageFile,
         selection: null,
       };
