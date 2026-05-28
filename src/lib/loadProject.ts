@@ -7,6 +7,7 @@ import type {
 import { buildIndex } from './index';
 import { mergeStyles } from './styles';
 import { isValidStatus, isValidType } from './resolveRef';
+import { publicUrl } from './publicUrl';
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|gif)$/i;
 const PAGE_EXT = /\.p$/i;
@@ -155,13 +156,13 @@ export async function loadFromDirectoryHandle(
 }
 
 export async function loadSampleProject(): Promise<LoadedProject> {
-  const relationsRes = await fetch('/sample-data/relations.json');
+  const relationsRes = await fetch(publicUrl('sample-data/relations.json'));
   if (!relationsRes.ok) throw new Error('Cannot load sample relations.json');
   const relations = (await relationsRes.json()) as RelationsFile;
 
   let stylesPartial: Partial<import('../types').AppStyles> | null = null;
   try {
-    const stylesRes = await fetch('/sample-data/styles.json');
+    const stylesRes = await fetch(publicUrl('sample-data/styles.json'));
     if (stylesRes.ok) stylesPartial = await stylesRes.json();
   } catch {
     // optional
@@ -179,15 +180,19 @@ export async function loadSampleProject(): Promise<LoadedProject> {
   ];
   const pageFiles: { name: string; content: unknown }[] = [];
   for (const name of pageNames) {
-    const res = await fetch(`/sample-data/docs/${name}`);
+    const res = await fetch(publicUrl(`sample-data/docs/${name}`));
     if (res.ok) pageFiles.push({ name, content: await res.json() });
   }
 
   const imageNames = ['diagram.png', 'architecture.jpg', 'overview.png'];
   const imageFiles: { name: string; blob: Blob }[] = [];
   for (const name of imageNames) {
-    const res = await fetch(`/sample-data/docs/${name}`);
+    const res = await fetch(publicUrl(`sample-data/docs/${name}`));
     if (res.ok) imageFiles.push({ name, blob: await res.blob() });
+  }
+
+  if (pageFiles.length === 0) {
+    throw new Error('Cannot load sample page data');
   }
 
   return assembleProject({ pageFiles, relations, stylesPartial, imageFiles });
