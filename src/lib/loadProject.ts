@@ -152,7 +152,8 @@ export async function loadFromDirectoryHandle(
     throw new Error('No *.p files found in /docs');
   }
 
-  return assembleProject({ pageFiles, relations, stylesPartial, imageFiles });
+  const project = assembleProject({ pageFiles, relations, stylesPartial, imageFiles });
+  return { ...project, folderHandle: root };
 }
 
 export async function loadSampleProject(): Promise<LoadedProject> {
@@ -200,6 +201,6 @@ export async function loadSampleProject(): Promise<LoadedProject> {
 
 export async function pickProjectFolder(): Promise<LoadedProject | null> {
   if (!window.showDirectoryPicker) return null;
-  const root = await window.showDirectoryPicker({ mode: 'read' });
+  const root = await window.showDirectoryPicker({ mode: 'readwrite' });
   return loadFromDirectoryHandle(root);
 }

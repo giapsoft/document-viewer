@@ -13,6 +13,10 @@ interface FileSystemDirectoryHandle {
     name: string,
     options?: { create?: boolean },
   ): Promise<FileSystemFileHandle>;
+  queryPermission?(descriptor?: { mode?: 'read' | 'readwrite' }): Promise<PermissionState>;
+  requestPermission?(descriptor?: {
+    mode?: 'read' | 'readwrite';
+  }): Promise<PermissionState>;
 }
 
 interface FileSystemHandle {
@@ -23,4 +27,14 @@ interface FileSystemHandle {
 interface FileSystemFileHandle extends FileSystemHandle {
   kind: 'file';
   getFile(): Promise<File>;
+  createWritable?(options?: FileSystemCreateWritableOptions): Promise<FileSystemWritableFileStream>;
+}
+
+interface FileSystemCreateWritableOptions {
+  keepExistingData?: boolean;
+}
+
+interface FileSystemWritableFileStream extends WritableStream {
+  write(data: string | BufferSource | Blob): Promise<void>;
+  close(): Promise<void>;
 }

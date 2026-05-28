@@ -66,6 +66,8 @@ export interface LoadedProject {
   imageUrls: Map<string, string>;
   index: ProjectIndex;
   warnings: string[];
+  /** Set when opened from a local folder; enables auto-save. */
+  folderHandle?: FileSystemDirectoryHandle | null;
 }
 
 export interface PanelState {

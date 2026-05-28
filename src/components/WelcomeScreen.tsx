@@ -58,7 +58,8 @@ export function WelcomeScreen({ onLoaded }: WelcomeScreenProps) {
         {error && <p className="welcome-error">{error}</p>}
         <p className="welcome-hint">
           Folder must contain <code>docs/</code> and <code>relations.json</code>.{' '}
-          <code>styles.json</code> is optional.
+          <code>styles.json</code> is optional. Edits auto-save when using{' '}
+          <strong>Select folder</strong> (Chrome/Edge).
         </p>
       </div>
     </div>

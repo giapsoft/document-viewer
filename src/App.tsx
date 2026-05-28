@@ -3,11 +3,14 @@ import { Sidebar } from './components/Sidebar';
 import { PagePanel } from './components/PagePanel';
 import { EditBar } from './components/EditBar';
 import { LinkModeToggle } from './components/LinkModeToggle';
+import { SaveIndicator } from './components/SaveIndicator';
 import { useAppStore } from './hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from './hooks/useSelectionNavigationShortcuts';
 export default function App() {
   const {
     state,
+    saveStatus,
+    saveError,
     setProject,
     toggleSidebar,
     expandSidebar,
@@ -46,7 +49,13 @@ export default function App() {
   const handleComponentClick = state.linkMode ? toggleLinkComponent : selectComponent;
 
   return (
-    <div className={`app ${state.sidebarExpanded ? 'sidebar-open' : 'sidebar-collapsed'}`}>
+    <>
+      <SaveIndicator
+        visible={Boolean(state.project.folderHandle)}
+        status={saveStatus}
+        errorMessage={saveError}
+      />
+      <div className={`app ${state.sidebarExpanded ? 'sidebar-open' : 'sidebar-collapsed'}`}>
       <Sidebar
         expanded={state.sidebarExpanded}
         pages={pageNames}
@@ -113,5 +122,6 @@ export default function App() {
         />
       </main>
     </div>
+    </>
   );
 }
