@@ -15,3 +15,41 @@ export function scrollElementIntoContainer(
     behavior,
   });
 }
+
+export function scrollToComponentInContainer(
+  container: HTMLElement | null,
+  componentRefs: Map<string, HTMLElement>,
+  componentId: string,
+): void {
+  const element = componentRefs.get(componentId);
+  if (container && element) {
+    scrollElementIntoContainer(container, element);
+  }
+}
+
+export function scheduleScrollToComponent(
+  scrollRef: { current: HTMLDivElement | null },
+  componentRefs: { current: Map<string, HTMLElement> },
+  componentId: string,
+): () => void {
+  let cancelled = false;
+
+  const tryScroll = () => {
+    if (cancelled) return;
+    scrollToComponentInContainer(
+      scrollRef.current,
+      componentRefs.current,
+      componentId,
+    );
+  };
+
+  const frame = requestAnimationFrame(() => {
+    tryScroll();
+    requestAnimationFrame(tryScroll);
+  });
+
+  return () => {
+    cancelled = true;
+    cancelAnimationFrame(frame);
+  };
+}

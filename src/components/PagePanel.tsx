@@ -1,7 +1,8 @@
-import { useRef, useEffect, type CSSProperties, type ReactNode } from 'react';import type { AppStyles, Component, LoadedProject, SelectionState } from '../types';
+import { useRef, useEffect, type CSSProperties, type ReactNode } from 'react';
+import type { AppStyles, Component, LoadedProject, PageData, SelectionState } from '../types';
 import { resolveComponentForDisplay, isTextType, getRefTargetId } from '../lib/resolveRef';
 import { formatPageName } from '../lib/formatPageName';
-import { scrollElementIntoContainer } from '../lib/scrollIntoContainer';
+import { scheduleScrollToComponent } from '../lib/scrollIntoContainer';
 import { ScrollbarMarkers } from './ScrollbarMarkers';
 import { RefLinkButton } from './RefLinkButton';
 
@@ -179,6 +180,27 @@ export function ComponentBlock({
   );
 }
 
+function getFirstSelectedComponentId(
+  page: PageData,
+  selection: SelectionState | null,
+  linkMode: boolean,
+  linkSelection?: Set<string>,
+): string | null {
+  if (linkMode) {
+    if (!linkSelection?.size) return null;
+    for (const component of page.components) {
+      if (linkSelection.has(component.id)) return component.id;
+    }
+    return null;
+  }
+
+  if (!selection) return null;
+  for (const component of page.components) {
+    if (selection.relatedIds.has(component.id)) return component.id;
+  }
+  return null;
+}
+
 interface PagePanelProps {
   pageFile: string;
   expanded: boolean;
@@ -211,6 +233,7 @@ export function PagePanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const componentRefs = useRef<Map<string, HTMLElement>>(new Map());
   const handledScrollNonceRef = useRef(0);
+  const wasExpandedRef = useRef(expanded);
   const page = project.pages.find((p) => p.fileName === pageFile);
 
   const registerRef = (id: string, el: HTMLElement | null) => {
@@ -231,28 +254,29 @@ export function PagePanel({
     if (!page?.components.some((c) => c.id === scrollToComponentId)) return;
 
     handledScrollNonceRef.current = scrollNonce;
-
-    let cancelled = false;
-
-    const tryScroll = () => {
-      if (cancelled) return;
-      const container = scrollRef.current;
-      const element = componentRefs.current.get(scrollToComponentId);
-      if (container && element) {
-        scrollElementIntoContainer(container, element);
-      }
-    };
-
-    const frame = requestAnimationFrame(() => {
-      tryScroll();
-      requestAnimationFrame(tryScroll);
-    });
-
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(frame);
-    };
+    return scheduleScrollToComponent(scrollRef, componentRefs, scrollToComponentId);
   }, [scrollToComponentId, scrollNonce, expanded, pageFile]);
+
+  useEffect(() => {
+    if (!expanded) {
+      wasExpandedRef.current = false;
+      return;
+    }
+
+    const justExpanded = !wasExpandedRef.current;
+    wasExpandedRef.current = true;
+    if (!justExpanded || !page) return;
+
+    const targetId = getFirstSelectedComponentId(
+      page,
+      selection,
+      linkMode,
+      linkSelection,
+    );
+    if (!targetId) return;
+
+    return scheduleScrollToComponent(scrollRef, componentRefs, targetId);
+  }, [expanded, pageFile, page, selection, linkMode, linkSelection]);
 
   if (!page) return null;
 
