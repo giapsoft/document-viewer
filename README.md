@@ -2,6 +2,8 @@
 
 Local document reader with component trace/highlight linking.
 
+**Live demo:** https://giapsoft.github.io/document-viewer/
+
 Spec: [document-viewer-plan.md](./document-viewer-plan.md)
 
 ## Run
@@ -41,6 +43,14 @@ Open the URL shown in the terminal (usually `http://localhost:5173`).
 npm run build
 npm run preview
 ```
+
+## Deploy (GitHub Pages)
+
+```bash
+npm run deploy
+```
+
+Pushes `dist/` to the `gh-pages` branch. Site: https://giapsoft.github.io/document-viewer/
 
 ## Notes
 
