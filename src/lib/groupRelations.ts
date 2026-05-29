@@ -16,6 +16,14 @@ export function normalizeRelations(relations: RelationsFile): RelationsFile {
   };
 }
 
+/** Update groups without dropping pageNames, pinnedPages, etc. */
+export function withRelationsGroups(
+  relations: RelationsFile,
+  groups: string[][],
+): RelationsFile {
+  return normalizeRelations({ ...relations, groups });
+}
+
 export const EMPTY_RELATIONS: RelationsFile = { pageNames: {}, pinnedPages: [], groups: [] };
 
 export function getGroupIndicesForComponent(

@@ -3,6 +3,7 @@ import { shrinkFarthestExpanded } from '../lib/index';
 import {
   updateComponentInProject,
   insertComponentRelative,
+  appendImageComponent,
   deleteComponentFromProject,
   rebuildProject,
 } from './projectMutations';
@@ -11,6 +12,7 @@ import {
   removeComponentFromGroup,
   createGroup,
   getGroupIndicesForComponent,
+  withRelationsGroups,
 } from './groupRelations';
 import {
   appendSelectionHistory,
@@ -302,28 +304,36 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         let linkTargetGroupIndex = state.linkTargetGroupIndex;
 
         if (linkTargetGroupIndex === null) {
-          relations = { groups: createGroup(relations.groups, [newComponent.id]) };
+          relations = withRelationsGroups(
+            relations,
+            createGroup(relations.groups, [newComponent.id]),
+          );
           linkTargetGroupIndex = relations.groups.length - 1;
         } else {
-          relations = {
-            groups: addComponentToGroup(
+          relations = withRelationsGroups(
+            relations,
+            addComponentToGroup(
               relations.groups,
               linkTargetGroupIndex,
               newComponent.id,
             ),
-          };
+          );
         }
 
         const rebuilt = rebuildProject({ ...project, relations });
 
-        return {
+        const nextState: AppState = {
           ...state,
           project: rebuilt,
-          panels: [{ pageFile, expanded: true }],
           currentPage: pageFile,
           selection: null,
           linkTargetGroupIndex,
           linkFocusComponentId: newComponent.id,
+        };
+
+        return {
+          ...nextState,
+          panels: buildPanelsForPageContext(nextState, pageFile),
         };
       }
 
@@ -334,17 +344,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         entry,
       );
 
-      return {
+      const baseState: AppState = {
         ...state,
         project,
-        panels: [{ pageFile, expanded: true }],
         currentPage: pageFile,
-        selection: {
-          componentId: newComponent.id,
-          relatedIds: new Set([newComponent.id]),
-          activeGroupIndex: null,
-          matchingGroupIndices: [],
-        },
+      };
+      const applied = applyComponentSelection(baseState, newComponent.id, pageFile);
+      if (!applied) return baseState;
+
+      return {
+        ...baseState,
+        ...applied,
         selectionHistory: history,
         selectionHistoryIndex: index,
       };
@@ -380,7 +390,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           linkTargetGroupIndex = nextGroups.length - 1;
           project = rebuildProject({
             ...project,
-            relations: { ...project.relations, groups: nextGroups },
+            relations: withRelationsGroups(project.relations, nextGroups),
           });
         }
       } else {
@@ -428,7 +438,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       const project = rebuildProject({
         ...state.project,
-        relations: { groups },
+        relations: withRelationsGroups(state.project.relations, groups),
       });
 
       return {
@@ -448,6 +458,34 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         project: { ...state.project, imageUrls },
+      };
+    }
+
+    case 'APPEND_IMAGE_COMPONENT': {
+      if (!state.project) return state;
+      const { pageFile, filename, objectUrl } = action;
+
+      const imageUrls = new Map(state.project.imageUrls);
+      imageUrls.set(filename, objectUrl);
+
+      const { project: withComponent, newComponent } = appendImageComponent(
+        { ...state.project, imageUrls },
+        pageFile,
+        filename,
+      );
+
+      const targetPanel = state.panels.find((p) => p.pageFile === pageFile);
+      const shouldScroll = Boolean(targetPanel?.expanded);
+
+      return {
+        ...state,
+        project: withComponent,
+        scrollToComponent: shouldScroll
+          ? {
+              componentId: newComponent.id,
+              nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+            }
+          : state.scrollToComponent,
       };
     }
 

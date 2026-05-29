@@ -2,6 +2,7 @@ import type { AppState, LoadedProject, PageData, RelationsFile } from '../types'
 import { rebuildProject } from './projectMutations';
 import { createComponentId, resolvePageId, resolvePageName } from './pageIds';
 import { buildPanelsForPageContext, refreshPanelsWithPins, removePinnedPage } from './pagePins';
+import { getOrphanedPageAssets } from './pageAssetCleanup';
 
 const PAGE_FILE_RE = /^[a-z0-9][a-z0-9._-]*\.p$/i;
 
@@ -99,17 +100,25 @@ export function deletePageFromProject(
   if (!page) return null;
 
   const removedIds = collectComponentIdsOnPage(page);
+  const remainingPages = project.pages.filter((p) => p.fileName !== fileName);
+  const orphaned = getOrphanedPageAssets(page, remainingPages);
+
   const pageNames = { ...(project.relations.pageNames ?? {}) };
   delete pageNames[fileName];
 
   const mdFiles = new Map(project.mdFiles);
-  for (const component of page.components) {
-    if (component.type === 'md') {
-      mdFiles.delete(component.id);
-    }
+  for (const componentId of orphaned.mdComponentIds) {
+    mdFiles.delete(componentId);
   }
 
-  const pages = project.pages.filter((p) => p.fileName !== fileName);
+  const imageUrls = new Map(project.imageUrls);
+  for (const imageName of orphaned.imageFilenames) {
+    const url = imageUrls.get(imageName);
+    if (url) URL.revokeObjectURL(url);
+    imageUrls.delete(imageName);
+  }
+
+  const pages = remainingPages;
   const groups = removeIdsFromGroups(project.relations.groups, removedIds);
   const pinnedPages = removePinnedPage(project.relations.pinnedPages, fileName);
 
@@ -118,6 +127,7 @@ export function deletePageFromProject(
     pages,
     relations: { ...project.relations, pageNames, groups, pinnedPages },
     mdFiles,
+    imageUrls,
   });
 }
 

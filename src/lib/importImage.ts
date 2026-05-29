@@ -17,6 +17,13 @@ export function canReadClipboardImages(): boolean {
   return typeof navigator !== 'undefined' && typeof navigator.clipboard?.read === 'function';
 }
 
+export function canReadClipboardForImageImport(): boolean {
+  return (
+    canReadClipboardImages() ||
+    (typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function')
+  );
+}
+
 export function pickImageFile(): Promise<File | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
@@ -189,12 +196,147 @@ export async function readImageBlobFromClipboard(): Promise<
 export async function importImageFromClipboard(
   project: LoadedProject,
 ): Promise<ImportImageResult> {
-  const read = await readImageBlobFromClipboard();
-  if ('error' in read) {
-    return { ok: false, error: read.error };
+  return importImageFromClipboardSource(project);
+}
+
+function normalizeClipboardPathText(raw: string): string {
+  return raw.trim().replace(/^["']|["']$/g, '').trim();
+}
+
+function basenameFromPath(text: string): string {
+  return text.replace(/^.*[/\\]/, '').trim();
+}
+
+function extFromBasename(name: string): string | null {
+  const match = name.match(/\.(jpe?g|png|gif)$/i);
+  if (!match) return null;
+  return match[1].toLowerCase().replace('jpeg', 'jpg');
+}
+
+async function importImageFromUrl(
+  project: LoadedProject,
+  url: string,
+): Promise<ImportImageResult> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return { ok: false, error: `Could not fetch image (${response.status}).` };
+    }
+    const blob = await response.blob();
+    const mimeExt = extensionFromMime(blob.type);
+    const urlExt = extFromBasename(url);
+    const ext = mimeExt ?? urlExt;
+    if (!ext || !IMAGE_EXT.test(`.${ext}`)) {
+      return { ok: false, error: 'URL does not point to a JPEG, PNG, or GIF image.' };
+    }
+    const stem = sanitizeBasename(basenameFromPath(url)).replace(/\.(jpe?g|png|gif)$/i, '') || 'image';
+    return importImageBlob(project, blob, stem, ext);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Could not fetch image from URL.',
+    };
+  }
+}
+
+async function importExistingDocsImage(
+  project: LoadedProject,
+  fileName: string,
+): Promise<ImportImageResult> {
+  const existingUrl = project.imageUrls.get(fileName);
+  if (existingUrl) {
+    return { ok: true, filename: fileName, objectUrl: existingUrl };
   }
 
-  return importImageBlob(project, read.blob, read.stem, read.ext);
+  if (!project.folderHandle) {
+    return {
+      ok: false,
+      error: 'Image file is not loaded in this project. Open a local folder project.',
+    };
+  }
+
+  try {
+    const docsHandle = await ensureDocsDirectory(project.folderHandle);
+    const fileHandle = await docsHandle.getFileHandle(fileName);
+    const file = await fileHandle.getFile();
+    const ext = extensionFromFile(file);
+    if (!ext || !IMAGE_EXT.test(`.${ext}`)) {
+      return { ok: false, error: 'File in docs/ is not a supported image type.' };
+    }
+    const objectUrl = URL.createObjectURL(file);
+    return { ok: true, filename: fileName, objectUrl };
+  } catch {
+    return {
+      ok: false,
+      error: `Image "${fileName}" was not found in docs/.`,
+    };
+  }
+}
+
+async function readImagePathFromClipboard(
+  project: LoadedProject,
+): Promise<ImportImageResult | null> {
+  if (!navigator.clipboard?.readText) return null;
+
+  let text: string;
+  try {
+    text = normalizeClipboardPathText(await navigator.clipboard.readText());
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'NotAllowedError') {
+      return { ok: false, error: 'Clipboard access was denied. Allow clipboard permission and try again.' };
+    }
+    return null;
+  }
+
+  if (!text) return null;
+
+  if (/^https?:\/\//i.test(text)) {
+    return importImageFromUrl(project, text);
+  }
+
+  if (/^file:\/\//i.test(text)) {
+    try {
+      const response = await fetch(text);
+      if (!response.ok) {
+        return { ok: false, error: 'Could not read image from file URL on clipboard.' };
+      }
+      const blob = await response.blob();
+      const ext = extensionFromMime(blob.type) ?? extFromBasename(text);
+      if (!ext || !IMAGE_EXT.test(`.${ext}`)) {
+        return { ok: false, error: 'File URL on clipboard is not a supported image.' };
+      }
+      const stem =
+        sanitizeBasename(basenameFromPath(text)).replace(/\.(jpe?g|png|gif)$/i, '') || 'image';
+      return importImageBlob(project, blob, stem, ext);
+    } catch {
+      return {
+        ok: false,
+        error: 'Browser blocked reading the file path on clipboard. Copy the image itself instead.',
+      };
+    }
+  }
+
+  const fileName = basenameFromPath(text);
+  if (!IMAGE_EXT.test(fileName)) {
+    return null;
+  }
+
+  return importExistingDocsImage(project, fileName);
+}
+
+/** Clipboard image bytes first, then image path / URL in plain text. */
+export async function importImageFromClipboardSource(
+  project: LoadedProject,
+): Promise<ImportImageResult> {
+  const imageRead = await readImageBlobFromClipboard();
+  if (!('error' in imageRead)) {
+    return importImageBlob(project, imageRead.blob, imageRead.stem, imageRead.ext);
+  }
+
+  const pathRead = await readImagePathFromClipboard(project);
+  if (pathRead) return pathRead;
+
+  return { ok: false, error: imageRead.error };
 }
 
 export async function importImageFromComputer(

@@ -90,6 +90,33 @@ export function insertComponentRelative(
   };
 }
 
+export function appendImageComponent(
+  project: LoadedProject,
+  pageFile: string,
+  filename: string,
+): { project: LoadedProject; newComponent: Component } {
+  const page = project.pages.find((p) => p.fileName === pageFile);
+  if (!page) {
+    throw new Error(`Page not found: ${pageFile}`);
+  }
+
+  const newComponent: Component = {
+    ...createDefaultComponent(page.pageId, page.components),
+    type: 'img',
+    content: filename,
+  };
+
+  const pages = project.pages.map((p) => {
+    if (p.fileName !== pageFile) return p;
+    return { ...p, components: [...p.components, newComponent] };
+  });
+
+  return {
+    project: rebuildProject({ ...project, pages }),
+    newComponent,
+  };
+}
+
 function removeIdFromGroups(groups: string[][], componentId: string): string[][] {
   return groups
     .map((group) => group.filter((id) => id !== componentId))

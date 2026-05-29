@@ -40,6 +40,7 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     renamePage,
     deletePage,
     togglePinPage,
+    appendClipboardImageToPage,
     suggestNewPageFileName,
     normalizePageFileName,
     normalizePageName,
@@ -105,6 +106,7 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
           onDeletePage={deletePage}
           pinnedPages={pinnedPages}
           onTogglePinPage={togglePinPage}
+          onAppendClipboardImage={appendClipboardImageToPage}
           suggestNewPageFileName={suggestNewPageFileName}
           normalizePageFileName={normalizePageFileName}
           normalizePageName={normalizePageName}

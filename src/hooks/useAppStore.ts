@@ -7,7 +7,7 @@ import {
   cancelAutoSave,
   type SaveStatus,
 } from '../lib/saveProject';
-import { importImageFromComputer, importImageFromClipboard, type ImportImageResult } from '../lib/importImage';
+import { importImageFromComputer, importImageFromClipboardSource, type ImportImageResult } from '../lib/importImage';
 import {
   createDefaultPageData,
   normalizePageFileName,
@@ -15,6 +15,7 @@ import {
   suggestNewPageFileName,
 } from '../lib/pageMutations';
 import { createPageFileOnDisk, deletePageFileOnDisk, deleteMdFileOnDisk } from '../lib/pageFileOps';
+import { getOrphanedPageAssets } from '../lib/pageAssetCleanup';
 import { findComponent } from '../lib/projectMutations';
 
 export type PageActionResult = { ok: true } | { ok: false; error: string };
@@ -23,6 +24,7 @@ const PERSIST_ACTIONS = new Set<AppAction['type']>([
   'UPDATE_COMPONENT',
   'UPDATE_MD_CONTENT',
   'INSERT_COMPONENT',
+  'APPEND_IMAGE_COMPONENT',
   'TOGGLE_LINK_MODE',
   'TOGGLE_LINK_COMPONENT',
   'CREATE_PAGE',
@@ -279,9 +281,12 @@ export function useAppStore() {
 
     try {
       const page = project.pages.find((p) => p.fileName === fileName);
-      const mdComponentIds =
-        page?.components.filter((c) => c.type === 'md').map((c) => c.id) ?? [];
-      await deletePageFileOnDisk(project.folderHandle!, fileName, mdComponentIds);
+      if (!page) {
+        return { ok: false, error: 'Page not found.' };
+      }
+      const remainingPages = project.pages.filter((p) => p.fileName !== fileName);
+      const orphaned = getOrphanedPageAssets(page, remainingPages);
+      await deletePageFileOnDisk(project.folderHandle!, fileName, orphaned);
       shouldPersistRef.current = true;
       dispatch({ type: 'DELETE_PAGE', fileName });
       return { ok: true };
@@ -299,7 +304,7 @@ export function useAppStore() {
       return { ok: false, error: 'No project is open.' };
     }
 
-    const result = await importImageFromClipboard(project);
+    const result = await importImageFromClipboardSource(project);
     if (result.ok) {
       dispatch({
         type: 'ADD_IMAGE',
@@ -309,6 +314,32 @@ export function useAppStore() {
     }
     return result;
   }, [dispatch]);
+
+  const appendClipboardImageToPage = useCallback(
+    async (pageFile: string): Promise<PageActionResult> => {
+      const project = requireWritableProject();
+      if (!project) {
+        return { ok: false, error: 'Open a local project folder to add images.' };
+      }
+      if (!project.pages.some((p) => p.fileName === pageFile)) {
+        return { ok: false, error: 'Page not found.' };
+      }
+
+      const result = await importImageFromClipboardSource(project);
+      if (!result.ok) {
+        return { ok: false, error: result.error };
+      }
+
+      dispatch({
+        type: 'APPEND_IMAGE_COMPONENT',
+        pageFile,
+        filename: result.filename,
+        objectUrl: result.objectUrl,
+      });
+      return { ok: true };
+    },
+    [dispatch],
+  );
 
   return {
     state,
@@ -334,6 +365,7 @@ export function useAppStore() {
     goNextGroup,
     importImage,
     importImageFromClipboard: importImageFromClipboardAction,
+    appendClipboardImageToPage,
     createPage,
     renamePage,
     togglePinPage,

@@ -316,6 +316,12 @@ code {
   background: #e7f1ff;
 }
 
+.page-list-action-image:hover:not(:disabled) {
+  color: #1971c2;
+  border-color: #74c0fc;
+  background: #e7f5ff;
+}
+
 .page-list-action-danger:hover:not(:disabled) {
   color: #dc3545;
   border-color: #f5c2c7;

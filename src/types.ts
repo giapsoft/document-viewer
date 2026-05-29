@@ -145,6 +145,7 @@ export type AppAction =
   | { type: 'GO_BACK_SELECTION' }
   | { type: 'GO_NEXT_SELECTION' }
   | { type: 'ADD_IMAGE'; filename: string; objectUrl: string }
+  | { type: 'APPEND_IMAGE_COMPONENT'; pageFile: string; filename: string; objectUrl: string }
   | { type: 'UPDATE_MD_CONTENT'; componentId: string; content: string }
   | { type: 'CREATE_PAGE'; fileName: string }
   | { type: 'RENAME_PAGE'; fileName: string; newPageName: string }

@@ -23,6 +23,7 @@ interface SidebarProps {
   onDeletePage: (fileName: string) => Promise<{ ok: boolean; error?: string }>;
   pinnedPages: string[];
   onTogglePinPage: (fileName: string) => void;
+  onAppendClipboardImage: (fileName: string) => Promise<{ ok: boolean; error?: string }>;
   suggestNewPageFileName: () => string;
   normalizePageFileName: (input: string) => string | null;
   normalizePageName: (input: string) => string | null;
@@ -40,6 +41,7 @@ export function Sidebar({
   onDeletePage,
   pinnedPages,
   onTogglePinPage,
+  onAppendClipboardImage,
   suggestNewPageFileName,
   normalizePageFileName,
   normalizePageName,
@@ -51,6 +53,7 @@ export function Sidebar({
     | null
   >(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [appendingImageFor, setAppendingImageFor] = useState<string | null>(null);
 
   if (!expanded) {
     return null;
@@ -120,6 +123,25 @@ export function Sidebar({
                 >
                   📌
                 </button>
+                {canManagePages && (
+                  <button
+                    type="button"
+                    className="page-list-action-btn page-list-action-image"
+                    title="Add image from clipboard at end of page"
+                    disabled={appendingImageFor === page.fileName}
+                    onClick={() => {
+                      setActionError(null);
+                      setAppendingImageFor(page.fileName);
+                      void runAction(() => onAppendClipboardImage(page.fileName)).finally(() => {
+                        setAppendingImageFor((current) =>
+                          current === page.fileName ? null : current,
+                        );
+                      });
+                    }}
+                  >
+                    🖼
+                  </button>
+                )}
                 {canManagePages && (
                   <>
                   <button

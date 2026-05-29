@@ -31,16 +31,35 @@ export async function renamePageFileOnDisk(
   await docsHandle.removeEntry(oldFileName);
 }
 
+export async function deleteImageFileOnDisk(
+  root: FileSystemDirectoryHandle,
+  fileName: string,
+): Promise<void> {
+  const docsHandle = await getDocsDirectoryIfPresent(root);
+  if (!docsHandle) return;
+  try {
+    await docsHandle.removeEntry(fileName);
+  } catch {
+    // file may not exist
+  }
+}
+
 export async function deletePageFileOnDisk(
   root: FileSystemDirectoryHandle,
   fileName: string,
-  mdComponentIds: string[] = [],
+  orphaned: { imageFilenames: string[]; mdComponentIds: string[] } = {
+    imageFilenames: [],
+    mdComponentIds: [],
+  },
 ): Promise<void> {
   const docsHandle = await getDocsDirectoryIfPresent(root);
   if (!docsHandle) return;
   await docsHandle.removeEntry(fileName);
-  for (const componentId of mdComponentIds) {
+  for (const componentId of orphaned.mdComponentIds) {
     await deleteMdFileOnDisk(root, componentId);
+  }
+  for (const imageName of orphaned.imageFilenames) {
+    await deleteImageFileOnDisk(root, imageName);
   }
 }
 
