@@ -258,12 +258,6 @@
     "content": "[INTRO 34] Filler — extends the page to test scrollbar markers.\nSecond line adds block height."
   },
   {
-    "id": "r1",
-    "type": "ref",
-    "status": "pending",
-    "content": "detail.2lists-bridge"
-  },
-  {
     "id": "intro-f35",
     "type": "body",
     "status": "done",

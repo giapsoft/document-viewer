@@ -46,7 +46,6 @@ const intro = [
   comp('l1', 'listItem', 'working', 'List item linked to l10 on specs.p'),
   comp('l2', 'listItem', 'pending', 'Standalone list item'),
   ...filler('intro', 8, 27),
-  comp('r1', 'ref', 'pending', 'detail.2lists-bridge'),
   ...filler('intro', 10, 35),
   comp('t2', 'title', 'done', 'End of intro section'),
   comp('b-intro-end', 'body', 'done', 'Last component on intro.p'),

@@ -21,6 +21,8 @@ interface SidebarProps {
     newPageName: string,
   ) => Promise<{ ok: boolean; error?: string }>;
   onDeletePage: (fileName: string) => Promise<{ ok: boolean; error?: string }>;
+  pinnedPages: string[];
+  onTogglePinPage: (fileName: string) => void;
   suggestNewPageFileName: () => string;
   normalizePageFileName: (input: string) => string | null;
   normalizePageName: (input: string) => string | null;
@@ -36,6 +38,8 @@ export function Sidebar({
   onCreatePage,
   onRenamePage,
   onDeletePage,
+  pinnedPages,
+  onTogglePinPage,
   suggestNewPageFileName,
   normalizePageFileName,
   normalizePageName,
@@ -85,6 +89,7 @@ export function Sidebar({
       <ul className="page-list">
         {pages.map((page) => {
           const isActive = currentPage === page.fileName;
+          const isPinned = pinnedPages.includes(page.fileName);
           return (
             <li
               key={page.fileName}
@@ -101,8 +106,22 @@ export function Sidebar({
                   fileName={page.fileName}
                 />
               </button>
-              {canManagePages && (
-                <div className="page-list-actions">
+              <div className="page-list-actions">
+                <button
+                  type="button"
+                  className={`page-list-action-btn page-list-action-pin${isPinned ? ' page-list-action-pin-active' : ''}`}
+                  title={
+                    isPinned
+                      ? 'Unpin — hide from secondary panels when not linked'
+                      : 'Pin — always show in secondary panels when not main page'
+                  }
+                  aria-pressed={isPinned}
+                  onClick={() => onTogglePinPage(page.fileName)}
+                >
+                  📌
+                </button>
+                {canManagePages && (
+                  <>
                   <button
                     type="button"
                     className="page-list-action-btn"
@@ -126,8 +145,9 @@ export function Sidebar({
                   >
                     ×
                   </button>
-                </div>
-              )}
+                  </>
+                )}
+              </div>
             </li>
           );
         })}

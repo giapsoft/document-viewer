@@ -1,4 +1,4 @@
-export type ComponentType = 'header' | 'title' | 'body' | 'listItem' | 'img' | 'md' | 'ref';
+export type ComponentType = 'header' | 'title' | 'body' | 'listItem' | 'img' | 'md';
 export type ComponentStatus = 'pending' | 'working' | 'done' | 'blocked' | 'undefined';
 
 export interface Component {
@@ -11,6 +11,8 @@ export interface Component {
 export interface RelationsFile {
   /** Optional display names: page file (e.g. intro.p) → pageName shown in UI */
   pageNames?: Record<string, string>;
+  /** Page files always shown as secondary panels when not the main page */
+  pinnedPages?: string[];
   groups: string[][];
 }
 
@@ -36,7 +38,7 @@ export interface ScrollMarkerStyle {
 
 export interface AppStyles {
   statuses: Record<ComponentStatus, StatusStyle>;
-  type: Record<Exclude<ComponentType, 'img' | 'md' | 'ref'>, TypeStyle>;
+  type: Record<Exclude<ComponentType, 'img' | 'md'>, TypeStyle>;
   selectedComponent: SelectedComponentStyle;
   linkedScrollMarker: ScrollMarkerStyle;
 }
@@ -46,7 +48,6 @@ export interface ResolvedComponent {
   type: ComponentType;
   status: ComponentStatus;
   content: string;
-  refError?: string;
 }
 
 export interface PageData {
@@ -150,6 +151,7 @@ export type AppAction =
   | { type: 'CREATE_PAGE'; fileName: string }
   | { type: 'RENAME_PAGE'; fileName: string; newPageName: string }
   | { type: 'DELETE_PAGE'; fileName: string }
+  | { type: 'TOGGLE_PIN_PAGE'; pageFile: string }
   | { type: 'DELETE_COMPONENT'; pageFile: string; componentId: string };
 
 declare global {

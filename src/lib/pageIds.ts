@@ -68,16 +68,6 @@ export function createComponentId(pageId: string, components: Component[]): stri
   return `${pageId}.${local}`;
 }
 
-export function normalizeRefContent(
-  content: string,
-  fromPageId: string,
-): string {
-  const target = content.trim();
-  if (!target) return target;
-  if (isGlobalComponentId(target)) return target;
-  return `${fromPageId}.${target}`;
-}
-
 export function normalizePageComponents(
   components: Component[],
   pageId: string,
@@ -97,12 +87,7 @@ export function normalizePageComponents(
       }
     }
 
-    let content = component.content;
-    if (component.type === 'ref') {
-      content = normalizeRefContent(content, pageId);
-    } else if (component.type === 'md') {
-      content = '';
-    }
+    const content = component.type === 'md' ? '' : component.content;
 
     return {
       ...component,

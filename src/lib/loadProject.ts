@@ -9,7 +9,7 @@ import { normalizePageComponents, resolvePageId, resolvePageName } from './pageI
 import { EMPTY_RELATIONS, normalizeRelations } from './groupRelations';
 import { getDocsDirectoryIfPresent } from './docsFolder';
 import { mergeStyles } from './styles';
-import { isValidStatus, isValidType } from './resolveRef';
+import { isValidStatus, isValidType } from './componentDisplay';
 import { publicUrl } from './publicUrl';
 import { MD_FILE_EXT, componentIdFromMdFileName } from './mdFiles';
 

@@ -26,6 +26,7 @@ import {
   applyDeletePageState,
   applyRenamePageState,
 } from './pageMutations';
+import { buildPanelsForPageContext, refreshPanelsWithPins, togglePinnedPage } from './pagePins';
 
 export const initialAppState: AppState = {
   project: null,
@@ -98,13 +99,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'EXPAND_SIDEBAR':
       return { ...state, sidebarExpanded: true };
 
-    case 'OPEN_PAGE':
-      return {
+    case 'OPEN_PAGE': {
+      const nextState: AppState = {
         ...state,
-        panels: [{ pageFile: action.pageFile, expanded: true }],
         currentPage: action.pageFile,
         selection: state.linkMode ? state.selection : null,
+        panels: [{ pageFile: action.pageFile, expanded: true }],
       };
+      const panels = buildPanelsForPageContext(nextState, action.pageFile);
+      return { ...nextState, panels };
+    }
 
     case 'SELECT_COMPONENT': {
       if (state.linkMode) return state;
@@ -514,6 +518,21 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'DELETE_PAGE':
       return applyDeletePageState(state, action.fileName);
+
+    case 'TOGGLE_PIN_PAGE': {
+      if (!state.project || !state.currentPage) return state;
+      const pinnedPages = togglePinnedPage(
+        state.project.relations.pinnedPages,
+        action.pageFile,
+      );
+      const project = rebuildProject({
+        ...state.project,
+        relations: { ...state.project.relations, pinnedPages },
+      });
+      const nextState: AppState = { ...state, project };
+      const panels = refreshPanelsWithPins(nextState);
+      return panels ? { ...nextState, panels } : nextState;
+    }
 
     default:
       return state;

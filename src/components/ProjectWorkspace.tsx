@@ -42,6 +42,7 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     createPage,
     renamePage,
     deletePage,
+    togglePinPage,
     suggestNewPageFileName,
     normalizePageFileName,
     normalizePageName,
@@ -68,6 +69,7 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     pageName: p.pageName,
   }));
   const canManagePages = Boolean(project.folderHandle);
+  const pinnedPages = project.relations.pinnedPages ?? [];
   const handleComponentClick = state.linkMode ? toggleLinkComponent : selectComponent;
 
   const matchingGroupIndices = state.selection?.matchingGroupIndices ?? [];
@@ -120,6 +122,8 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
           onCreatePage={createPage}
           onRenamePage={renamePage}
           onDeletePage={deletePage}
+          pinnedPages={pinnedPages}
+          onTogglePinPage={togglePinPage}
           suggestNewPageFileName={suggestNewPageFileName}
           normalizePageFileName={normalizePageFileName}
           normalizePageName={normalizePageName}

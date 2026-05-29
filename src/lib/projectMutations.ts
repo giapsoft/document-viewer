@@ -96,18 +96,6 @@ function removeIdFromGroups(groups: string[][], componentId: string): string[][]
     .filter((group) => group.length > 0);
 }
 
-function clearRefTargetsTo(pages: LoadedProject['pages'], targetId: string): LoadedProject['pages'] {
-  return pages.map((page) => ({
-    ...page,
-    components: page.components.map((c) => {
-      if (c.type === 'ref' && c.content.trim() === targetId) {
-        return { ...c, content: '' };
-      }
-      return c;
-    }),
-  }));
-}
-
 export function deleteComponentFromProject(
   project: LoadedProject,
   pageFile: string,
@@ -127,7 +115,6 @@ export function deleteComponentFromProject(
     };
   });
 
-  pages = clearRefTargetsTo(pages, componentId);
   const groups = removeIdFromGroups(project.relations.groups, componentId);
 
   const mdFiles = new Map(project.mdFiles);

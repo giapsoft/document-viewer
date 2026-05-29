@@ -9,10 +9,9 @@ import type {
 import { findComponent } from '../lib/projectMutations';
 import type { ImportImageResult } from '../lib/importImage';
 import { ImagePickerDialog } from './ImagePickerDialog';
-import { RefTargetPickerDialog } from './RefTargetPickerDialog';
 import { ConfirmDialog } from './PageFileDialog';
 
-const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'md', 'ref'];
+const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'md'];
 const STATUSES: ComponentStatus[] = ['undefined', 'pending', 'working', 'done', 'blocked'];
 
 function ComponentIdHeader({ componentId, listBadge }: { componentId: string; listBadge?: ReactNode }) {
@@ -136,12 +135,6 @@ function EditBarForm({
     onUpdate(pageFile, component.id, changes);
   };
 
-  const refTargetId = component.content.trim();
-  const refTargetValid = component.type === 'ref' && refTargetId
-    ? findComponent(project, refTargetId)
-    : null;
-  const refTargetLabel = refTargetValid ? refTargetId : 'Select component';
-
   const imgFilename = component.content.trim();
   const imgLabel = imgFilename || 'select image';
   const mdContent = project.mdFiles.get(component.id) ?? '';
@@ -250,20 +243,10 @@ function EditBarForm({
                   </option>
                 ))}
               </select>
-              {component.type === 'ref' && (
-                <button
-                  type="button"
-                  className="edit-bar-input edit-bar-ref-target"
-                  onClick={() => setPickerOpen(true)}
-                  title="Ref target"
-                >
-                  {refTargetLabel}
-                </button>
-              )}
               {component.type === 'img' && (
                 <button
                   type="button"
-                  className="edit-bar-input edit-bar-ref-target"
+                  className="edit-bar-input edit-bar-file-picker"
                   onClick={() => setPickerOpen(true)}
                   title="Image file"
                 >
@@ -272,7 +255,7 @@ function EditBarForm({
               )}
             </div>
           </div>
-          {component.type !== 'ref' && component.type !== 'img' && component.type !== 'md' && (
+          {component.type !== 'img' && component.type !== 'md' && (
             <textarea
               className="edit-bar-input edit-bar-input-content"
               rows={3}
@@ -298,20 +281,10 @@ function EditBarForm({
       {confirmDelete && (
         <ConfirmDialog
           title="Delete component"
-          message={`Delete component "${component.id}"? It will be removed from this page and from all groups. Refs pointing to it will be cleared.`}
+          message={`Delete component "${component.id}"? It will be removed from this page and from all groups.`}
           confirmLabel="Delete"
           onClose={() => setConfirmDelete(false)}
           onConfirm={() => onDeleteComponent(pageFile, component.id)}
-        />
-      )}
-
-      {pickerOpen && component.type === 'ref' && (
-        <RefTargetPickerDialog
-          project={project}
-          refComponentId={component.id}
-          targetId={component.content}
-          onSelect={(targetId) => patch({ content: targetId })}
-          onClose={() => setPickerOpen(false)}
         />
       )}
 

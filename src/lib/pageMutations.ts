@@ -1,6 +1,7 @@
 import type { AppState, LoadedProject, PageData, RelationsFile } from '../types';
 import { rebuildProject } from './projectMutations';
 import { createComponentId, resolvePageId, resolvePageName } from './pageIds';
+import { buildPanelsForPageContext, refreshPanelsWithPins, removePinnedPage } from './pagePins';
 
 const PAGE_FILE_RE = /^[a-z0-9][a-z0-9._-]*\.p$/i;
 
@@ -110,11 +111,12 @@ export function deletePageFromProject(
 
   const pages = project.pages.filter((p) => p.fileName !== fileName);
   const groups = removeIdsFromGroups(project.relations.groups, removedIds);
+  const pinnedPages = removePinnedPage(project.relations.pinnedPages, fileName);
 
   return rebuildProject({
     ...project,
     pages,
-    relations: { ...project.relations, pageNames, groups },
+    relations: { ...project.relations, pageNames, groups, pinnedPages },
     mdFiles,
   });
 }
@@ -135,13 +137,15 @@ export function applyCreatePageState(state: AppState, fileName: string): AppStat
   const project = createPageInProject(state.project, fileName);
   if (!project) return state;
 
-  return {
+  const nextState: AppState = {
     ...state,
     project,
-    panels: [{ pageFile: fileName, expanded: true }],
     currentPage: fileName,
     selection: state.linkMode ? state.selection : null,
+    panels: [{ pageFile: fileName, expanded: true }],
   };
+  const panels = buildPanelsForPageContext(nextState, fileName);
+  return { ...nextState, panels };
 }
 
 export function applyDeletePageState(state: AppState, fileName: string): AppState {
@@ -165,14 +169,26 @@ export function applyDeletePageState(state: AppState, fileName: string): AppStat
     selection = null;
   }
 
-  return {
+  let nextState: AppState = {
     ...state,
     project,
-    panels: currentPage && !panels.some((p) => p.pageFile === currentPage)
-      ? [{ pageFile: currentPage, expanded: true }]
-      : panels,
+    panels,
     currentPage,
     selection: state.linkMode ? selection : null,
     selectionHistory,
   };
+
+  if (currentPage && !panels.some((p) => p.pageFile === currentPage)) {
+    nextState = {
+      ...nextState,
+      panels: [{ pageFile: currentPage, expanded: true }],
+    };
+  }
+
+  const refreshed = refreshPanelsWithPins(nextState);
+  if (refreshed) {
+    nextState = { ...nextState, panels: refreshed };
+  }
+
+  return nextState;
 }

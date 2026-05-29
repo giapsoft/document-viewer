@@ -27,6 +27,7 @@ const PERSIST_ACTIONS = new Set<AppAction['type']>([
   'CREATE_PAGE',
   'RENAME_PAGE',
   'DELETE_PAGE',
+  'TOGGLE_PIN_PAGE',
   'DELETE_COMPONENT',
 ]);
 
@@ -268,6 +269,12 @@ export function useAppStore() {
     [dispatch],
   );
 
+  const togglePinPage = useCallback((fileName: string) => {
+    if (!projectRef.current?.pages.some((p) => p.fileName === fileName)) return;
+    shouldPersistRef.current = true;
+    dispatch({ type: 'TOGGLE_PIN_PAGE', pageFile: fileName });
+  }, [dispatch]);
+
   const deletePage = useCallback(async (fileName: string): Promise<PageActionResult> => {
     const project = requireWritableProject();
     if (!project) {
@@ -338,6 +345,7 @@ export function useAppStore() {
     importImageFromClipboard: importImageFromClipboardAction,
     createPage,
     renamePage,
+    togglePinPage,
     deletePage,
     suggestNewPageFileName: () =>
       suggestNewPageFileName(projectRef.current?.pages.map((p) => p.fileName) ?? []),

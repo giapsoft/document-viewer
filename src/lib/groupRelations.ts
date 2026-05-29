@@ -6,13 +6,17 @@ export function cloneGroups(groups: string[][]): string[][] {
 
 export function normalizeRelations(relations: RelationsFile): RelationsFile {
   const groups = Array.isArray(relations.groups) ? relations.groups : [];
+  const pinnedPages = Array.isArray(relations.pinnedPages)
+    ? [...new Set(relations.pinnedPages.filter((f) => typeof f === 'string' && f.trim()))]
+    : [];
   return {
     pageNames: relations.pageNames ? { ...relations.pageNames } : {},
+    pinnedPages,
     groups: cloneGroups(groups),
   };
 }
 
-export const EMPTY_RELATIONS: RelationsFile = { pageNames: {}, groups: [] };
+export const EMPTY_RELATIONS: RelationsFile = { pageNames: {}, pinnedPages: [], groups: [] };
 
 export function getGroupIndicesForComponent(
   groups: string[][],

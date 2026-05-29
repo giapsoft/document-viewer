@@ -1,11 +1,10 @@
 import { useRef, useEffect, type CSSProperties, type ReactNode } from 'react';
 import type { AppStyles, Component, LoadedProject, PageData, SelectionState } from '../types';
-import { resolveComponentForDisplay, isTextType, getRefTargetId } from '../lib/resolveRef';
+import { resolveComponentForDisplay, isTextType } from '../lib/componentDisplay';
 import { PageLabel } from './PageLabel';
 import { MarkdownPreview } from './MarkdownPreview';
 import { scheduleScrollToComponent } from '../lib/scrollIntoContainer';
 import { ScrollbarMarkers } from './ScrollbarMarkers';
-import { RefLinkButton } from './RefLinkButton';
 
 interface ComponentBlockProps {
   component: Component;
@@ -21,15 +20,12 @@ interface ComponentBlockProps {
 
 interface ComponentShellProps {
   component: Component;
-  isRefType: boolean;
-  refTargetId: string | null;
   isSelected: boolean;
   isDimmed: boolean;
   linkMode?: boolean;
   className: string;
   style: CSSProperties;
   onSelect: (componentId: string, pageFile: string) => void;
-  onJumpToOriginal: (targetId: string) => void;
   pageFile: string;
   registerRef: (id: string, el: HTMLElement | null) => void;
   children: ReactNode;
@@ -37,15 +33,12 @@ interface ComponentShellProps {
 
 function ComponentShell({
   component,
-  isRefType,
-  refTargetId,
   isSelected,
   isDimmed,
   linkMode,
   className,
   style,
   onSelect,
-  onJumpToOriginal,
   pageFile,
   registerRef,
   children,
@@ -53,7 +46,7 @@ function ComponentShell({
   return (
     <div
       ref={(el) => registerRef(component.id, el)}
-      className={`component-block ${className} ${isRefType ? 'component-ref-copy' : ''} ${isSelected ? 'selected' : ''} ${isDimmed ? 'dimmed' : ''} ${linkMode && isSelected ? 'link-selected' : ''}`}
+      className={`component-block ${className} ${isSelected ? 'selected' : ''} ${isDimmed ? 'dimmed' : ''} ${linkMode && isSelected ? 'link-selected' : ''}`}
       style={style}
       onClick={(e) => {
         e.stopPropagation();
@@ -68,12 +61,6 @@ function ComponentShell({
         }
       }}
     >
-      {isRefType && refTargetId && !linkMode && (
-        <RefLinkButton
-          refId={refTargetId}
-          onJump={() => onJumpToOriginal(refTargetId)}
-        />
-      )}
       {children}
     </div>
   );
@@ -90,13 +77,7 @@ export function ComponentBlock({
   onSelect,
   registerRef,
 }: ComponentBlockProps) {
-  const resolved = resolveComponentForDisplay(
-    component,
-    project.index.componentData,
-    project.mdFiles,
-  );
-  const isRefType = component.type === 'ref';
-  const refTargetId = isRefType ? getRefTargetId(component) : null;
+  const resolved = resolveComponentForDisplay(component, project.mdFiles);
 
   const isLinkSelected = linkMode && (linkGroupMembers?.has(component.id) ?? false);
   const isSelected = linkMode
@@ -119,33 +100,15 @@ export function ComponentBlock({
       : {}),
   };
 
-  const handleJumpToOriginal = (targetId: string) => {
-    const originalPage = project.index.componentToPage.get(targetId);
-    if (originalPage) {
-      onSelect(targetId, originalPage);
-    }
-  };
-
   const shellProps = {
     component,
-    isRefType,
-    refTargetId,
     isSelected,
     isDimmed,
     linkMode,
     onSelect,
-    onJumpToOriginal: handleJumpToOriginal,
     pageFile,
     registerRef,
   };
-
-  if (resolved.refError) {
-    return (
-      <ComponentShell {...shellProps} className="component-error" style={shellStyle}>
-        {resolved.refError}
-      </ComponentShell>
-    );
-  }
 
   if (resolved.type === 'img') {
     const src = project.imageUrls.get(resolved.content);

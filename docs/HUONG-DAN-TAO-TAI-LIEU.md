@@ -8,7 +8,7 @@ Spec ngắn để agent tạo/sửa dữ liệu. Không đề cập `styles.json
 |-----------|-------|---------|
 | **pageId** | `intro` | Tên file bỏ `.p` (`intro.p` → `intro`). Cố định; prefix của global id. |
 | **local id** | `p1` | Id component **trong file `.p`** (unique trong trang). |
-| **global id** | `intro.p1` | `pageId` + `.` + `local id`. Id trong app, `groups`, `ref` (khuyến nghị), file sidecar `.md`. |
+| **global id** | `intro.p1` | `pageId` + `.` + `local id`. Id trong app, `groups`, file sidecar `.md`. |
 
 **Công thức:** `global id` = `{pageId}.{localId}`
 
@@ -44,7 +44,7 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 | `id` | có | **local id** trong trang (vd. `b1`, `c2`). App ghép thành **global id** `pageId.b1` khi load |
 | `type` | có | xem bảng dưới |
 | `status` | có | xem bảng dưới |
-| `content` | có | text; với `img`/`ref`/`md` có ý nghĩa đặc biệt |
+| `content` | có | text; với `img`/`md` có ý nghĩa đặc biệt |
 
 **Không cần (và không nên) ghi global id** trong `.p` — chỉ dùng local id; app tự sinh `c1`, `c2`, … khi insert trong UI.
 
@@ -76,11 +76,9 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 | `listItem` | văn bản (app thêm bullet) |
 | `img` | **tên file** ảnh trong `docs/` (vd. `diagram.png`) |
 | `md` | để trống `""` — nội dung Markdown nằm ở file sidecar `{globalId}.md` (vd. global id `intro.notes` → `intro.notes.md`) |
-| `ref` | **global id** component gốc (vd. `detail.b3`) |
 
 - Text (`header`/`title`/`body`/`listItem`): plain, `\n` = xuống dòng. Không Markdown/HTML.
 - `md`: Markdown trong file sidecar cùng thư mục `docs/`; tên file = **global id** + `.md` (không lặp pageId).
-- `ref` cùng trang có thể viết **local id** trong file (`b1`) — app tự thành global id; khuyến nghị ghi global id khi khác trang.
 
 ## `status`
 
@@ -91,6 +89,7 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 ```json
 {
   "pageNames": {},
+  "pinnedPages": ["detail.p"],
   "groups": [
     ["intro.b1", "detail.b2"],
     ["detail.b2", "appendix.b3"]
@@ -98,17 +97,10 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 }
 ```
 
-- `groups`: mảng các **nhóm** component (**global id**).
+- `pinnedPages` (tùy chọn): tên file trang (vd. `detail.p`) luôn hiển thị ở **panel phụ** khi không phải trang chính; bật/tắt bằng nút 📌 trong sidebar.
+- `groups`: mảng các **nhóm** component (**global id**). Dùng để trace/highlight khi click component — mở các trang liên quan.
 - Một id **có thể nằm ở nhiều nhóm**.
 - Id trong nhóm có thể **khác trang**.
-
-## `ref` vs nhóm
-
-| | `ref` | `groups` |
-|---|-------|----------|
-| Mục đích | hiển thị lại nội dung gốc | trace/highlight khi click |
-| ID riêng | có (local id trong `.p`, global id trong app) | global id |
-| Click block ref | chọn ref, **không** kéo theo nhóm của gốc | — |
 
 ## Ví dụ tối thiểu
 
@@ -116,7 +108,7 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 ```json
 [
   { "id": "h1", "type": "header", "status": "done", "content": "Trang A" },
-  { "id": "b1", "type": "body", "status": "done", "content": "Liên kết sang B." }
+  { "id": "b1", "type": "body", "status": "done", "content": "Liên kết sang B qua groups." }
 ]
 ```
 
@@ -124,8 +116,7 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 ```json
 [
   { "id": "h2", "type": "header", "status": "done", "content": "Trang B" },
-  { "id": "b2", "type": "body", "status": "working", "content": "Chi tiết." },
-  { "id": "r1", "type": "ref", "status": "pending", "content": "a.b1" }
+  { "id": "b2", "type": "body", "status": "working", "content": "Chi tiết." }
 ]
 ```
 
@@ -142,7 +133,8 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 ## Quy tắc quan trọng
 
 - **local id** unique trong từng file `.p`; **global id** unique toàn project.
-- `groups` và `ref` (khác trang) dùng **global id**.
+- `groups` dùng **global id** (khác trang bắt buộc ghi đầy đủ).
+- Để liên kết component giữa các trang: thêm **global id** vào cùng một nhóm trong `groups` — **không** tạo component copy trên trang khác.
 - Đổi tên file `.p` → cập nhật key trong `pageNames`, giữ value pageId cũ để không gãy links.
 - Trong app (mở **local project folder**): **+ New page**, **✎** đổi **pageName**, **×** xóa page. File và pageId không đổi.
-- `type`/`status` sai → file `.p` đó bị bỏ.
+- `type`/`status` sai → component đó bị bỏ khi load.

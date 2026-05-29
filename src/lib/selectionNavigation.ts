@@ -5,6 +5,11 @@ import {
   buildPanelsForPages,
   getGroupIndicesForComponent,
 } from './index';
+import {
+  getPinnedPages,
+  mergePinnedPagesIntoOrder,
+  validPageFileSet,
+} from './pagePins';
 
 export const MAX_SELECTION_HISTORY = 20;
 
@@ -70,10 +75,18 @@ export function buildSelectionForComponent(
       : getRelatedIdsForGroup(componentId, activeGroup);
 
   const hasLinks = relatedIds.size > 1;
+  const validFiles = validPageFileSet(state);
+  const pinnedPages = getPinnedPages(state.project.relations);
 
   if (!hasLinks) {
+    const orderedPages = mergePinnedPagesIntoOrder(
+      [pageFile],
+      pageFile,
+      pinnedPages,
+      validFiles,
+    );
     return {
-      panels: [{ pageFile, expanded: true }],
+      panels: buildPanelsForPages(orderedPages, pageFile),
       currentPage: pageFile,
       selection: {
         componentId,
@@ -86,11 +99,11 @@ export function buildSelectionForComponent(
 
   const groupMemberOrder = activeGroup;
 
-  const orderedPages = orderPagesForSelection(
+  const orderedPages = mergePinnedPagesIntoOrder(
+    orderPagesForSelection(pageFile, relatedIds, index, groupMemberOrder),
     pageFile,
-    relatedIds,
-    index,
-    groupMemberOrder,
+    pinnedPages,
+    validFiles,
   );
 
   return {
