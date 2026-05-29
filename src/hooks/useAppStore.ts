@@ -23,6 +23,7 @@ const PERSIST_ACTIONS = new Set<AppAction['type']>([
   'UPDATE_COMPONENT',
   'UPDATE_MD_CONTENT',
   'INSERT_COMPONENT',
+  'TOGGLE_LINK_MODE',
   'TOGGLE_LINK_COMPONENT',
   'CREATE_PAGE',
   'RENAME_PAGE',
@@ -191,14 +192,6 @@ export function useAppStore() {
     dispatch({ type: 'GO_NEXT_GROUP' });
   }, [dispatch]);
 
-  const goPrevLinkGroup = useCallback(() => {
-    dispatch({ type: 'GO_PREV_LINK_GROUP' });
-  }, [dispatch]);
-
-  const goNextLinkGroup = useCallback(() => {
-    dispatch({ type: 'GO_NEXT_LINK_GROUP' });
-  }, [dispatch]);
-
   const importImage = useCallback(async (): Promise<ImportImageResult> => {
     const project = projectRef.current;
     if (!project) {
@@ -339,8 +332,6 @@ export function useAppStore() {
     goNextSelection,
     goPrevGroup,
     goNextGroup,
-    goPrevLinkGroup,
-    goNextLinkGroup,
     importImage,
     importImageFromClipboard: importImageFromClipboardAction,
     createPage,

@@ -142,8 +142,6 @@ export type AppAction =
   | { type: 'TOGGLE_LINK_COMPONENT'; componentId: string; pageFile: string }
   | { type: 'GO_PREV_GROUP' }
   | { type: 'GO_NEXT_GROUP' }
-  | { type: 'GO_PREV_LINK_GROUP' }
-  | { type: 'GO_NEXT_LINK_GROUP' }
   | { type: 'GO_BACK_SELECTION' }
   | { type: 'GO_NEXT_SELECTION' }
   | { type: 'ADD_IMAGE'; filename: string; objectUrl: string }

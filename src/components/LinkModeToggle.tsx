@@ -12,12 +12,8 @@ interface LinkModeToggleProps {
   groupNavLabel?: string | null;
   onGroupPrev?: () => void;
   onGroupNext?: () => void;
-  canGoPrevLinkGroup?: boolean;
-  canGoNextLinkGroup?: boolean;
-  linkGroupNavLabel?: string | null;
-  linkFocusComponentId?: string | null;
-  onLinkGroupPrev?: () => void;
-  onLinkGroupNext?: () => void;
+  /** Locked list index in link mode, or null when creating a new list */
+  linkEditingListIndex?: number | null;
   linkTargetMemberCount?: number;
 }
 
@@ -35,14 +31,11 @@ export function LinkModeToggle({
   groupNavLabel = null,
   onGroupPrev,
   onGroupNext,
-  canGoPrevLinkGroup = false,
-  canGoNextLinkGroup: _canGoNextLinkGroup = false,
-  linkGroupNavLabel = null,
-  linkFocusComponentId = null,
-  onLinkGroupPrev,
-  onLinkGroupNext,
+  linkEditingListIndex = null,
   linkTargetMemberCount = 0,
 }: LinkModeToggleProps) {
+  const creatingNewList = enabled && linkEditingListIndex === null;
+
   return (
     <div className="link-mode-bar">
       {sidebarCollapsed && onExpandSidebar && (
@@ -97,27 +90,6 @@ export function LinkModeToggle({
           </button>
         </div>
       )}
-      {enabled && canGoPrevLinkGroup && onLinkGroupPrev && onLinkGroupNext && (
-        <div className="selection-nav-group link-list-nav">
-          <button
-            type="button"
-            className="selection-nav-btn"
-            onClick={onLinkGroupPrev}
-            title="Previous list (add target)"
-          >
-            ← List
-          </button>
-          <span className="group-nav-label">{linkGroupNavLabel ?? 'List'}</span>
-          <button
-            type="button"
-            className="selection-nav-btn"
-            onClick={onLinkGroupNext}
-            title="Next list (add target)"
-          >
-            List →
-          </button>
-        </div>
-      )}
       <button
         type="button"
         className={`link-mode-toggle ${enabled ? 'active' : ''}`}
@@ -132,18 +104,11 @@ export function LinkModeToggle({
           {enabled ? 'ON' : 'OFF'}
         </span>
       </button>
-      {enabled && linkFocusComponentId && (
-        <span className="link-focus-badge">
-          Focus: <code>{linkFocusComponentId}</code>
-        </span>
-      )}
       {enabled && (
         <span className="link-mode-hint">
-          {canGoPrevLinkGroup && linkGroupNavLabel
-            ? `Add/remove in ${linkGroupNavLabel} (${linkTargetMemberCount} members).`
-            : linkFocusComponentId
-              ? 'Focus node is in 1 list — no list switcher.'
-              : 'Select a component, then toggle lists with ← List / List →.'}
+          {creatingNewList
+            ? 'Creating a new list — click components to add them to this list.'
+            : `Editing list ${linkEditingListIndex! + 1} (${linkTargetMemberCount} members) — click to add or remove.`}
         </span>
       )}
     </div>

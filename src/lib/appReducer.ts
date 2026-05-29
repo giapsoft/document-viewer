@@ -10,7 +10,6 @@ import {
   addComponentToGroup,
   removeComponentFromGroup,
   createGroup,
-  adjustGroupIndexAfterRemoval,
   getGroupIndicesForComponent,
 } from './groupRelations';
 import {
@@ -42,47 +41,6 @@ export const initialAppState: AppState = {
   scrollToComponent: null,
   selectionScrollNonce: 0,
 };
-
-function clampLinkTargetIndex(groupsLength: number, index: number | null): number | null {
-  if (groupsLength === 0) return null;
-  if (index === null || index < 0 || index >= groupsLength) return 0;
-  return index;
-}
-
-function resolveLinkTargetForComponent(
-  groups: string[][],
-  componentId: string | null,
-  preferredIndex: number | null,
-): number | null {
-  if (!componentId) return preferredIndex;
-  const matching = getGroupIndicesForComponent(groups, componentId);
-  if (matching.length === 0) return preferredIndex;
-  if (preferredIndex !== null && matching.includes(preferredIndex)) {
-    return preferredIndex;
-  }
-  return matching[0];
-}
-
-function cycleLinkTargetAmongMatching(
-  groups: string[][],
-  componentId: string | null,
-  currentTarget: number | null,
-  direction: 'prev' | 'next',
-): number | null {
-  if (!componentId) return currentTarget;
-  const matching = getGroupIndicesForComponent(groups, componentId);
-  if (matching.length <= 1) return matching[0] ?? currentTarget;
-
-  let pos = currentTarget !== null ? matching.indexOf(currentTarget) : -1;
-  if (pos < 0) pos = 0;
-
-  const nextPos =
-    direction === 'prev'
-      ? (pos - 1 + matching.length) % matching.length
-      : (pos + 1) % matching.length;
-
-  return matching[nextPos];
-}
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -149,20 +107,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         scrollToComponent: null,
         selectionScrollNonce: state.selectionScrollNonce + 1,
       };
-    }
-
-    case 'GO_PREV_LINK_GROUP':
-    case 'GO_NEXT_LINK_GROUP': {
-      if (!state.linkMode || !state.project) return state;
-
-      const next = cycleLinkTargetAmongMatching(
-        state.project.relations.groups,
-        state.linkFocusComponentId,
-        state.linkTargetGroupIndex,
-        action.type === 'GO_PREV_LINK_GROUP' ? 'prev' : 'next',
-      );
-
-      return { ...state, linkTargetGroupIndex: next };
     }
 
     case 'GO_BACK_SELECTION': {
@@ -414,26 +358,38 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           linkMode: false,
           linkTargetGroupIndex: null,
           linkFocusComponentId: null,
-          selection: state.selection,
         };
       }
 
-      const groups = state.project?.relations.groups ?? [];
-      const linkFocusComponentId = state.selection?.componentId ?? null;
-      const matching = linkFocusComponentId
-        ? getGroupIndicesForComponent(groups, linkFocusComponentId)
-        : [];
-      const preferred =
-        state.selection?.activeGroupIndex !== null &&
-        state.selection?.activeGroupIndex !== undefined &&
-        matching.includes(state.selection.activeGroupIndex)
-          ? state.selection.activeGroupIndex
-          : (matching[0] ?? null);
-      const linkTargetGroupIndex =
-        matching.length > 0 ? preferred : null;
+      if (!state.project) return state;
+
+      let project = state.project;
+      const groups = project.relations.groups;
+      const selectedId = state.selection?.componentId ?? null;
+      let linkTargetGroupIndex: number | null = null;
+      let linkFocusComponentId: string | null = selectedId;
+
+      if (selectedId) {
+        const matching = getGroupIndicesForComponent(groups, selectedId);
+        if (matching.length > 0) {
+          const active = state.selection?.activeGroupIndex ?? null;
+          linkTargetGroupIndex =
+            active !== null && matching.includes(active) ? active : matching[0];
+        } else {
+          const nextGroups = createGroup(groups, [selectedId]);
+          linkTargetGroupIndex = nextGroups.length - 1;
+          project = rebuildProject({
+            ...project,
+            relations: { ...project.relations, groups: nextGroups },
+          });
+        }
+      } else {
+        linkFocusComponentId = null;
+      }
 
       return {
         ...state,
+        project,
         linkMode: true,
         linkTargetGroupIndex,
         linkFocusComponentId,
@@ -448,12 +404,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       if (!state.project.index.componentData.has(componentId)) return state;
 
       let groups = state.project.relations.groups;
-      let linkTargetGroupIndex = resolveLinkTargetForComponent(
-        groups,
-        componentId,
-        state.linkTargetGroupIndex,
-      );
-      let removedGroupIndex: number | null = null;
+      let linkTargetGroupIndex = state.linkTargetGroupIndex;
 
       if (linkTargetGroupIndex === null) {
         groups = createGroup(groups, [componentId]);
@@ -467,12 +418,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             componentId,
           );
           groups = result.groups;
-          removedGroupIndex = result.removedGroupIndex;
-          if (removedGroupIndex !== null) {
-            linkTargetGroupIndex = adjustGroupIndexAfterRemoval(
-              linkTargetGroupIndex,
-              removedGroupIndex,
-            );
+          if (result.removedGroupIndex !== null) {
+            linkTargetGroupIndex = null;
           }
         } else {
           groups = addComponentToGroup(groups, linkTargetGroupIndex, componentId);
@@ -483,12 +430,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state.project,
         relations: { groups },
       });
-
-      linkTargetGroupIndex = resolveLinkTargetForComponent(
-        project.relations.groups,
-        componentId,
-        clampLinkTargetIndex(project.relations.groups.length, linkTargetGroupIndex),
-      );
 
       return {
         ...state,

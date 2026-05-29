@@ -5,7 +5,6 @@ import { LinkModeToggle } from './LinkModeToggle';
 import { SaveIndicator } from './SaveIndicator';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
-import { getGroupIndicesForComponent } from '../lib/groupRelations';
 
 type AppStore = ReturnType<typeof useAppStore>;
 
@@ -35,8 +34,6 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     goNextSelection,
     goPrevGroup,
     goNextGroup,
-    goPrevLinkGroup,
-    goNextLinkGroup,
     importImage,
     importImageFromClipboard,
     createPage,
@@ -82,27 +79,11 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     : null;
 
   const groups = project.relations.groups;
-  const linkTargetGroupIndex = state.linkTargetGroupIndex;
-  const linkMatchingGroupIndices = state.linkFocusComponentId
-    ? getGroupIndicesForComponent(groups, state.linkFocusComponentId)
-    : [];
-  const resolvedLinkTargetIndex =
-    linkTargetGroupIndex !== null &&
-    linkMatchingGroupIndices.includes(linkTargetGroupIndex)
-      ? linkTargetGroupIndex
-      : (linkMatchingGroupIndices[0] ?? null);
+  const linkEditingListIndex = state.linkTargetGroupIndex;
   const linkGroupMembers =
-    state.linkMode && resolvedLinkTargetIndex !== null
-      ? new Set(groups[resolvedLinkTargetIndex] ?? [])
+    state.linkMode && linkEditingListIndex !== null
+      ? new Set(groups[linkEditingListIndex] ?? [])
       : new Set<string>();
-  const showLinkGroupNav = state.linkMode && linkMatchingGroupIndices.length > 1;
-  const linkTargetPosition =
-    resolvedLinkTargetIndex !== null
-      ? linkMatchingGroupIndices.indexOf(resolvedLinkTargetIndex)
-      : -1;
-  const linkGroupNavLabel = showLinkGroupNav
-    ? `List ${linkTargetPosition + 1}/${linkMatchingGroupIndices.length}`
-    : null;
 
   return (
     <>
@@ -157,12 +138,7 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
             groupNavLabel={groupNavLabel}
             onGroupPrev={goPrevGroup}
             onGroupNext={goNextGroup}
-            canGoPrevLinkGroup={showLinkGroupNav}
-            canGoNextLinkGroup={showLinkGroupNav}
-            linkGroupNavLabel={linkGroupNavLabel}
-            linkFocusComponentId={state.linkFocusComponentId}
-            onLinkGroupPrev={goPrevLinkGroup}
-            onLinkGroupNext={goNextLinkGroup}
+            linkEditingListIndex={linkEditingListIndex}
             linkTargetMemberCount={linkGroupMembers.size}
           />
 

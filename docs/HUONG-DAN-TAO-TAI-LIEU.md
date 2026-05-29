@@ -99,6 +99,7 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 
 - `pinnedPages` (tùy chọn): tên file trang (vd. `detail.p`) luôn hiển thị ở **panel phụ** khi không phải trang chính; bật/tắt bằng nút 📌 trong sidebar.
 - `groups`: mảng các **nhóm** component (**global id**). Dùng để trace/highlight khi click component — mở các trang liên quan.
+- Trong app, **Link mode**: bật khi **chưa chọn component** → tạo **list mới** (click để thêm/bỏ); bật khi **đã chọn component** → chỉ sửa **list** mà component đó thuộc (theo group đang active).
 - Một id **có thể nằm ở nhiều nhóm**.
 - Id trong nhóm có thể **khác trang**.
 
