@@ -1,5 +1,6 @@
 import type { Component, LoadedProject } from '../types';
 import { buildIndex } from './index';
+import { createComponentId } from './pageIds';
 
 export function rebuildProject(project: LoadedProject): LoadedProject {
   const { index, warnings } = buildIndex(project.pages, project.relations);
@@ -10,9 +11,9 @@ export function rebuildProject(project: LoadedProject): LoadedProject {
   };
 }
 
-export function createDefaultComponent(suffix = Date.now()): Component {
+export function createDefaultComponent(pageId: string, components: Component[]): Component {
   return {
-    id: `new-${suffix}`,
+    id: createComponentId(pageId, components),
     type: 'body',
     status: 'undefined',
     content: '',
@@ -23,20 +24,40 @@ export function updateComponentInProject(
   project: LoadedProject,
   pageFile: string,
   componentId: string,
-  patch: Partial<Component>,
+  patch: Partial<Omit<Component, 'id'>>,
 ): { project: LoadedProject; newComponentId: string } {
+  const page = project.pages.find((p) => p.fileName === pageFile);
+  const existing = page?.components.find((c) => c.id === componentId);
+
+  let mdFiles = project.mdFiles;
+  if (existing && patch.type !== undefined && patch.type !== existing.type) {
+    mdFiles = new Map(project.mdFiles);
+    if (existing.type === 'md' && patch.type !== 'md') {
+      mdFiles.delete(componentId);
+    } else if (patch.type === 'md' && existing.type !== 'md') {
+      mdFiles.set(componentId, mdFiles.get(componentId) ?? '');
+    }
+  }
+
   const pages = project.pages.map((page) => {
     if (page.fileName !== pageFile) return page;
     return {
       ...page,
-      components: page.components.map((c) =>
-        c.id === componentId ? { ...c, ...patch, id: patch.id?.trim() || c.id } : c,
-      ),
+      components: page.components.map((c) => {
+        if (c.id !== componentId) return c;
+        const next = { ...c, ...patch };
+        if (next.type === 'md') {
+          next.content = '';
+        }
+        return next;
+      }),
     };
   });
 
-  const newComponentId = patch.id?.trim() || componentId;
-  return { project: rebuildProject({ ...project, pages }), newComponentId };
+  return {
+    project: rebuildProject({ ...project, pages, mdFiles }),
+    newComponentId: componentId,
+  };
 }
 
 export function insertComponentRelative(
@@ -44,29 +65,82 @@ export function insertComponentRelative(
   pageFile: string,
   anchorComponentId: string,
   position: 'above' | 'below',
-  component?: Partial<Component>,
+  component?: Partial<Omit<Component, 'id'>>,
 ): { project: LoadedProject; newComponent: Component } {
+  const page = project.pages.find((p) => p.fileName === pageFile);
   const newComponent: Component = {
-    ...createDefaultComponent(),
+    ...createDefaultComponent(page?.pageId ?? 'page', page?.components ?? []),
     ...component,
-    id: component?.id?.trim() || createDefaultComponent().id,
   };
 
-  const pages = project.pages.map((page) => {
-    if (page.fileName !== pageFile) return page;
-    const index = page.components.findIndex((c) => c.id === anchorComponentId);
-    if (index < 0) return page;
+  const pages = project.pages.map((p) => {
+    if (p.fileName !== pageFile) return p;
+    const index = p.components.findIndex((c) => c.id === anchorComponentId);
+    if (index < 0) return p;
 
     const insertAt = position === 'above' ? index : index + 1;
-    const components = [...page.components];
+    const components = [...p.components];
     components.splice(insertAt, 0, newComponent);
-    return { ...page, components };
+    return { ...p, components };
   });
 
   return {
     project: rebuildProject({ ...project, pages }),
     newComponent,
   };
+}
+
+function removeIdFromGroups(groups: string[][], componentId: string): string[][] {
+  return groups
+    .map((group) => group.filter((id) => id !== componentId))
+    .filter((group) => group.length > 0);
+}
+
+function clearRefTargetsTo(pages: LoadedProject['pages'], targetId: string): LoadedProject['pages'] {
+  return pages.map((page) => ({
+    ...page,
+    components: page.components.map((c) => {
+      if (c.type === 'ref' && c.content.trim() === targetId) {
+        return { ...c, content: '' };
+      }
+      return c;
+    }),
+  }));
+}
+
+export function deleteComponentFromProject(
+  project: LoadedProject,
+  pageFile: string,
+  componentId: string,
+): LoadedProject | null {
+  const page = project.pages.find((p) => p.fileName === pageFile);
+  if (!page) return null;
+  if (page.components.length <= 1) return null;
+
+  const doomed = page.components.find((c) => c.id === componentId);
+
+  let pages = project.pages.map((p) => {
+    if (p.fileName !== pageFile) return p;
+    return {
+      ...p,
+      components: p.components.filter((c) => c.id !== componentId),
+    };
+  });
+
+  pages = clearRefTargetsTo(pages, componentId);
+  const groups = removeIdFromGroups(project.relations.groups, componentId);
+
+  const mdFiles = new Map(project.mdFiles);
+  if (doomed?.type === 'md') {
+    mdFiles.delete(componentId);
+  }
+
+  return rebuildProject({
+    ...project,
+    pages,
+    relations: { ...project.relations, groups },
+    mdFiles,
+  });
 }
 
 export function findComponent(

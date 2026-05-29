@@ -3,13 +3,13 @@ import { shrinkFarthestExpanded } from '../lib/index';
 import {
   updateComponentInProject,
   insertComponentRelative,
+  deleteComponentFromProject,
   rebuildProject,
 } from './projectMutations';
 import {
   addComponentToGroup,
   removeComponentFromGroup,
   createGroup,
-  renameComponentInGroups,
   adjustGroupIndexAfterRemoval,
   getGroupIndicesForComponent,
 } from './groupRelations';
@@ -21,6 +21,11 @@ import {
   remapSelectionHistoryId,
   scrollToHistoryEntry,
 } from './selectionNavigation';
+import {
+  applyCreatePageState,
+  applyDeletePageState,
+  applyRenamePageState,
+} from './pageMutations';
 
 export const initialAppState: AppState = {
   project: null,
@@ -267,13 +272,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         patch,
       );
 
-      let relations = project.relations;
-      if (newComponentId !== componentId) {
-        relations = {
-          groups: renameComponentInGroups(relations.groups, componentId, newComponentId),
-        };
-      }
-      const rebuilt = rebuildProject({ ...project, relations });
+      const rebuilt = rebuildProject(project);
 
       let selection = state.selection;
       if (selection?.componentId === componentId) {
@@ -297,6 +296,46 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         project: rebuilt,
         selection,
         selectionHistory,
+      };
+    }
+
+    case 'UPDATE_MD_CONTENT': {
+      if (!state.project) return state;
+      const mdFiles = new Map(state.project.mdFiles);
+      mdFiles.set(action.componentId, action.content);
+      return {
+        ...state,
+        project: { ...state.project, mdFiles },
+      };
+    }
+
+    case 'DELETE_COMPONENT': {
+      if (!state.project) return state;
+      const { pageFile, componentId } = action;
+      const project = deleteComponentFromProject(state.project, pageFile, componentId);
+      if (!project) return state;
+
+      const panels = state.panels.filter((p) => p.pageFile !== pageFile || p.expanded);
+      let currentPage = state.currentPage;
+      if (!panels.some((p) => p.pageFile === currentPage)) {
+        currentPage = pageFile;
+      }
+
+      const page = project.pages.find((p) => p.fileName === pageFile);
+      const firstId = page?.components[0]?.id ?? null;
+
+      return {
+        ...state,
+        project,
+        selection: null,
+        panels: panels.length > 0 ? panels : [{ pageFile, expanded: true }],
+        currentPage,
+        selectionHistory: state.selectionHistory.filter(
+          (e) => e.componentId !== componentId,
+        ),
+        scrollToComponent: firstId
+          ? { componentId: firstId, nonce: (state.scrollToComponent?.nonce ?? 0) + 1 }
+          : null,
       };
     }
 
@@ -466,6 +505,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         project: { ...state.project, imageUrls },
       };
     }
+
+    case 'CREATE_PAGE':
+      return applyCreatePageState(state, action.fileName);
+
+    case 'RENAME_PAGE':
+      return applyRenamePageState(state, action.fileName, action.newPageName);
+
+    case 'DELETE_PAGE':
+      return applyDeletePageState(state, action.fileName);
 
     default:
       return state;

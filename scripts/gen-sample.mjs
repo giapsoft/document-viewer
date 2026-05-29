@@ -24,6 +24,7 @@ function filler(prefix, count, start, status = 'done') {
 const intro = [
   comp('h1', 'header', 'done', 'Introduction'),
   comp('t1', 'title', 'done', 'Document Viewer project overview'),
+  comp('notes', 'md', 'done', ''),
   comp('i-intro', 'img', 'done', 'overview.png'),
   ...filler('intro', 8, 1),
   comp('b1', 'body', 'done', '★ HUB b1 — trace to 2lists-bridge (detail), b4 (appendix), b6 (detail page)'),
@@ -45,7 +46,7 @@ const intro = [
   comp('l1', 'listItem', 'working', 'List item linked to l10 on specs.p'),
   comp('l2', 'listItem', 'pending', 'Standalone list item'),
   ...filler('intro', 8, 27),
-  comp('r1', 'ref', 'pending', '2lists-bridge'),
+  comp('r1', 'ref', 'pending', 'detail.2lists-bridge'),
   ...filler('intro', 10, 35),
   comp('t2', 'title', 'done', 'End of intro section'),
   comp('b-intro-end', 'body', 'done', 'Last component on intro.p'),
@@ -173,14 +174,29 @@ const pages = {
   'changelog.p': changelog,
 };
 
+const localToPage = new Map();
+for (const [fileName, components] of Object.entries(pages)) {
+  const pageId = fileName.replace(/\.p$/i, '');
+  for (const c of components) {
+    localToPage.set(c.id, pageId);
+  }
+}
+
+function q(localId) {
+  const pageId = localToPage.get(localId);
+  if (!pageId) throw new Error(`Unknown component id: ${localId}`);
+  return `${pageId}.${localId}`;
+}
+
 const relations = {
+  pageNames: {},
   groups: [
-    ['b1', '2lists-bridge', 'b4', 'b6'],
-    ['2lists-bridge', 'b3', 'b7', 'b8', 'b9'],
-    ['l1', 'l10'],
-    ['mega5', 'm-detail', 'm-integration', 'm-workflow', 'm-reference'],
-    ['chain-a', 'chain-b', 'chain-c', 'chain-d', 'chain-e'],
-    ['specs-hub', 'q-integration', 'q-workflow', 'q-reference'],
+    [q('b1'), q('2lists-bridge'), q('b4'), q('b6'), q('i-intro')],
+    [q('2lists-bridge'), q('b3'), q('b7'), q('b8'), q('b9')],
+    [q('l1'), q('l10')],
+    [q('mega5'), q('m-detail'), q('m-integration'), q('m-workflow'), q('m-reference')],
+    [q('chain-a'), q('chain-b'), q('chain-c'), q('chain-d'), q('chain-e')],
+    [q('specs-hub'), q('q-integration'), q('q-workflow'), q('q-reference')],
   ],
 };
 
@@ -189,15 +205,30 @@ const targets = [
   join(root, 'sample-data/docs'),
 ];
 
+const introNotesMd = `# Markdown notes
+
+This is a **markdown** component (\`type: md\`).
+
+- Sidecar file: \`intro.notes.md\`
+- Body is **not** stored in \`.p\` \`content\`
+
+## Code example
+
+\`\`\`text
+echo "Hello from markdown"
+\`\`\`
+`;
+
 for (const dir of targets) {
   mkdirSync(dir, { recursive: true });
   for (const [fileName, components] of Object.entries(pages)) {
     writeFileSync(join(dir, fileName), JSON.stringify(components, null, 2) + '\n');
   }
+  writeFileSync(join(dir, 'intro.notes.md'), introNotesMd);
 }
 
 for (const base of [join(root, 'public/sample-data'), join(root, 'sample-data')]) {
   writeFileSync(join(base, 'relations.json'), JSON.stringify(relations, null, 2) + '\n');
 }
 
-console.log('Generated English sample data (8 pages, 4-page and 5-page link clusters)');
+console.log('Generated sample data (global ids in groups, local ids in .p files)');

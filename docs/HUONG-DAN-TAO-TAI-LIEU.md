@@ -2,14 +2,25 @@
 
 Spec ngắn để agent tạo/sửa dữ liệu. Không đề cập `styles.json`.
 
+## Thuật ngữ id
+
+| Thuật ngữ | Ví dụ | Ghi chú |
+|-----------|-------|---------|
+| **pageId** | `intro` | Tên file bỏ `.p` (`intro.p` → `intro`). Cố định; prefix của global id. |
+| **local id** | `p1` | Id component **trong file `.p`** (unique trong trang). |
+| **global id** | `intro.p1` | `pageId` + `.` + `local id`. Id trong app, `groups`, `ref` (khuyến nghị), file sidecar `.md`. |
+
+**Công thức:** `global id` = `{pageId}.{localId}`
+
 ## Cấu trúc thư mục
 
 ```text
 <root>/
-├── docs/
+├── docs/                # app tạo khi tạo trang đầu tiên (có thể chưa có khi mới mở folder)
 │   ├── *.p              # mỗi file = 1 trang (JSON array)
+│   ├── *.md             # markdown sidecar cho component `md` (tên = global id, vd. `intro.notes.md`)
 │   └── *.png|jpg|...    # ảnh (tùy chọn, cùng thư mục docs/)
-└── relations.json       # bắt buộc
+└── relations.json       # app ghi khi lưu; thiếu thì mặc định `{ "pageNames": {}, "groups": [] }`
 ```
 
 - Chỉ file **phẳng** trong `docs/` — không có thư mục con.
@@ -30,10 +41,30 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 
 | Trường | Bắt buộc | Ghi chú |
 |--------|----------|---------|
-| `id` | có | **unique toàn project** |
+| `id` | có | **local id** trong trang (vd. `b1`, `c2`). App ghép thành **global id** `pageId.b1` khi load |
 | `type` | có | xem bảng dưới |
 | `status` | có | xem bảng dưới |
-| `content` | có | text; với `img`/`ref` có ý nghĩa đặc biệt |
+| `content` | có | text; với `img`/`ref`/`md` có ý nghĩa đặc biệt |
+
+**Không cần (và không nên) ghi global id** trong `.p` — chỉ dùng local id; app tự sinh `c1`, `c2`, … khi insert trong UI.
+
+## `pageId` và `pageName`
+
+- **pageId** — xem bảng thuật ngữ. **Cố định** trong app (không đổi khi đổi pageName).
+- **pageName** = tên hiển thị (có thể đổi trong app). Lưu trong `relations.json` → `pageNames`.
+- **global id** (`intro.b1`, …) do app cấp khi tạo component — **không đổi** sau đó (không rename trong UI).
+
+```json
+{
+  "pageNames": {
+    "intro.p": "Introduction"
+  },
+  "groups": []
+}
+```
+
+- Không có entry → pageName mặc định = pageId (stem file).
+- Đổi tên page trong app **chỉ** đổi pageName; file `.p` và pageId giữ nguyên.
 
 ## `type`
 
@@ -44,9 +75,12 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 | `body` | văn bản |
 | `listItem` | văn bản (app thêm bullet) |
 | `img` | **tên file** ảnh trong `docs/` (vd. `diagram.png`) |
-| `ref` | **id component gốc** (cùng hoặc khác trang) |
+| `md` | để trống `""` — nội dung Markdown nằm ở file sidecar `{globalId}.md` (vd. global id `intro.notes` → `intro.notes.md`) |
+| `ref` | **global id** component gốc (vd. `detail.b3`) |
 
-- Text: plain, `\n` = xuống dòng. Không Markdown/HTML.
+- Text (`header`/`title`/`body`/`listItem`): plain, `\n` = xuống dòng. Không Markdown/HTML.
+- `md`: Markdown trong file sidecar cùng thư mục `docs/`; tên file = **global id** + `.md` (không lặp pageId).
+- `ref` cùng trang có thể viết **local id** trong file (`b1`) — app tự thành global id; khuyến nghị ghi global id khi khác trang.
 
 ## `status`
 
@@ -56,33 +90,25 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 
 ```json
 {
+  "pageNames": {},
   "groups": [
-    ["b1", "b2", "b4"],
-    ["b2", "b3", "b7"]
+    ["intro.b1", "detail.b2"],
+    ["detail.b2", "appendix.b3"]
   ]
 }
 ```
 
-- `groups`: mảng các **nhóm** component.
-- Mỗi nhóm = mảng id. Click một id → highlight **toàn bộ nhóm** đó.
-- Một id **có thể nằm ở nhiều nhóm** (node trung gian phục vụ nhiều cụm).
+- `groups`: mảng các **nhóm** component (**global id**).
+- Một id **có thể nằm ở nhiều nhóm**.
 - Id trong nhóm có thể **khác trang**.
-- Thêm id vào nhóm: append vào **một** mảng nhóm — không cần nối từng cặp.
-- Sample data: id bắt đầu `2lists-` = node thuộc **nhiều nhóm** (vd. `2lists-bridge`).
-
-**Nhiều nhóm:** click → highlight **một nhóm** (list đầu tiên chứa component). Nút ← Group / Group → xoay giữa các nhóm — mỗi lần chỉ highlight + mở panel của nhóm đang chọn.
-
-**Link mode:** sửa **một list** tại một thời điểm; ← List / List → xoay giữa các list **chứa component vừa chọn** (ẩn nếu chỉ thuộc 0–1 list).
 
 ## `ref` vs nhóm
 
 | | `ref` | `groups` |
 |---|-------|----------|
 | Mục đích | hiển thị lại nội dung gốc | trace/highlight khi click |
-| ID riêng | có (id của bản ref) | dùng id component |
-| Click block ref | chọn id ref, **không** kéo theo nhóm của gốc | — |
-
-- `ref` resolve đệ quy tới component không phải `ref`. Vòng ref → `[circular ref]`. Id sai → `[ref not found: …]`.
+| ID riêng | có (local id trong `.p`, global id trong app) | global id |
+| Click block ref | chọn ref, **không** kéo theo nhóm của gốc | — |
 
 ## Ví dụ tối thiểu
 
@@ -99,23 +125,24 @@ Mảng JSON. Thứ tự phần tử = thứ tự hiển thị trên trang.
 [
   { "id": "h2", "type": "header", "status": "done", "content": "Trang B" },
   { "id": "b2", "type": "body", "status": "working", "content": "Chi tiết." },
-  { "id": "r1", "type": "ref", "status": "pending", "content": "b1" }
+  { "id": "r1", "type": "ref", "status": "pending", "content": "a.b1" }
 ]
 ```
 
 **`relations.json`**
 ```json
 {
+  "pageNames": {},
   "groups": [
-    ["b1", "b2"]
+    ["a.b1", "b.b2"]
   ]
 }
 ```
 
 ## Quy tắc quan trọng
 
-- Mỗi `id` **một lần** trong toàn project (trong file `.p`). Trùng → warning, chỉ bản đầu được dùng.
-- Cùng id có thể xuất hiện trong **nhiều nhóm** trong `relations.json`.
+- **local id** unique trong từng file `.p`; **global id** unique toàn project.
+- `groups` và `ref` (khác trang) dùng **global id**.
+- Đổi tên file `.p` → cập nhật key trong `pageNames`, giữ value pageId cũ để không gãy links.
+- Trong app (mở **local project folder**): **+ New page**, **✎** đổi **pageName**, **×** xóa page. File và pageId không đổi.
 - `type`/`status` sai → file `.p` đó bị bỏ.
-- `img`: chỉ tên file, không đường dẫn con.
-- Đổi/xóa `id` → cập nhật mọi nhóm và mọi `ref` trỏ tới id đó.

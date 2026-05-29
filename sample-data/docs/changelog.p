@@ -13,9 +13,9 @@
   },
   {
     "id": "changelog-f02",
-    "type": "img",
+    "type": "body",
     "status": "done",
-    "content": "clipboard.png"
+    "content": "[CHANGELOG 02] Filler — extends the page to test scrollbar markers.\nSecond line adds block height."
   },
   {
     "id": "changelog-f03",

@@ -1,7 +1,7 @@
 {
   "name": "document-viewer",
   "private": true,
-  "version": "0.2.2",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,10 +10,13 @@
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
+    "dompurify": "^3.4.7",
+    "marked": "^18.0.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@types/dompurify": "^3.0.5",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",

@@ -30,14 +30,19 @@ export function resolveRefTarget(
 export function resolveComponentForDisplay(
   component: Component,
   componentData: Map<string, Component>,
+  mdFiles?: Map<string, string>,
   visited = new Set<string>(),
 ): ResolvedComponent {
   if (component.type !== 'ref') {
+    const content =
+      component.type === 'md'
+        ? (mdFiles?.get(component.id) ?? '')
+        : component.content;
     return {
       id: component.id,
       type: component.type,
       status: component.status,
-      content: component.content,
+      content,
     };
   }
 
@@ -76,7 +81,7 @@ export function resolveComponentForDisplay(
   visited.add(component.id);
 
   if (target.type === 'ref') {
-    const resolved = resolveComponentForDisplay(target, componentData, visited);
+    const resolved = resolveComponentForDisplay(target, componentData, mdFiles, visited);
     return {
       id: component.id,
       type: resolved.type,
@@ -86,11 +91,14 @@ export function resolveComponentForDisplay(
     };
   }
 
+  const content =
+    target.type === 'md' ? (mdFiles?.get(target.id) ?? '') : target.content;
+
   return {
     id: component.id,
     type: target.type,
     status: target.status,
-    content: target.content,
+    content,
   };
 }
 
@@ -102,8 +110,8 @@ export function getConnectorTraceId(
   return resolved?.id ?? component.content.trim() ?? component.id;
 }
 
-export function isTextType(type: ComponentType): type is Exclude<ComponentType, 'img' | 'ref'> {
-  return type !== 'img' && type !== 'ref';
+export function isTextType(type: ComponentType): type is Exclude<ComponentType, 'img' | 'md' | 'ref'> {
+  return type !== 'img' && type !== 'md' && type !== 'ref';
 }
 
 export function isValidStatus(status: string): status is ComponentStatus {
@@ -111,5 +119,5 @@ export function isValidStatus(status: string): status is ComponentStatus {
 }
 
 export function isValidType(type: string): type is ComponentType {
-  return ['header', 'title', 'body', 'listItem', 'img', 'ref'].includes(type);
+  return ['header', 'title', 'body', 'listItem', 'img', 'md', 'ref'].includes(type);
 }

@@ -5,9 +5,13 @@ import type {
   RelationsFile,
 } from '../types';
 import { buildIndex } from './index';
+import { normalizePageComponents, resolvePageId, resolvePageName } from './pageIds';
+import { EMPTY_RELATIONS, normalizeRelations } from './groupRelations';
+import { getDocsDirectoryIfPresent } from './docsFolder';
 import { mergeStyles } from './styles';
 import { isValidStatus, isValidType } from './resolveRef';
 import { publicUrl } from './publicUrl';
+import { MD_FILE_EXT, componentIdFromMdFileName } from './mdFiles';
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|gif)$/i;
 const PAGE_EXT = /\.p$/i;
@@ -52,16 +56,21 @@ export interface RawProjectInput {
   relations: RelationsFile;
   stylesPartial?: Partial<import('../types').AppStyles> | null;
   imageFiles: { name: string; blob: Blob }[];
+  mdFiles?: { componentId: string; content: string }[];
 }
 
 export function assembleProject(input: RawProjectInput): LoadedProject {
   const warnings: string[] = [];
   const pages: PageData[] = [];
+  const relations = normalizeRelations(input.relations);
 
   for (const { name, content } of input.pageFiles) {
     try {
-      const components = parseComponents(content, name);
-      pages.push({ fileName: name, components });
+      const pageId = resolvePageId(name);
+      const pageName = resolvePageName(name, relations.pageNames);
+      const parsed = parseComponents(content, name);
+      const components = normalizePageComponents(parsed, pageId, name, warnings);
+      pages.push({ fileName: name, pageId, pageName, components });
     } catch (err) {
       warnings.push(
         err instanceof Error ? err.message : `Failed to parse ${name}`,
@@ -76,41 +85,51 @@ export function assembleProject(input: RawProjectInput): LoadedProject {
     imageUrls.set(name, URL.createObjectURL(blob));
   }
 
-  const { index, warnings: indexWarnings } = buildIndex(pages, input.relations);
+  const mdFiles = new Map<string, string>();
+  for (const { componentId, content } of input.mdFiles ?? []) {
+    mdFiles.set(componentId, content);
+  }
+
+  for (const page of pages) {
+    for (const component of page.components) {
+      if (component.type !== 'md') continue;
+      if (!mdFiles.has(component.id)) {
+        warnings.push(`Missing markdown file for ${component.id}`);
+        mdFiles.set(component.id, '');
+      }
+    }
+  }
+
+  const { index, warnings: indexWarnings } = buildIndex(pages, relations);
   warnings.push(...indexWarnings);
 
   return {
     pages,
-    relations: input.relations,
+    relations,
     styles: mergeStyles(input.stylesPartial),
     imageUrls,
+    mdFiles,
     index,
     warnings,
   };
 }
 
-export async function loadFromDirectoryHandle(
-  root: FileSystemDirectoryHandle,
-): Promise<LoadedProject> {
-  let docsHandle: FileSystemDirectoryHandle;
-  try {
-    docsHandle = await root.getDirectoryHandle('docs');
-  } catch {
-    throw new Error('Missing /docs folder');
-  }
-
-  let relations: RelationsFile;
+async function loadRelationsFromRoot(root: FileSystemDirectoryHandle): Promise<RelationsFile> {
   try {
     const relHandle = await root.getFileHandle('relations.json');
     const relFile = await relHandle.getFile();
-    relations = await readJsonFile<RelationsFile>(relFile);
-    if (!Array.isArray(relations.groups)) {
-      throw new Error('relations.json: missing groups');
-    }
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('groups')) throw err;
-    throw new Error('Missing or invalid relations.json');
+    const parsed = await readJsonFile<RelationsFile>(relFile);
+    return normalizeRelations(parsed);
+  } catch {
+    return EMPTY_RELATIONS;
   }
+}
+
+export async function loadFromDirectoryHandle(
+  root: FileSystemDirectoryHandle,
+): Promise<LoadedProject> {
+  const relations = await loadRelationsFromRoot(root);
+  const docsHandle = await getDocsDirectoryIfPresent(root);
 
   let stylesPartial: Partial<import('../types').AppStyles> | null = null;
   try {
@@ -123,29 +142,33 @@ export async function loadFromDirectoryHandle(
 
   const pageFiles: { name: string; content: unknown }[] = [];
   const imageFiles: { name: string; blob: Blob }[] = [];
+  const mdFiles: { componentId: string; content: string }[] = [];
 
-  for await (const entry of docsHandle.values()) {
-    if (entry.kind !== 'file') continue;
-    const name = entry.name;
-    if (PAGE_EXT.test(name)) {
-      const file = await (entry as FileSystemFileHandle).getFile();
-      try {
-        const content = JSON.parse(await file.text());
-        pageFiles.push({ name, content });
-      } catch {
-        pageFiles.push({ name, content: null });
+  if (docsHandle) {
+    for await (const entry of docsHandle.values()) {
+      if (entry.kind !== 'file') continue;
+      const name = entry.name;
+      if (PAGE_EXT.test(name)) {
+        const file = await (entry as FileSystemFileHandle).getFile();
+        try {
+          const content = JSON.parse(await file.text());
+          pageFiles.push({ name, content });
+        } catch {
+          pageFiles.push({ name, content: null });
+        }
+      } else if (IMAGE_EXT.test(name)) {
+        const file = await (entry as FileSystemFileHandle).getFile();
+        imageFiles.push({ name, blob: file });
+      } else if (MD_FILE_EXT.test(name)) {
+        const componentId = componentIdFromMdFileName(name);
+        if (!componentId) continue;
+        const file = await (entry as FileSystemFileHandle).getFile();
+        mdFiles.push({ componentId, content: await file.text() });
       }
-    } else if (IMAGE_EXT.test(name)) {
-      const file = await (entry as FileSystemFileHandle).getFile();
-      imageFiles.push({ name, blob: file });
     }
   }
 
-  if (pageFiles.length === 0) {
-    throw new Error('No *.p files found in /docs');
-  }
-
-  const project = assembleProject({ pageFiles, relations, stylesPartial, imageFiles });
+  const project = assembleProject({ pageFiles, relations, stylesPartial, imageFiles, mdFiles });
   return { ...project, folderHandle: root };
 }
 
@@ -185,11 +208,23 @@ export async function loadSampleProject(): Promise<LoadedProject> {
     if (res.ok) imageFiles.push({ name, blob: await res.blob() });
   }
 
+  const mdNames = ['intro.notes.md'];
+  const mdFiles: { componentId: string; content: string }[] = [];
+  for (const name of mdNames) {
+    const res = await fetch(publicUrl(`sample-data/docs/${name}`));
+    if (res.ok) {
+      const componentId = componentIdFromMdFileName(name);
+      if (componentId) {
+        mdFiles.push({ componentId, content: await res.text() });
+      }
+    }
+  }
+
   if (pageFiles.length === 0) {
     throw new Error('Cannot load sample page data');
   }
 
-  return assembleProject({ pageFiles, relations, stylesPartial, imageFiles });
+  return assembleProject({ pageFiles, relations, stylesPartial, imageFiles, mdFiles });
 }
 
 export async function pickProjectFolder(): Promise<LoadedProject | null> {

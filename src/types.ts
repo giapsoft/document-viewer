@@ -1,4 +1,4 @@
-export type ComponentType = 'header' | 'title' | 'body' | 'listItem' | 'img' | 'ref';
+export type ComponentType = 'header' | 'title' | 'body' | 'listItem' | 'img' | 'md' | 'ref';
 export type ComponentStatus = 'pending' | 'working' | 'done' | 'blocked' | 'undefined';
 
 export interface Component {
@@ -9,6 +9,8 @@ export interface Component {
 }
 
 export interface RelationsFile {
+  /** Optional display names: page file (e.g. intro.p) → pageName shown in UI */
+  pageNames?: Record<string, string>;
   groups: string[][];
 }
 
@@ -34,7 +36,7 @@ export interface ScrollMarkerStyle {
 
 export interface AppStyles {
   statuses: Record<ComponentStatus, StatusStyle>;
-  type: Record<Exclude<ComponentType, 'img' | 'ref'>, TypeStyle>;
+  type: Record<Exclude<ComponentType, 'img' | 'md' | 'ref'>, TypeStyle>;
   selectedComponent: SelectedComponentStyle;
   linkedScrollMarker: ScrollMarkerStyle;
 }
@@ -49,12 +51,17 @@ export interface ResolvedComponent {
 
 export interface PageData {
   fileName: string;
+  /** Fixed: file stem without .p — prefix of global ids on this page */
+  pageId: string;
+  /** Display label (relations.pageNames or defaults to pageId) */
+  pageName: string;
   components: Component[];
 }
 
 export interface ProjectIndex {
   componentToPage: Map<string, string>;
   componentData: Map<string, Component>;
+  pageIdByFile: Map<string, string>;
   groups: string[][];
   componentToGroups: Map<string, number[]>;
 }
@@ -64,6 +71,8 @@ export interface LoadedProject {
   relations: RelationsFile;
   styles: AppStyles;
   imageUrls: Map<string, string>;
+  /** Markdown body keyed by global id (sidecar `{globalId}.md` files). */
+  mdFiles: Map<string, string>;
   index: ProjectIndex;
   warnings: string[];
   /** Set when opened from a local folder; enables auto-save. */
@@ -136,7 +145,12 @@ export type AppAction =
   | { type: 'GO_NEXT_LINK_GROUP' }
   | { type: 'GO_BACK_SELECTION' }
   | { type: 'GO_NEXT_SELECTION' }
-  | { type: 'ADD_IMAGE'; filename: string; objectUrl: string };
+  | { type: 'ADD_IMAGE'; filename: string; objectUrl: string }
+  | { type: 'UPDATE_MD_CONTENT'; componentId: string; content: string }
+  | { type: 'CREATE_PAGE'; fileName: string }
+  | { type: 'RENAME_PAGE'; fileName: string; newPageName: string }
+  | { type: 'DELETE_PAGE'; fileName: string }
+  | { type: 'DELETE_COMPONENT'; pageFile: string; componentId: string };
 
 declare global {
   interface Window {

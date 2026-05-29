@@ -5,10 +5,14 @@ export function cloneGroups(groups: string[][]): string[][] {
 }
 
 export function normalizeRelations(relations: RelationsFile): RelationsFile {
+  const groups = Array.isArray(relations.groups) ? relations.groups : [];
   return {
-    groups: cloneGroups(relations.groups),
+    pageNames: relations.pageNames ? { ...relations.pageNames } : {},
+    groups: cloneGroups(groups),
   };
 }
+
+export const EMPTY_RELATIONS: RelationsFile = { pageNames: {}, groups: [] };
 
 export function getGroupIndicesForComponent(
   groups: string[][],

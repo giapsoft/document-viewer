@@ -49,10 +49,16 @@ export function buildIndex(
     }
   });
 
+  const pageIdByFile = new Map<string, string>();
+  for (const page of pages) {
+    pageIdByFile.set(page.fileName, page.pageId);
+  }
+
   return {
     index: {
       componentToPage,
       componentData,
+      pageIdByFile,
       groups,
       componentToGroups,
     },

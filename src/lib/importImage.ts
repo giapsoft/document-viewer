@@ -1,4 +1,5 @@
 import type { LoadedProject } from '../types';
+import { ensureDocsDirectory } from './docsFolder';
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|gif)$/i;
 
@@ -133,7 +134,7 @@ async function importImageBlob(
   const filename = resolveUniqueImageFilename(project.imageUrls.keys(), stem, ext);
 
   try {
-    const docsHandle = await project.folderHandle.getDirectoryHandle('docs');
+    const docsHandle = await ensureDocsDirectory(project.folderHandle);
     await writeBlobFile(docsHandle, filename, blob);
     const objectUrl = URL.createObjectURL(blob);
     return { ok: true, filename, objectUrl };

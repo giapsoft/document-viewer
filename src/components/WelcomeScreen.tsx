@@ -57,9 +57,10 @@ export function WelcomeScreen({ onLoaded }: WelcomeScreenProps) {
         </div>
         {error && <p className="welcome-error">{error}</p>}
         <p className="welcome-hint">
-          Folder must contain <code>docs/</code> and <code>relations.json</code>.{' '}
-          <code>styles.json</code> is optional. Edits auto-save when using{' '}
-          <strong>Select folder</strong> (Chrome/Edge).
+          You can open an empty folder and add pages from the sidebar. The app creates{' '}
+          <code>docs/</code> on the first page and writes <code>relations.json</code> when
+          saving. <code>styles.json</code> is optional. Edits auto-save in Chrome/Edge when
+          using <strong>Select folder</strong>.
         </p>
       </div>
     </div>

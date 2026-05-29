@@ -12,10 +12,16 @@
     "content": "Document Viewer project overview"
   },
   {
+    "id": "notes",
+    "type": "md",
+    "status": "done",
+    "content": ""
+  },
+  {
     "id": "i-intro",
     "type": "img",
     "status": "done",
-    "content": "clipboard.png"
+    "content": "overview.png"
   },
   {
     "id": "intro-f01",
@@ -255,7 +261,7 @@
     "id": "r1",
     "type": "ref",
     "status": "pending",
-    "content": "2lists-bridge"
+    "content": "detail.2lists-bridge"
   },
   {
     "id": "intro-f35",

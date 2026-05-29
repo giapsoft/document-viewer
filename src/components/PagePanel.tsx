@@ -1,7 +1,8 @@
 import { useRef, useEffect, type CSSProperties, type ReactNode } from 'react';
 import type { AppStyles, Component, LoadedProject, PageData, SelectionState } from '../types';
 import { resolveComponentForDisplay, isTextType, getRefTargetId } from '../lib/resolveRef';
-import { formatPageName } from '../lib/formatPageName';
+import { PageLabel } from './PageLabel';
+import { MarkdownPreview } from './MarkdownPreview';
 import { scheduleScrollToComponent } from '../lib/scrollIntoContainer';
 import { ScrollbarMarkers } from './ScrollbarMarkers';
 import { RefLinkButton } from './RefLinkButton';
@@ -89,7 +90,11 @@ export function ComponentBlock({
   onSelect,
   registerRef,
 }: ComponentBlockProps) {
-  const resolved = resolveComponentForDisplay(component, project.index.componentData);
+  const resolved = resolveComponentForDisplay(
+    component,
+    project.index.componentData,
+    project.mdFiles,
+  );
   const isRefType = component.type === 'ref';
   const refTargetId = isRefType ? getRefTargetId(component) : null;
 
@@ -150,6 +155,18 @@ export function ComponentBlock({
           <img src={src} alt={resolved.content} className="component-img" />
         ) : (
           <span className="broken-image">🖼 {resolved.content} (not found)</span>
+        )}
+      </ComponentShell>
+    );
+  }
+
+  if (resolved.type === 'md') {
+    return (
+      <ComponentShell {...shellProps} className="component-md-wrap" style={shellStyle}>
+        {resolved.content.trim() ? (
+          <MarkdownPreview source={resolved.content} />
+        ) : (
+          <span className="component-md-empty">Empty markdown</span>
         )}
       </ComponentShell>
     );
@@ -331,6 +348,15 @@ export function PagePanel({
 
   if (!page) return null;
 
+  const panelTitle = (
+    <PageLabel
+      className="page-panel-title-label"
+      pageName={page.pageName}
+      pageId={page.pageId}
+      fileName={page.fileName}
+    />
+  );
+
   return (
     <div
       ref={panelRef}
@@ -340,7 +366,7 @@ export function PagePanel({
       <div className="page-panel-header">
         {expanded ? (
           <>
-            <span className="page-panel-title">{formatPageName(pageFile)}</span>
+            <span className="page-panel-title">{panelTitle}</span>
             <button
               type="button"
               className="panel-toggle-btn"
@@ -360,8 +386,8 @@ export function PagePanel({
             >
               ▶
             </button>
-            <span className="page-panel-vertical-title" title={formatPageName(pageFile)}>
-              {formatPageName(pageFile)}
+            <span className="page-panel-vertical-title" title={page.pageName}>
+              {page.pageName}
             </span>
           </>
         )}

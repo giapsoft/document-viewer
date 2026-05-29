@@ -1,4 +1,8 @@
 import type { LoadedProject, RelationsFile, Component } from '../types';
+import { serializePageComponents } from './pageIds';
+import { normalizeRelations } from './groupRelations';
+import { mdSidecarFileName } from './mdFiles';
+import { ensureDocsDirectory } from './docsFolder';
 
 export type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -15,6 +19,20 @@ export function setSaveStatusListener(
 
 function notify(status: SaveStatus, message?: string) {
   statusListener?.(status, message);
+}
+
+async function writeTextFile(
+  dirHandle: FileSystemDirectoryHandle,
+  fileName: string,
+  contents: string,
+): Promise<void> {
+  const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+  if (!fileHandle.createWritable) {
+    throw new Error('This browser does not support saving files to the selected folder');
+  }
+  const writable = await fileHandle.createWritable();
+  await writable.write(contents);
+  await writable.close();
 }
 
 async function writeJsonFile(
@@ -52,11 +70,27 @@ export async function saveProjectToFolder(project: LoadedProject): Promise<void>
     throw new Error('Write permission was not granted for the selected folder');
   }
 
-  const docsHandle = await root.getDirectoryHandle('docs');
-  for (const page of project.pages) {
-    await writeJsonFile(docsHandle, page.fileName, page.components as Component[]);
+  if (project.pages.length > 0) {
+    const docsHandle = await ensureDocsDirectory(root);
+    for (const page of project.pages) {
+      const serialized = serializePageComponents(page.components, page.pageId);
+      await writeJsonFile(docsHandle, page.fileName, serialized as Component[]);
+    }
+
+    for (const page of project.pages) {
+      for (const component of page.components) {
+        if (component.type !== 'md') continue;
+        const content = project.mdFiles.get(component.id) ?? '';
+        await writeTextFile(docsHandle, mdSidecarFileName(component.id), content);
+      }
+    }
   }
-  await writeJsonFile(root, 'relations.json', project.relations as RelationsFile);
+
+  await writeJsonFile(
+    root,
+    'relations.json',
+    normalizeRelations(project.relations) as RelationsFile,
+  );
 }
 
 export function scheduleAutoSave(getProject: () => LoadedProject | null): void {

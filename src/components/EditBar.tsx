@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type {
   Component,
   ComponentStatus,
@@ -7,13 +7,23 @@ import type {
   SelectionState,
 } from '../types';
 import { findComponent } from '../lib/projectMutations';
-import { formatPageName } from '../lib/formatPageName';
 import type { ImportImageResult } from '../lib/importImage';
 import { ImagePickerDialog } from './ImagePickerDialog';
 import { RefTargetPickerDialog } from './RefTargetPickerDialog';
+import { ConfirmDialog } from './PageFileDialog';
 
-const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'ref'];
+const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'md', 'ref'];
 const STATUSES: ComponentStatus[] = ['undefined', 'pending', 'working', 'done', 'blocked'];
+
+function ComponentIdHeader({ componentId, listBadge }: { componentId: string; listBadge?: ReactNode }) {
+  return (
+    <span className="edit-bar-header-id">
+      <span className="edit-bar-header-id-label">ID</span>
+      <code className="edit-bar-component-id">{componentId}</code>
+      {listBadge}
+    </span>
+  );
+}
 
 interface EditBarProps {
   project: LoadedProject;
@@ -25,6 +35,8 @@ interface EditBarProps {
   ) => void;
   onInsertAbove: (pageFile: string, anchorComponentId: string) => void;
   onInsertBelow: (pageFile: string, anchorComponentId: string) => void;
+  onDeleteComponent: (pageFile: string, componentId: string) => void;
+  onUpdateMdContent: (componentId: string, content: string) => void;
   onImportImage?: () => Promise<ImportImageResult>;
   onImportImageFromClipboard?: () => Promise<ImportImageResult>;
 }
@@ -35,6 +47,8 @@ export function EditBar({
   onUpdate,
   onInsertAbove,
   onInsertBelow,
+  onDeleteComponent,
+  onUpdateMdContent,
   onImportImage,
   onImportImageFromClipboard,
 }: EditBarProps) {
@@ -58,6 +72,8 @@ export function EditBar({
   }
 
   const { pageFile, component } = located;
+  const page = project.pages.find((p) => p.fileName === pageFile);
+  const canDelete = (page?.components.length ?? 0) > 1;
 
   return (
     <EditBarForm
@@ -66,11 +82,14 @@ export function EditBar({
       selection={selection}
       pageFile={pageFile}
       component={component}
+      canDelete={canDelete}
       expanded={expanded}
       onToggleExpanded={() => setExpanded((value) => !value)}
       onUpdate={onUpdate}
       onInsertAbove={onInsertAbove}
       onInsertBelow={onInsertBelow}
+      onDeleteComponent={onDeleteComponent}
+      onUpdateMdContent={onUpdateMdContent}
       onImportImage={onImportImage}
       onImportImageFromClipboard={onImportImageFromClipboard}
     />
@@ -82,11 +101,14 @@ interface EditBarFormProps {
   selection: SelectionState;
   pageFile: string;
   component: Component;
+  canDelete: boolean;
   expanded: boolean;
   onToggleExpanded: () => void;
   onUpdate: EditBarProps['onUpdate'];
   onInsertAbove: EditBarProps['onInsertAbove'];
   onInsertBelow: EditBarProps['onInsertBelow'];
+  onDeleteComponent: EditBarProps['onDeleteComponent'];
+  onUpdateMdContent: EditBarProps['onUpdateMdContent'];
   onImportImage?: EditBarProps['onImportImage'];
   onImportImageFromClipboard?: EditBarProps['onImportImageFromClipboard'];
 }
@@ -96,22 +118,21 @@ function EditBarForm({
   selection,
   pageFile,
   component,
+  canDelete,
   expanded,
   onToggleExpanded,
   onUpdate,
   onInsertAbove,
   onInsertBelow,
+  onDeleteComponent,
+  onUpdateMdContent,
   onImportImage,
   onImportImageFromClipboard,
 }: EditBarFormProps) {
-  const [idDraft, setIdDraft] = useState(component.id);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useEffect(() => {
-    setIdDraft(component.id);
-  }, [component.id]);
-
-  const patch = (changes: Partial<Component>) => {
+  const patch = (changes: Partial<Omit<Component, 'id'>>) => {
     onUpdate(pageFile, component.id, changes);
   };
 
@@ -123,6 +144,7 @@ function EditBarForm({
 
   const imgFilename = component.content.trim();
   const imgLabel = imgFilename || 'select image';
+  const mdContent = project.mdFiles.get(component.id) ?? '';
 
   const listBadge =
     selection.matchingGroupIndices.length > 1 ? (
@@ -151,9 +173,7 @@ function EditBarForm({
             <span className="edit-bar-icon" aria-hidden>
               ✎
             </span>
-            <span className="edit-bar-page">{formatPageName(pageFile)}</span>
-            <span className="edit-bar-sep">·</span>
-            <code className="edit-bar-component-id">{component.id}</code>
+            <ComponentIdHeader componentId={component.id} />
             <span className="edit-bar-sep">·</span>
             <span>{component.type}</span>
             <span className="edit-bar-sep">·</span>
@@ -176,9 +196,7 @@ function EditBarForm({
               ✎
             </span>
             <span className="edit-bar-meta">
-              <span className="edit-bar-page">{formatPageName(pageFile)}</span>
-              <code className="edit-bar-component-id">{component.id}</code>
-              {listBadge}
+              <ComponentIdHeader componentId={component.id} listBadge={listBadge} />
             </span>
             <div className="edit-bar-actions">
               <button
@@ -197,24 +215,17 @@ function EditBarForm({
               >
                 ↓
               </button>
+              <button
+                type="button"
+                className="edit-bar-icon-btn edit-bar-icon-btn-danger"
+                disabled={!canDelete}
+                onClick={() => setConfirmDelete(true)}
+                title={canDelete ? 'Delete component' : 'Cannot delete the only component on this page'}
+              >
+                ×
+              </button>
             </div>
             <div className="edit-bar-fields">
-              <input
-                className="edit-bar-input edit-bar-input-id"
-                type="text"
-                value={idDraft}
-                title="ID"
-                placeholder="ID"
-                onChange={(e) => setIdDraft(e.target.value)}
-                onBlur={() => {
-                  if (idDraft.trim() && idDraft !== component.id) {
-                    patch({ id: idDraft.trim() });
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur();
-                }}
-              />
               <select
                 className="edit-bar-input edit-bar-input-type"
                 value={component.type}
@@ -261,7 +272,7 @@ function EditBarForm({
               )}
             </div>
           </div>
-          {component.type !== 'ref' && component.type !== 'img' && (
+          {component.type !== 'ref' && component.type !== 'img' && component.type !== 'md' && (
             <textarea
               className="edit-bar-input edit-bar-input-content"
               rows={3}
@@ -271,7 +282,27 @@ function EditBarForm({
               onChange={(e) => patch({ content: e.target.value })}
             />
           )}
+          {component.type === 'md' && (
+            <textarea
+              className="edit-bar-input edit-bar-input-content edit-bar-input-md"
+              rows={8}
+              value={mdContent}
+              title="Markdown"
+              placeholder="Markdown…"
+              onChange={(e) => onUpdateMdContent(component.id, e.target.value)}
+            />
+          )}
         </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete component"
+          message={`Delete component "${component.id}"? It will be removed from this page and from all groups. Refs pointing to it will be cleared.`}
+          confirmLabel="Delete"
+          onClose={() => setConfirmDelete(false)}
+          onConfirm={() => onDeleteComponent(pageFile, component.id)}
+        />
       )}
 
       {pickerOpen && component.type === 'ref' && (

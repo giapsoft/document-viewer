@@ -1,42 +1,43 @@
 {
+  "pageNames": {},
   "groups": [
     [
-      "b1",
-      "2lists-bridge",
-      "b4",
-      "b6",
-      "i-intro"
+      "intro.b1",
+      "detail.2lists-bridge",
+      "appendix.b4",
+      "detail.b6",
+      "intro.i-intro"
     ],
     [
-      "2lists-bridge",
-      "b3",
-      "b7",
-      "b8",
-      "b9"
+      "detail.2lists-bridge",
+      "detail.b3",
+      "appendix.b7",
+      "specs.b8",
+      "appendix.b9"
     ],
     [
-      "l1",
-      "l10"
+      "intro.l1",
+      "specs.l10"
     ],
     [
-      "mega5",
-      "m-detail",
-      "m-integration",
-      "m-workflow",
-      "m-reference"
+      "intro.mega5",
+      "detail.m-detail",
+      "integration.m-integration",
+      "workflow.m-workflow",
+      "reference.m-reference"
     ],
     [
-      "chain-a",
-      "chain-b",
-      "chain-c",
-      "chain-d",
-      "chain-e"
+      "intro.chain-a",
+      "detail.chain-b",
+      "appendix.chain-c",
+      "specs.chain-d",
+      "integration.chain-e"
     ],
     [
-      "specs-hub",
-      "q-integration",
-      "q-workflow",
-      "q-reference"
+      "specs.specs-hub",
+      "integration.q-integration",
+      "workflow.q-workflow",
+      "reference.q-reference"
     ]
   ]
 }
