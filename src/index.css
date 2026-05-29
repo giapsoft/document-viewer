@@ -534,6 +534,28 @@ code {
   border-color: #86b7fe;
 }
 
+.link-unlink-btn {
+  padding: 0.3rem 0.65rem;
+  border: 1px solid #ced4da;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #495057;
+  cursor: pointer;
+}
+
+.link-unlink-btn:hover:not(:disabled) {
+  color: #dc3545;
+  border-color: #f5c2c7;
+  background: #fff5f5;
+}
+
+.link-unlink-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .link-mode-toggle-track {
   position: relative;
   width: 34px;

@@ -29,6 +29,7 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     insertComponentBelow,
     deleteComponent,
     toggleLinkMode,
+    deleteActiveGroup,
     toggleLinkComponent,
     goBackSelection,
     goNextSelection,
@@ -86,6 +87,10 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
       ? new Set(groups[linkEditingListIndex] ?? [])
       : new Set<string>();
 
+  const canUnlinkGroup = state.linkMode
+    ? linkEditingListIndex !== null
+    : activeGroupIndex !== null;
+
   return (
     <>
       <SaveIndicator
@@ -129,6 +134,8 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
           <LinkModeToggle
             enabled={state.linkMode}
             onToggle={toggleLinkMode}
+            canUnlink={canUnlinkGroup}
+            onUnlink={deleteActiveGroup}
             sidebarCollapsed={!state.sidebarExpanded}
             onExpandSidebar={expandSidebar}
             canGoBack={canGoBack}

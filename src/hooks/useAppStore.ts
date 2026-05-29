@@ -26,6 +26,7 @@ const PERSIST_ACTIONS = new Set<AppAction['type']>([
   'INSERT_COMPONENT',
   'APPEND_IMAGE_COMPONENT',
   'TOGGLE_LINK_MODE',
+  'DELETE_ACTIVE_GROUP',
   'TOGGLE_LINK_COMPONENT',
   'CREATE_PAGE',
   'RENAME_PAGE',
@@ -169,6 +170,10 @@ export function useAppStore() {
 
   const toggleLinkMode = useCallback(() => {
     dispatch({ type: 'TOGGLE_LINK_MODE' });
+  }, [dispatch]);
+
+  const deleteActiveGroup = useCallback(() => {
+    dispatch({ type: 'DELETE_ACTIVE_GROUP' });
   }, [dispatch]);
 
   const toggleLinkComponent = useCallback(
@@ -358,6 +363,7 @@ export function useAppStore() {
     insertComponentBelow,
     deleteComponent,
     toggleLinkMode,
+    deleteActiveGroup,
     toggleLinkComponent,
     goBackSelection,
     goNextSelection,

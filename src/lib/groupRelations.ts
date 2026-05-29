@@ -74,6 +74,13 @@ export function createGroup(groups: string[][], componentIds: string[]): string[
   return [...cloneGroups(groups), unique];
 }
 
+export function removeGroupAtIndex(groups: string[][], groupIndex: number): string[][] {
+  if (groupIndex < 0 || groupIndex >= groups.length) return cloneGroups(groups);
+  const next = cloneGroups(groups);
+  next.splice(groupIndex, 1);
+  return next;
+}
+
 export function renameComponentInGroups(
   groups: string[][],
   oldId: string,

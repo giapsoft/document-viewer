@@ -139,6 +139,7 @@ export type AppAction =
       position: 'above' | 'below';
     }
   | { type: 'TOGGLE_LINK_MODE' }
+  | { type: 'DELETE_ACTIVE_GROUP' }
   | { type: 'TOGGLE_LINK_COMPONENT'; componentId: string; pageFile: string }
   | { type: 'GO_PREV_GROUP' }
   | { type: 'GO_NEXT_GROUP' }

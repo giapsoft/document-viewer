@@ -1,6 +1,8 @@
 interface LinkModeToggleProps {
   enabled: boolean;
   onToggle: () => void;
+  canUnlink?: boolean;
+  onUnlink?: () => void;
   sidebarCollapsed?: boolean;
   onExpandSidebar?: () => void;
   canGoBack?: boolean;
@@ -20,6 +22,8 @@ interface LinkModeToggleProps {
 export function LinkModeToggle({
   enabled,
   onToggle,
+  canUnlink = false,
+  onUnlink,
   sidebarCollapsed = false,
   onExpandSidebar,
   canGoBack = false,
@@ -104,6 +108,21 @@ export function LinkModeToggle({
           {enabled ? 'ON' : 'OFF'}
         </span>
       </button>
+      {onUnlink && (
+        <button
+          type="button"
+          className="link-unlink-btn"
+          onClick={onUnlink}
+          disabled={!canUnlink}
+          title={
+            canUnlink
+              ? 'Delete the currently selected relation group'
+              : 'Select a linked group to unlink'
+          }
+        >
+          Unlink
+        </button>
+      )}
       {enabled && (
         <span className="link-mode-hint">
           {creatingNewList

@@ -10,6 +10,7 @@ import {
 import {
   addComponentToGroup,
   removeComponentFromGroup,
+  removeGroupAtIndex,
   createGroup,
   getGroupIndicesForComponent,
   withRelationsGroups,
@@ -405,6 +406,62 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         linkFocusComponentId,
         selection: null,
       };
+    }
+
+    case 'DELETE_ACTIVE_GROUP': {
+      if (!state.project) return state;
+
+      const groupIndex = state.linkMode
+        ? state.linkTargetGroupIndex
+        : (state.selection?.activeGroupIndex ?? null);
+
+      if (groupIndex === null) return state;
+
+      const groups = removeGroupAtIndex(state.project.relations.groups, groupIndex);
+      const project = rebuildProject({
+        ...state.project,
+        relations: withRelationsGroups(state.project.relations, groups),
+      });
+
+      let nextState: AppState = { ...state, project };
+
+      if (state.linkMode) {
+        nextState = {
+          ...nextState,
+          linkTargetGroupIndex: null,
+        };
+      } else if (state.selection) {
+        const { componentId } = state.selection;
+        const pageFile =
+          state.project.index.componentToPage.get(componentId) ?? state.currentPage;
+        if (pageFile) {
+          const applied = applyComponentSelection(nextState, componentId, pageFile);
+          if (applied) {
+            nextState = {
+              ...nextState,
+              ...applied,
+              selectionScrollNonce: state.selectionScrollNonce + 1,
+            };
+          } else {
+            nextState = {
+              ...nextState,
+              selection: {
+                ...state.selection,
+                relatedIds: new Set([componentId]),
+                activeGroupIndex: null,
+                matchingGroupIndices: [],
+              },
+            };
+          }
+        }
+      }
+
+      const panels = refreshPanelsWithPins(nextState);
+      if (panels) {
+        nextState = { ...nextState, panels };
+      }
+
+      return nextState;
     }
 
     case 'TOGGLE_LINK_COMPONENT': {
