@@ -1,9 +1,10 @@
-import { useRef, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { useRef, useEffect, useLayoutEffect, type CSSProperties, type ReactNode } from 'react';
 import type { AppStyles, Component, LoadedProject, PageData, SelectionState } from '../types';
 import { resolveComponentForDisplay, isTextType } from '../lib/componentDisplay';
 import { PageLabel } from './PageLabel';
 import { MarkdownPreview } from './MarkdownPreview';
 import { scheduleScrollToComponent } from '../lib/scrollIntoContainer';
+import { getPageScrollTop, setPageScrollTop } from '../lib/pageScrollMemory';
 import { ScrollbarMarkers } from './ScrollbarMarkers';
 
 interface ComponentBlockProps {
@@ -20,9 +21,8 @@ interface ComponentBlockProps {
 
 interface ComponentShellProps {
   component: Component;
-  isSelected: boolean;
+  highlightKind: 'none' | 'primary' | 'related' | 'link';
   isDimmed: boolean;
-  linkMode?: boolean;
   className: string;
   style: CSSProperties;
   onSelect: (componentId: string, pageFile: string) => void;
@@ -33,9 +33,8 @@ interface ComponentShellProps {
 
 function ComponentShell({
   component,
-  isSelected,
+  highlightKind,
   isDimmed,
-  linkMode,
   className,
   style,
   onSelect,
@@ -46,7 +45,7 @@ function ComponentShell({
   return (
     <div
       ref={(el) => registerRef(component.id, el)}
-      className={`component-block ${className} ${isSelected ? 'selected' : ''} ${isDimmed ? 'dimmed' : ''} ${linkMode && isSelected ? 'link-selected' : ''}`}
+      className={`component-block ${className} ${highlightKind !== 'none' ? 'selected' : ''} ${highlightKind === 'primary' ? 'selected-primary' : ''} ${highlightKind === 'related' ? 'selected-related' : ''} ${highlightKind === 'link' ? 'link-selected' : ''} ${isDimmed ? 'dimmed' : ''}`}
       style={style}
       onClick={(e) => {
         e.stopPropagation();
@@ -80,31 +79,49 @@ export function ComponentBlock({
   const resolved = resolveComponentForDisplay(component, project.mdFiles);
 
   const isLinkSelected = linkMode && (linkGroupMembers?.has(component.id) ?? false);
-  const isSelected = linkMode
-    ? isLinkSelected
-    : (selection?.relatedIds.has(component.id) ?? false);
+  const isPrimarySelected =
+    !linkMode && selection?.componentId === component.id;
+  const isRelatedSelected =
+    !linkMode &&
+    (selection?.relatedIds.has(component.id) ?? false) &&
+    !isPrimarySelected;
   const isDimmed = linkMode
     ? linkGroupMembers != null && linkGroupMembers.size > 0 && !isLinkSelected
     : selection !== null && !selection.relatedIds.has(component.id);
-  const selectedStyle = isSelected ? styles.selectedComponent : null;
+
+  const highlightKind: ComponentShellProps['highlightKind'] = linkMode
+    ? isLinkSelected
+      ? 'link'
+      : 'none'
+    : isPrimarySelected
+      ? 'primary'
+      : isRelatedSelected
+        ? 'related'
+        : 'none';
+
+  const highlightStyle =
+    highlightKind === 'primary'
+      ? styles.selectedComponent
+      : highlightKind === 'related'
+        ? styles.linkedComponent
+        : null;
   const statusStyle = styles.statuses[resolved.status];
 
   const shellStyle: CSSProperties = {
     backgroundColor: statusStyle.backgroundColor,
-    ...(selectedStyle
+    ...(highlightStyle
       ? {
-          borderColor: selectedStyle.borderColor,
-          borderWidth: selectedStyle.borderWidth,
-          borderStyle: selectedStyle.borderStyle,
+          borderColor: highlightStyle.borderColor,
+          borderWidth: highlightStyle.borderWidth,
+          borderStyle: highlightStyle.borderStyle,
         }
       : {}),
   };
 
   const shellProps = {
     component,
-    isSelected,
+    highlightKind,
     isDimmed,
-    linkMode,
     onSelect,
     pageFile,
     registerRef,
@@ -181,6 +198,39 @@ function getFirstSelectedComponentId(
   return null;
 }
 
+function shouldSkipScrollRestore(
+  page: PageData | undefined,
+  scrollToComponentId: string | null,
+  scrollNonce: number,
+  isCurrent: boolean,
+  selection: SelectionState | null,
+  selectionScrollNonce: number,
+  linkMode: boolean,
+  linkGroupMembers?: Set<string>,
+): boolean {
+  if (
+    scrollToComponentId &&
+    scrollNonce > 0 &&
+    page?.components.some((c) => c.id === scrollToComponentId)
+  ) {
+    return true;
+  }
+
+  if (linkMode) return false;
+
+  if (!isCurrent && selectionScrollNonce > 0 && page) {
+    const targetId = getFirstSelectedComponentId(
+      page,
+      selection,
+      linkMode,
+      linkGroupMembers,
+    );
+    if (targetId) return true;
+  }
+
+  return false;
+}
+
 interface PagePanelProps {
   pageFile: string;
   expanded: boolean;
@@ -216,7 +266,8 @@ export function PagePanel({
   const panelRef = useRef<HTMLDivElement>(null);
   const componentRefs = useRef<Map<string, HTMLElement>>(new Map());
   const handledScrollNonceRef = useRef(0);
-  const handledSelectionScrollRef = useRef(0);
+  const lastGroupScrollKeyRef = useRef<string | null>(null);
+  const groupScrollReadyRef = useRef(false);
   const wasExpandedRef = useRef(false);
   const page = project.pages.find((p) => p.fileName === pageFile);
 
@@ -231,6 +282,66 @@ export function PagePanel({
       if (selection.relatedIds.has(c.id)) highlightedOnPage.add(c.id);
     }
   }
+
+  useEffect(() => {
+    if (!expanded) {
+      wasExpandedRef.current = false;
+      return;
+    }
+
+    const el = scrollRef.current;
+    if (!el) return;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onScroll = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => setPageScrollTop(pageFile, el.scrollTop), 100);
+    };
+
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      if (timer) clearTimeout(timer);
+      setPageScrollTop(pageFile, el.scrollTop);
+      el.removeEventListener('scroll', onScroll);
+    };
+  }, [expanded, pageFile]);
+
+  useLayoutEffect(() => {
+    if (!expanded) return;
+    if (wasExpandedRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    if (
+      shouldSkipScrollRestore(
+        page,
+        scrollToComponentId,
+        scrollNonce,
+        isCurrent,
+        selection,
+        selectionScrollNonce,
+        linkMode,
+        linkGroupMembers,
+      )
+    ) {
+      return;
+    }
+
+    const saved = getPageScrollTop(pageFile);
+    if (saved !== undefined) {
+      el.scrollTop = saved;
+    }
+  }, [
+    expanded,
+    pageFile,
+    page,
+    scrollToComponentId,
+    scrollNonce,
+    isCurrent,
+    selection,
+    selectionScrollNonce,
+    linkMode,
+    linkGroupMembers,
+  ]);
 
   useEffect(() => {
     if (!scrollToComponentId || scrollNonce === 0 || !expanded) return;
@@ -249,13 +360,18 @@ export function PagePanel({
   }, [scrollToComponentId, scrollNonce, expanded, pageFile]);
 
   useEffect(() => {
-    if (!expanded || selectionScrollNonce === 0 || linkMode) return;
-    if (isCurrent) {
-      handledSelectionScrollRef.current = selectionScrollNonce;
+    if (!expanded || linkMode || isCurrent || !page || !selection) return;
+    if (selection.matchingGroupIndices.length <= 1) return;
+    if (selection.activeGroupIndex === null) return;
+
+    const groupScrollKey = `${selection.componentId}:${selection.activeGroupIndex}`;
+    if (!groupScrollReadyRef.current) {
+      groupScrollReadyRef.current = true;
+      lastGroupScrollKeyRef.current = groupScrollKey;
       return;
     }
-    if (handledSelectionScrollRef.current === selectionScrollNonce) return;
-    if (!page) return;
+    if (lastGroupScrollKeyRef.current === groupScrollKey) return;
+    lastGroupScrollKeyRef.current = groupScrollKey;
 
     const targetId = getFirstSelectedComponentId(
       page,
@@ -263,36 +379,28 @@ export function PagePanel({
       linkMode,
       linkGroupMembers,
     );
-    if (!targetId) {
-      handledSelectionScrollRef.current = selectionScrollNonce;
-      return;
-    }
+    if (!targetId) return;
 
-    return scheduleScrollToComponent(
-      scrollRef,
-      componentRefs,
-      targetId,
-      panelRef,
-      () => {
-        handledSelectionScrollRef.current = selectionScrollNonce;
-      },
-    );
+    return scheduleScrollToComponent(scrollRef, componentRefs, targetId, panelRef);
   }, [
-    selectionScrollNonce,
     expanded,
     isCurrent,
+    linkMode,
     pageFile,
     page,
-    selection,
-    linkMode,
+    selection?.componentId,
+    selection?.activeGroupIndex,
+    selection?.matchingGroupIndices.length,
     linkGroupMembers,
   ]);
 
   useEffect(() => {
-    if (!expanded) {
-      wasExpandedRef.current = false;
-      return;
-    }
+    groupScrollReadyRef.current = false;
+    lastGroupScrollKeyRef.current = null;
+  }, [selection?.componentId, pageFile]);
+
+  useEffect(() => {
+    if (!expanded) return;
 
     const justExpanded = !wasExpandedRef.current;
     wasExpandedRef.current = true;

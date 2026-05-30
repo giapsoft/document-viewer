@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { loadSampleProject, pickProjectFolder } from '../lib/loadProject';
+import { VersionBadge } from './VersionBadge';
 
 interface WelcomeScreenProps {
   onLoaded: (project: import('../types').LoadedProject) => void;
@@ -62,6 +63,7 @@ export function WelcomeScreen({ onLoaded }: WelcomeScreenProps) {
           saving. <code>styles.json</code> is optional. Edits auto-save in Chrome/Edge when
           using <strong>Select folder</strong>.
         </p>
+        <VersionBadge />
       </div>
     </div>
   );

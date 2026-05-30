@@ -2,7 +2,7 @@ import type { AppState, LoadedProject, PageData, RelationsFile } from '../types'
 import { rebuildProject } from './projectMutations';
 import { createComponentId, resolvePageId, resolvePageName } from './pageIds';
 import { buildPanelsForPageContext, refreshPanelsWithPins, removePinnedPage } from './pagePins';
-import { getOrphanedPageAssets } from './pageAssetCleanup';
+import { getOrphanedPageAssets } from './pageFileOps';
 
 const PAGE_FILE_RE = /^[a-z0-9][a-z0-9._-]*\.p$/i;
 

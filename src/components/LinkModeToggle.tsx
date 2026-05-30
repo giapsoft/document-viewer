@@ -41,7 +41,7 @@ export function LinkModeToggle({
   const creatingNewList = enabled && linkEditingListIndex === null;
 
   return (
-    <div className="link-mode-bar">
+    <>
       {sidebarCollapsed && onExpandSidebar && (
         <button
           type="button"
@@ -130,6 +130,6 @@ export function LinkModeToggle({
             : `Editing list ${linkEditingListIndex! + 1} (${linkTargetMemberCount} members) — click to add or remove.`}
         </span>
       )}
-    </div>
+    </>
   );
 }

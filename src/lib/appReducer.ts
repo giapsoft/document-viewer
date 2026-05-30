@@ -54,6 +54,39 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         sidebarExpanded: true,
       };
 
+    case 'RELOAD_PROJECT': {
+      const project = action.project;
+      const pageFiles = new Set(project.pages.map((p) => p.fileName));
+      let currentPage = state.currentPage;
+      if (!currentPage || !pageFiles.has(currentPage)) {
+        currentPage = project.pages[0]?.fileName ?? null;
+      }
+
+      let nextState: AppState = {
+        ...state,
+        project,
+        panels: [],
+        currentPage,
+        selection: null,
+        linkMode: false,
+        linkTargetGroupIndex: null,
+        linkFocusComponentId: null,
+        selectionHistory: [],
+        selectionHistoryIndex: -1,
+        scrollToComponent: null,
+        selectionScrollNonce: 0,
+      };
+
+      if (currentPage) {
+        nextState = {
+          ...nextState,
+          panels: buildPanelsForPageContext(nextState, currentPage),
+        };
+      }
+
+      return nextState;
+    }
+
     case 'TOGGLE_SIDEBAR':
       return { ...state, sidebarExpanded: !state.sidebarExpanded };
 
@@ -91,7 +124,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selectionHistory: history,
         selectionHistoryIndex: index,
         scrollToComponent: null,
-        selectionScrollNonce: state.selectionScrollNonce + 1,
       };
     }
 

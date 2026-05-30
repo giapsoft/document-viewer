@@ -16,8 +16,13 @@ export const DEFAULT_STYLES: AppStyles = {
   },
   selectedComponent: {
     borderColor: '#0D6EFD',
-    borderWidth: '2px',
+    borderWidth: '3px',
     borderStyle: 'solid',
+  },
+  linkedComponent: {
+    borderColor: '#0D6EFD',
+    borderWidth: '2px',
+    borderStyle: 'dashed',
   },
   linkedScrollMarker: {
     backgroundColor: '#0D6EFD',
@@ -34,6 +39,10 @@ export function mergeStyles(partial?: Partial<AppStyles> | null): AppStyles {
     selectedComponent: {
       ...DEFAULT_STYLES.selectedComponent,
       ...partial.selectedComponent,
+    },
+    linkedComponent: {
+      ...DEFAULT_STYLES.linkedComponent,
+      ...partial.linkedComponent,
     },
     linkedScrollMarker: {
       ...DEFAULT_STYLES.linkedScrollMarker,

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { PageFileDialog, ConfirmDialog } from './PageFileDialog';
+import { PageFileDialog } from './PageFileDialog';
 import { PageLabel } from './PageLabel';
+import { VersionBadge } from './VersionBadge';
 
 export interface SidebarPageEntry {
   fileName: string;
@@ -49,7 +50,6 @@ export function Sidebar({
   const [dialog, setDialog] = useState<
     | { type: 'create' }
     | { type: 'rename'; page: SidebarPageEntry }
-    | { type: 'delete'; page: SidebarPageEntry }
     | null
   >(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -143,7 +143,6 @@ export function Sidebar({
                   </button>
                 )}
                 {canManagePages && (
-                  <>
                   <button
                     type="button"
                     className="page-list-action-btn"
@@ -155,19 +154,6 @@ export function Sidebar({
                   >
                     ✎
                   </button>
-                  <button
-                    type="button"
-                    className="page-list-action-btn page-list-action-danger"
-                    title="Delete page"
-                    disabled={pages.length <= 1}
-                    onClick={() => {
-                      setActionError(null);
-                      setDialog({ type: 'delete', page });
-                    }}
-                  >
-                    ×
-                  </button>
-                  </>
                 )}
               </div>
             </li>
@@ -175,8 +161,8 @@ export function Sidebar({
         })}
       </ul>
 
-      {canManagePages && (
-        <div className="sidebar-footer">
+      <div className="sidebar-footer">
+        {canManagePages && (
           <button
             type="button"
             className="sidebar-new-page-btn"
@@ -187,8 +173,9 @@ export function Sidebar({
           >
             + New page
           </button>
-        </div>
-      )}
+        )}
+        <VersionBadge className="sidebar-version" />
+      </div>
 
       {dialog?.type === 'create' && (
         <PageFileDialog
@@ -220,7 +207,12 @@ export function Sidebar({
           initialValue={dialog.page.pageName}
           hint={`File ${dialog.page.fileName} and pageId "${dialog.page.pageId}" stay unchanged.`}
           confirmLabel="Rename"
+          deleteDisabled={pages.length <= 1}
+          deleteConfirmMessage={`Delete "${dialog.page.fileName}" and remove its components from all groups? This cannot be undone.`}
           onClose={() => setDialog(null)}
+          onDelete={() => {
+            void runAction(() => onDeletePage(dialog.page.fileName));
+          }}
           onConfirm={(raw) => {
             const pageName = normalizePageName(raw);
             if (!pageName) {
@@ -232,18 +224,6 @@ export function Sidebar({
               return;
             }
             void runAction(() => onRenamePage(dialog.page.fileName, pageName));
-          }}
-        />
-      )}
-
-      {dialog?.type === 'delete' && (
-        <ConfirmDialog
-          title="Delete page"
-          message={`Delete "${dialog.page.fileName}" and remove its components from all groups? This cannot be undone.`}
-          confirmLabel="Delete"
-          onClose={() => setDialog(null)}
-          onConfirm={() => {
-            void runAction(() => onDeletePage(dialog.page.fileName));
           }}
         />
       )}

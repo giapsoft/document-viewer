@@ -51,7 +51,7 @@ export function EditBar({
   onImportImage,
   onImportImageFromClipboard,
 }: EditBarProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
 
   if (!selection) {
     return (

@@ -8,6 +8,9 @@ interface PageFileDialogProps {
   confirmLabel: string;
   onConfirm: (value: string) => void;
   onClose: () => void;
+  onDelete?: () => void;
+  deleteDisabled?: boolean;
+  deleteConfirmMessage?: string;
 }
 
 export function PageFileDialog({
@@ -18,9 +21,13 @@ export function PageFileDialog({
   confirmLabel,
   onConfirm,
   onClose,
+  onDelete,
+  deleteDisabled = false,
+  deleteConfirmMessage = 'Delete this page and remove its components from all groups? This cannot be undone.',
 }: PageFileDialogProps) {
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -59,6 +66,33 @@ export function PageFileDialog({
           </button>
         </header>
         <form className="page-file-dialog-body" onSubmit={handleSubmit}>
+          {confirmingDelete ? (
+            <>
+              <p className="page-file-dialog-message">{deleteConfirmMessage}</p>
+              <footer className="page-file-dialog-footer page-file-dialog-footer-split">
+                <button
+                  type="button"
+                  className="picker-import-btn"
+                  onClick={() => setConfirmingDelete(false)}
+                >
+                  Back
+                </button>
+                <div className="page-file-dialog-footer-actions">
+                  <button type="button" className="picker-import-btn" onClick={onClose}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="picker-import-btn page-file-dialog-danger"
+                    onClick={() => onDelete?.()}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </footer>
+            </>
+          ) : (
+            <>
           <label className="page-file-dialog-label">
             <span>{label}</span>
             <input
@@ -76,14 +110,30 @@ export function PageFileDialog({
               {error}
             </p>
           )}
-          <footer className="page-file-dialog-footer">
-            <button type="button" className="picker-import-btn" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="picker-import-btn page-file-dialog-submit">
-              {confirmLabel}
-            </button>
+          <footer className="page-file-dialog-footer page-file-dialog-footer-split">
+            {onDelete ? (
+              <button
+                type="button"
+                className="picker-import-btn page-file-dialog-danger"
+                disabled={deleteDisabled}
+                onClick={() => setConfirmingDelete(true)}
+              >
+                Delete page
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="page-file-dialog-footer-actions">
+              <button type="button" className="picker-import-btn" onClick={onClose}>
+                Cancel
+              </button>
+              <button type="submit" className="picker-import-btn page-file-dialog-submit">
+                {confirmLabel}
+              </button>
+            </div>
           </footer>
+            </>
+          )}
         </form>
       </div>
     </div>

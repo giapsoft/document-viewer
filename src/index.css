@@ -19,56 +19,42 @@ body {
 }
 
 .version-badge {
-  position: fixed;
-  top: 0.4rem;
-  right: 0.55rem;
-  z-index: 1100;
-  padding: 0.2rem 0.45rem;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid #dee2e6;
-  font-size: 0.68rem;
-  font-weight: 600;
+  font-size: 0.62rem;
   font-variant-numeric: tabular-nums;
-  color: #6c757d;
-  pointer-events: none;
+  color: #868e96;
+  line-height: 1.2;
   user-select: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
-.save-indicator {
-  position: fixed;
-  top: 1.55rem;
-  right: 0.55rem;
-  z-index: 1100;
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
+.welcome-card .version-badge {
+  display: block;
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.sidebar-version.version-badge {
+  display: block;
+  margin-top: 0.45rem;
+  text-align: left;
+}
+
+.project-save-label {
   font-size: 0.62rem;
   font-weight: 600;
-  pointer-events: none;
-  user-select: none;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid #dee2e6;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  color: #868e96;
 }
 
-.save-indicator.save-pending,
-.save-indicator.save-saving {
+.project-save-label-pending,
+.project-save-label-saving {
   color: #856404;
-  border-color: #ffecb5;
-  background: #fff8e6;
 }
 
-.save-indicator.save-saved {
+.project-save-label-saved {
   color: #0f5132;
-  border-color: #badbcc;
-  background: #ecfdf3;
 }
 
-.save-indicator.save-error {
+.project-save-label-error {
   color: #842029;
-  border-color: #f5c2c7;
-  background: #fff5f5;
 }
 
 #root {
@@ -328,7 +314,8 @@ code {
 }
 
 .sidebar-footer {
-  padding: 0.5rem 0.75rem 0.75rem;
+  flex-shrink: 0;
+  padding: 0.5rem 0.75rem 0.65rem;
   border-top: 1px solid #dee2e6;
 }
 
@@ -393,6 +380,16 @@ code {
   margin-top: 1rem;
 }
 
+.page-file-dialog-footer-split {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.page-file-dialog-footer-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .page-file-dialog-submit {
   background: #0d6efd;
   border-color: #0d6efd;
@@ -449,6 +446,40 @@ code {
   padding: 0.45rem 0.75rem;
   background: #fff;
   border-bottom: 1px solid #dee2e6;
+}
+
+.project-folder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
+.project-folder-btn {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  background: #f8f9fa;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.project-folder-btn:hover:not(:disabled) {
+  background: #e9ecef;
+}
+
+.project-folder-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.project-folder-error {
+  font-size: 0.78rem;
+  color: #dc3545;
+  max-width: 16rem;
 }
 
 .link-list-nav {
@@ -756,7 +787,15 @@ code {
 }
 
 .component-block.selected {
-  /* border from inline selectedComponent style */
+  /* border from inline highlight style */
+}
+
+.component-block.selected-primary {
+  box-shadow: 0 0 0 1px rgba(13, 110, 253, 0.35);
+}
+
+.component-block.selected-related {
+  opacity: 1;
 }
 
 .component-block.link-selected {

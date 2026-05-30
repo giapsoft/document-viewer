@@ -39,7 +39,10 @@ export interface ScrollMarkerStyle {
 export interface AppStyles {
   statuses: Record<ComponentStatus, StatusStyle>;
   type: Record<Exclude<ComponentType, 'img' | 'md'>, TypeStyle>;
+  /** Primary clicked / focused component in a selection. */
   selectedComponent: SelectedComponentStyle;
+  /** Other components in the same active relation group. */
+  linkedComponent: SelectedComponentStyle;
   linkedScrollMarker: ScrollMarkerStyle;
 }
 
@@ -119,6 +122,7 @@ export interface SelectionHistoryEntry {
 
 export type AppAction =
   | { type: 'SET_PROJECT'; project: LoadedProject }
+  | { type: 'RELOAD_PROJECT'; project: LoadedProject }
   | { type: 'TOGGLE_SIDEBAR' }
   | { type: 'EXPAND_SIDEBAR' }
   | { type: 'OPEN_PAGE'; pageFile: string }

@@ -8,15 +8,20 @@ import {
   type SaveStatus,
 } from '../lib/saveProject';
 import { importImageFromComputer, importImageFromClipboardSource, type ImportImageResult } from '../lib/importImage';
+import { clearPageScrollMemory } from '../lib/pageScrollMemory';
 import {
   createDefaultPageData,
   normalizePageFileName,
   normalizePageName,
   suggestNewPageFileName,
 } from '../lib/pageMutations';
-import { createPageFileOnDisk, deletePageFileOnDisk, deleteMdFileOnDisk } from '../lib/pageFileOps';
-import { getOrphanedPageAssets } from '../lib/pageAssetCleanup';
+import { createPageFileOnDisk, deletePageFileOnDisk, deleteMdFileOnDisk, getOrphanedPageAssets } from '../lib/pageFileOps';
 import { findComponent } from '../lib/projectMutations';
+import {
+  loadFromDirectoryHandle,
+  pickProjectFolder,
+  revokeProjectImageUrls,
+} from '../lib/loadProject';
 
 export type PageActionResult = { ok: true } | { ok: false; error: string };
 
@@ -73,6 +78,8 @@ export function useAppStore() {
   }, []);
 
   const setProject = useCallback((project: LoadedProject) => {
+    revokeProjectImageUrls(projectRef.current);
+    clearPageScrollMemory();
     dispatch({ type: 'SET_PROJECT', project });
   }, [dispatch]);
 
@@ -346,11 +353,63 @@ export function useAppStore() {
     [dispatch],
   );
 
+  const reloadProjectFromDisk = useCallback(async (): Promise<PageActionResult> => {
+    const project = projectRef.current;
+    if (!project?.folderHandle) {
+      return { ok: false, error: 'Reload is only available for a local project folder.' };
+    }
+
+    cancelAutoSave();
+    shouldPersistRef.current = false;
+
+    try {
+      revokeProjectImageUrls(project);
+      clearPageScrollMemory();
+      const reloaded = await loadFromDirectoryHandle(project.folderHandle);
+      dispatch({ type: 'RELOAD_PROJECT', project: reloaded });
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not reload project from disk.',
+      };
+    }
+  }, [dispatch]);
+
+  const selectProjectFolder = useCallback(async (): Promise<PageActionResult> => {
+    if (!window.showDirectoryPicker) {
+      return {
+        ok: false,
+        error: 'Folder selection is not supported in this browser. Please use Chrome or Edge.',
+      };
+    }
+
+    cancelAutoSave();
+    shouldPersistRef.current = false;
+
+    try {
+      const project = await pickProjectFolder();
+      if (!project) return { ok: true };
+      setProject(project);
+      return { ok: true };
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return { ok: true };
+      }
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not open project folder.',
+      };
+    }
+  }, [setProject]);
+
   return {
     state,
     saveStatus,
     saveError,
     setProject,
+    reloadProjectFromDisk,
+    selectProjectFolder,
     toggleSidebar,
     expandSidebar,
     openPage,

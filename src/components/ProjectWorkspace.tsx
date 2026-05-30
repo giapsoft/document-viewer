@@ -2,9 +2,10 @@ import { Sidebar } from './Sidebar';
 import { PagePanel } from './PagePanel';
 import { EditBar } from './EditBar';
 import { LinkModeToggle } from './LinkModeToggle';
-import { SaveIndicator } from './SaveIndicator';
+import { ProjectFolderActions } from './ProjectFolderActions';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
+import { useState } from 'react';
 
 type AppStore = ReturnType<typeof useAppStore>;
 
@@ -42,6 +43,8 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     deletePage,
     togglePinPage,
     appendClipboardImageToPage,
+    reloadProjectFromDisk,
+    selectProjectFolder,
     suggestNewPageFileName,
     normalizePageFileName,
     normalizePageName,
@@ -91,13 +94,24 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     ? linkEditingListIndex !== null
     : activeGroupIndex !== null;
 
+  const [folderActionLoading, setFolderActionLoading] = useState(false);
+  const [folderActionError, setFolderActionError] = useState<string | null>(null);
+
+  const runFolderAction = async (action: () => Promise<{ ok: boolean; error?: string }>) => {
+    setFolderActionError(null);
+    setFolderActionLoading(true);
+    try {
+      const result = await action();
+      if (!result.ok) {
+        setFolderActionError(result.error ?? 'Could not complete the action.');
+      }
+    } finally {
+      setFolderActionLoading(false);
+    }
+  };
+
   return (
     <>
-      <SaveIndicator
-        visible={Boolean(project.folderHandle)}
-        status={saveStatus}
-        errorMessage={saveError}
-      />
       <div className={`app ${state.sidebarExpanded ? 'sidebar-open' : 'sidebar-collapsed'}`}>
         <Sidebar
           expanded={state.sidebarExpanded}
@@ -131,25 +145,37 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
             </div>
           )}
 
-          <LinkModeToggle
-            enabled={state.linkMode}
-            onToggle={toggleLinkMode}
-            canUnlink={canUnlinkGroup}
-            onUnlink={deleteActiveGroup}
-            sidebarCollapsed={!state.sidebarExpanded}
-            onExpandSidebar={expandSidebar}
-            canGoBack={canGoBack}
-            canGoNext={canGoNext}
-            onSelectionBack={goBackSelection}
-            onSelectionNext={goNextSelection}
-            canGoPrevGroup={showGroupNav}
-            canGoNextGroup={showGroupNav}
-            groupNavLabel={groupNavLabel}
-            onGroupPrev={goPrevGroup}
-            onGroupNext={goNextGroup}
-            linkEditingListIndex={linkEditingListIndex}
-            linkTargetMemberCount={linkGroupMembers.size}
-          />
+          <div className="link-mode-bar">
+            <LinkModeToggle
+              enabled={state.linkMode}
+              onToggle={toggleLinkMode}
+              canUnlink={canUnlinkGroup}
+              onUnlink={deleteActiveGroup}
+              sidebarCollapsed={!state.sidebarExpanded}
+              onExpandSidebar={expandSidebar}
+              canGoBack={canGoBack}
+              canGoNext={canGoNext}
+              onSelectionBack={goBackSelection}
+              onSelectionNext={goNextSelection}
+              canGoPrevGroup={showGroupNav}
+              canGoNextGroup={showGroupNav}
+              groupNavLabel={groupNavLabel}
+              onGroupPrev={goPrevGroup}
+              onGroupNext={goNextGroup}
+              linkEditingListIndex={linkEditingListIndex}
+              linkTargetMemberCount={linkGroupMembers.size}
+            />
+            <ProjectFolderActions
+              canReload={canManagePages}
+              loading={folderActionLoading}
+              error={folderActionError}
+              onReload={() => void runFolderAction(reloadProjectFromDisk)}
+              onSelectFolder={() => void runFolderAction(selectProjectFolder)}
+              saveVisible={canManagePages}
+              saveStatus={saveStatus}
+              saveError={saveError}
+            />
+          </div>
 
           <div className="panel-row">
             {state.panels.length === 0 && (

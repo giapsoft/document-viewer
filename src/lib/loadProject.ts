@@ -227,6 +227,13 @@ export async function loadSampleProject(): Promise<LoadedProject> {
   return assembleProject({ pageFiles, relations, stylesPartial, imageFiles, mdFiles });
 }
 
+export function revokeProjectImageUrls(project: LoadedProject | null | undefined): void {
+  if (!project) return;
+  for (const url of project.imageUrls.values()) {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export async function pickProjectFolder(): Promise<LoadedProject | null> {
   if (!window.showDirectoryPicker) return null;
   const root = await window.showDirectoryPicker({ mode: 'readwrite' });
