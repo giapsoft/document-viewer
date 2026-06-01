@@ -425,6 +425,7 @@ export function PagePanel({
       pageName={page.pageName}
       pageId={page.pageId}
       fileName={page.fileName}
+      componentCount={page.components.length}
     />
   );
 
@@ -457,8 +458,12 @@ export function PagePanel({
             >
               ▶
             </button>
-            <span className="page-panel-vertical-title" title={page.pageName}>
+            <span
+              className="page-panel-vertical-title"
+              title={`${page.pageName} (${page.components.length})`}
+            >
               {page.pageName}
+              <span className="page-label-count"> ({page.components.length})</span>
             </span>
           </>
         )}

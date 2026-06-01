@@ -69,6 +69,7 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     fileName: p.fileName,
     pageId: p.pageId,
     pageName: p.pageName,
+    componentCount: p.components.length,
   }));
   const canManagePages = Boolean(project.folderHandle);
   const pinnedPages = project.relations.pinnedPages ?? [];

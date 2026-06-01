@@ -7,6 +7,7 @@ export interface SidebarPageEntry {
   fileName: string;
   pageId: string;
   pageName: string;
+  componentCount: number;
 }
 
 interface SidebarProps {
@@ -107,6 +108,7 @@ export function Sidebar({
                   pageName={page.pageName}
                   pageId={page.pageId}
                   fileName={page.fileName}
+                  componentCount={page.componentCount}
                 />
               </button>
               <div className="page-list-actions">

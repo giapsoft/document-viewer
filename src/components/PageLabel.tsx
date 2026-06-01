@@ -2,17 +2,33 @@ interface PageLabelProps {
   pageName: string;
   pageId: string;
   fileName?: string;
+  componentCount?: number;
   className?: string;
 }
 
 /** pageName on top; pageId below only when it differs from pageName. */
-export function PageLabel({ pageName, pageId, fileName, className = '' }: PageLabelProps) {
+export function PageLabel({
+  pageName,
+  pageId,
+  fileName,
+  componentCount,
+  className = '',
+}: PageLabelProps) {
   const showId = pageName !== pageId;
-  const title = fileName ? `${fileName} · id: ${pageId}` : `id: ${pageId}`;
+  const countNote =
+    componentCount != null ? ` · ${componentCount} component${componentCount === 1 ? '' : 's'}` : '';
+  const title = fileName
+    ? `${fileName} · id: ${pageId}${countNote}`
+    : `id: ${pageId}${countNote}`;
 
   return (
     <span className={`page-label-stack ${className}`.trim()} title={title}>
-      <span className="page-label-name">{pageName}</span>
+      <span className="page-label-name">
+        {pageName}
+        {componentCount != null && (
+          <span className="page-label-count"> ({componentCount})</span>
+        )}
+      </span>
       {showId && <span className="page-label-id">{pageId}</span>}
     </span>
   );

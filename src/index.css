@@ -263,6 +263,11 @@ code {
   max-width: 100%;
 }
 
+.page-label-count {
+  font-weight: 500;
+  color: #868e96;
+}
+
 .page-label-id {
   font-size: 0.68rem;
   font-family: ui-monospace, Consolas, monospace;
