@@ -1,5 +1,5 @@
 import type { LoadedProject } from '../types';
-import { ensureDocsDirectory } from './docsFolder';
+import { compressImageIfNeeded } from './imageCompress';
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|gif)$/i;
 
@@ -9,8 +9,8 @@ const MIME_TO_EXT: Record<string, string> = {
   'image/gif': 'gif',
 };
 
-export function canImportImages(project: LoadedProject): boolean {
-  return Boolean(project.folderHandle);
+export function canImportImages(project: LoadedProject | null | undefined): boolean {
+  return Boolean(project);
 }
 
 export function canReadClipboardImages(): boolean {
@@ -82,34 +82,8 @@ export function resolveUniqueImageFilename(
   return `${safeStem}-${n}.${safeExt}`;
 }
 
-async function ensureWritePermission(
-  handle: FileSystemDirectoryHandle,
-): Promise<boolean> {
-  const options = { mode: 'readwrite' as const };
-  if (handle.queryPermission && handle.requestPermission) {
-    if ((await handle.queryPermission(options)) === 'granted') return true;
-    if ((await handle.requestPermission(options)) === 'granted') return true;
-    return false;
-  }
-  return true;
-}
-
-async function writeBlobFile(
-  dirHandle: FileSystemDirectoryHandle,
-  fileName: string,
-  blob: Blob,
-): Promise<void> {
-  const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-  if (!fileHandle.createWritable) {
-    throw new Error('This browser does not support saving files to the selected folder');
-  }
-  const writable = await fileHandle.createWritable();
-  await writable.write(blob);
-  await writable.close();
-}
-
 export type ImportImageResult =
-  | { ok: true; filename: string; objectUrl: string }
+  | { ok: true; filename: string; objectUrl: string; blob: Blob }
   | { ok: false; error: string; cancelled?: boolean };
 
 async function importImageBlob(
@@ -118,39 +92,14 @@ async function importImageBlob(
   stem: string,
   ext: string,
 ): Promise<ImportImageResult> {
-  if (!project.folderHandle) {
-    return {
-      ok: false,
-      error:
-        'Import is only available when a local project folder is open. Use “Open project folder” instead of sample mode.',
-    };
-  }
-
   if (!IMAGE_EXT.test(`.${ext}`)) {
     return { ok: false, error: 'Please choose a JPEG, PNG, or GIF image.' };
   }
 
-  const allowed = await ensureWritePermission(project.folderHandle);
-  if (!allowed) {
-    return {
-      ok: false,
-      error: 'Write permission was not granted for the selected folder.',
-    };
-  }
-
   const filename = resolveUniqueImageFilename(project.imageUrls.keys(), stem, ext);
-
-  try {
-    const docsHandle = await ensureDocsDirectory(project.folderHandle);
-    await writeBlobFile(docsHandle, filename, blob);
-    const objectUrl = URL.createObjectURL(blob);
-    return { ok: true, filename, objectUrl };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : 'Could not copy image into docs/',
-    };
-  }
+  const compressed = await compressImageIfNeeded(blob, filename);
+  const objectUrl = URL.createObjectURL(compressed.blob);
+  return { ok: true, filename: compressed.filename, objectUrl, blob: compressed.blob };
 }
 
 const CLIPBOARD_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif'] as const;
@@ -244,33 +193,32 @@ async function importExistingDocsImage(
   fileName: string,
 ): Promise<ImportImageResult> {
   const existingUrl = project.imageUrls.get(fileName);
-  if (existingUrl) {
-    return { ok: true, filename: fileName, objectUrl: existingUrl };
+  const existingBlob = project.imageBlobs.get(fileName);
+  if (existingUrl && existingBlob) {
+    return { ok: true, filename: fileName, objectUrl: existingUrl, blob: existingBlob };
   }
 
-  if (!project.folderHandle) {
-    return {
-      ok: false,
-      error: 'Image file is not loaded in this project. Open a local folder project.',
-    };
-  }
-
-  try {
-    const docsHandle = await ensureDocsDirectory(project.folderHandle);
-    const fileHandle = await docsHandle.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    const ext = extensionFromFile(file);
-    if (!ext || !IMAGE_EXT.test(`.${ext}`)) {
-      return { ok: false, error: 'File in docs/ is not a supported image type.' };
+  if (project.folderHandle) {
+    try {
+      const { ensureDocsDirectory } = await import('./docsFolder');
+      const docsHandle = await ensureDocsDirectory(project.folderHandle);
+      const fileHandle = await docsHandle.getFileHandle(fileName);
+      const file = await fileHandle.getFile();
+      const ext = extensionFromFile(file);
+      if (!ext || !IMAGE_EXT.test(`.${ext}`)) {
+        return { ok: false, error: 'File in docs/ is not a supported image type.' };
+      }
+      const objectUrl = URL.createObjectURL(file);
+      return { ok: true, filename: fileName, objectUrl, blob: file };
+    } catch {
+      // fall through
     }
-    const objectUrl = URL.createObjectURL(file);
-    return { ok: true, filename: fileName, objectUrl };
-  } catch {
-    return {
-      ok: false,
-      error: `Image "${fileName}" was not found in docs/.`,
-    };
   }
+
+  return {
+    ok: false,
+    error: `Image "${fileName}" was not found in this project.`,
+  };
 }
 
 async function readImagePathFromClipboard(
@@ -342,14 +290,6 @@ export async function importImageFromClipboardSource(
 export async function importImageFromComputer(
   project: LoadedProject,
 ): Promise<ImportImageResult> {
-  if (!project.folderHandle) {
-    return {
-      ok: false,
-      error:
-        'Import is only available when a local project folder is open. Use “Open project folder” instead of sample mode.',
-    };
-  }
-
   const file = await pickImageFile();
   if (!file) return { ok: false, error: '', cancelled: true };
 

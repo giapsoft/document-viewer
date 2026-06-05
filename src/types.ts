@@ -70,17 +70,33 @@ export interface ProjectIndex {
   componentToGroups: Map<string, number[]>;
 }
 
+export type ProjectSource = 'local' | 'remote';
+
+/** Tracks last saved remote payload to skip unchanged uploads. */
+export interface RemoteSyncState {
+  format: 'bundle' | 'legacy';
+  bundleHash?: string | null;
+  fileHashes?: Map<string, string>;
+}
+
 export interface LoadedProject {
   pages: PageData[];
   relations: RelationsFile;
   styles: AppStyles;
   imageUrls: Map<string, string>;
+  /** Image bytes keyed by filename in docs/ (persisted on Save). */
+  imageBlobs: Map<string, Blob>;
   /** Markdown body keyed by global id (sidecar `{globalId}.md` files). */
   mdFiles: Map<string, string>;
   index: ProjectIndex;
   warnings: string[];
-  /** Set when opened from a local folder; enables auto-save. */
+  source: ProjectSource;
+  remoteDocId?: string | null;
+  remoteTitle?: string | null;
+  /** Set when opened from a local folder (reload from disk). */
   folderHandle?: FileSystemDirectoryHandle | null;
+  /** Populated after remote load/save for incremental sync. */
+  remoteSync?: RemoteSyncState | null;
 }
 
 export interface PanelState {
@@ -122,6 +138,7 @@ export interface SelectionHistoryEntry {
 
 export type AppAction =
   | { type: 'SET_PROJECT'; project: LoadedProject }
+  | { type: 'CLOSE_PROJECT' }
   | { type: 'RELOAD_PROJECT'; project: LoadedProject }
   | { type: 'TOGGLE_SIDEBAR' }
   | { type: 'EXPAND_SIDEBAR' }
@@ -149,8 +166,14 @@ export type AppAction =
   | { type: 'GO_NEXT_GROUP' }
   | { type: 'GO_BACK_SELECTION' }
   | { type: 'GO_NEXT_SELECTION' }
-  | { type: 'ADD_IMAGE'; filename: string; objectUrl: string }
-  | { type: 'APPEND_IMAGE_COMPONENT'; pageFile: string; filename: string; objectUrl: string }
+  | { type: 'ADD_IMAGE'; filename: string; objectUrl: string; blob: Blob }
+  | {
+      type: 'APPEND_IMAGE_COMPONENT';
+      pageFile: string;
+      filename: string;
+      objectUrl: string;
+      blob: Blob;
+    }
   | { type: 'UPDATE_MD_CONTENT'; componentId: string; content: string }
   | { type: 'CREATE_PAGE'; fileName: string }
   | { type: 'RENAME_PAGE'; fileName: string; newPageName: string }

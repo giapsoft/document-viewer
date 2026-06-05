@@ -2,7 +2,8 @@ import { Sidebar } from './Sidebar';
 import { PagePanel } from './PagePanel';
 import { EditBar } from './EditBar';
 import { LinkModeToggle } from './LinkModeToggle';
-import { ProjectFolderActions } from './ProjectFolderActions';
+import { ProjectToolbar } from './ProjectToolbar';
+import { SaveDocDialog } from './SaveDocDialog';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
 import { useState } from 'react';
@@ -11,11 +12,13 @@ type AppStore = ReturnType<typeof useAppStore>;
 
 interface ProjectWorkspaceProps {
   store: AppStore;
+  supabaseReady: boolean;
 }
 
-export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
+export function ProjectWorkspace({ store, supabaseReady }: ProjectWorkspaceProps) {
   const {
     state,
+    dirty,
     saveStatus,
     saveError,
     toggleSidebar,
@@ -43,8 +46,10 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     deletePage,
     togglePinPage,
     appendClipboardImageToPage,
-    reloadProjectFromDisk,
+    reloadProject,
     selectProjectFolder,
+    saveProject,
+    closeProject,
     suggestNewPageFileName,
     normalizePageFileName,
     normalizePageName,
@@ -71,7 +76,7 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     pageName: p.pageName,
     componentCount: p.components.length,
   }));
-  const canManagePages = Boolean(project.folderHandle);
+  const canManagePages = true;
   const pinnedPages = project.relations.pinnedPages ?? [];
   const handleComponentClick = state.linkMode ? toggleLinkComponent : selectComponent;
 
@@ -95,21 +100,52 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
     ? linkEditingListIndex !== null
     : activeGroupIndex !== null;
 
-  const [folderActionLoading, setFolderActionLoading] = useState(false);
-  const [folderActionError, setFolderActionError] = useState<string | null>(null);
+  const [toolbarLoading, setToolbarLoading] = useState(false);
+  const [toolbarError, setToolbarError] = useState<string | null>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
 
-  const runFolderAction = async (action: () => Promise<{ ok: boolean; error?: string }>) => {
-    setFolderActionError(null);
-    setFolderActionLoading(true);
+  const runToolbarAction = async (action: () => Promise<{ ok: boolean; error?: string }>) => {
+    setToolbarError(null);
+    setToolbarLoading(true);
     try {
       const result = await action();
       if (!result.ok) {
-        setFolderActionError(result.error ?? 'Could not complete the action.');
+        setToolbarError(result.error ?? 'Could not complete the action.');
       }
     } finally {
-      setFolderActionLoading(false);
+      setToolbarLoading(false);
     }
   };
+
+  const handleSave = async () => {
+    if (!supabaseReady) {
+      setToolbarError('Supabase is not configured.');
+      return;
+    }
+    if (project.source === 'local') {
+      setSaveDialogOpen(true);
+      return;
+    }
+    await runToolbarAction(async () => {
+      const result = await saveProject();
+      return result.ok ? { ok: true } : { ok: false, error: result.error };
+    });
+  };
+
+  const handleClose = () => {
+    if (dirty) {
+      const leave = window.confirm('You have unsaved changes. Close anyway?');
+      if (!leave) return;
+    }
+    closeProject();
+  };
+
+  const sourceLabel =
+    project.source === 'remote'
+      ? project.remoteTitle ?? 'Remote document'
+      : project.folderHandle
+        ? 'Local folder'
+        : 'Local';
 
   return (
     <>
@@ -166,22 +202,26 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
               linkEditingListIndex={linkEditingListIndex}
               linkTargetMemberCount={linkGroupMembers.size}
             />
-            <ProjectFolderActions
-              canReload={canManagePages}
-              loading={folderActionLoading}
-              error={folderActionError}
-              onReload={() => void runFolderAction(reloadProjectFromDisk)}
-              onSelectFolder={() => void runFolderAction(selectProjectFolder)}
-              saveVisible={canManagePages}
+            <ProjectToolbar
+              dirty={dirty}
+              canReload
+              canSave={supabaseReady}
+              loading={toolbarLoading}
+              error={toolbarError}
               saveStatus={saveStatus}
               saveError={saveError}
+              sourceLabel={sourceLabel}
+              onSave={() => void handleSave()}
+              onReload={() => void runToolbarAction(reloadProject)}
+              onSelectFolder={() => void runToolbarAction(selectProjectFolder)}
+              onClose={handleClose}
             />
           </div>
 
           <div className="panel-row">
             {state.panels.length === 0 && (
               <div className="empty-panels">
-                {project.pages.length === 0 && canManagePages
+                {project.pages.length === 0
                   ? 'No pages yet. Use + New page in the sidebar to create the first one.'
                   : 'Select a page from the sidebar to get started.'}
               </div>
@@ -219,6 +259,20 @@ export function ProjectWorkspace({ store }: ProjectWorkspaceProps) {
           />
         </main>
       </div>
+
+      {saveDialogOpen && (
+        <SaveDocDialog
+          project={project}
+          onClose={() => setSaveDialogOpen(false)}
+          onConfirm={(title) => {
+            setSaveDialogOpen(false);
+            void runToolbarAction(async () => {
+              const result = await saveProject(title);
+              return result.ok ? { ok: true } : { ok: false, error: result.error };
+            });
+          }}
+        />
+      )}
     </>
   );
 }

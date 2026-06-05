@@ -91,6 +91,98 @@ code {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
 }
 
+.welcome-card-wide {
+  max-width: 640px;
+}
+
+.welcome-remote {
+  margin: 1.5rem 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e9ecef;
+}
+
+.welcome-remote-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.welcome-remote-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.welcome-refresh-btn {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  background: #fff;
+  color: #495057;
+  cursor: pointer;
+}
+
+.welcome-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.welcome-remote-status {
+  color: #6c757d;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.welcome-doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.welcome-doc-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background: #f8f9fa;
+  text-align: left;
+  cursor: pointer;
+}
+
+.welcome-doc-item:hover:not(:disabled) {
+  border-color: #0d6efd;
+  background: #eef4ff;
+}
+
+.welcome-doc-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.welcome-doc-title {
+  font-weight: 600;
+  color: #212529;
+}
+
+.welcome-doc-meta {
+  font-size: 0.85rem;
+  color: #6c757d;
+}
+
+.welcome-supabase-hint {
+  margin-top: 1rem;
+}
+
 .welcome-card h1 {
   margin: 0 0 0.5rem;
   font-size: 1.75rem;
@@ -474,6 +566,25 @@ code {
 
 .project-folder-btn:hover:not(:disabled) {
   background: #e9ecef;
+}
+
+.project-folder-btn-primary {
+  background: #0d6efd;
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+.project-folder-btn-primary:hover:not(:disabled) {
+  background: #0b5ed7;
+}
+
+.project-source-label {
+  font-size: 0.85rem;
+  color: #495057;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-folder-btn:disabled {

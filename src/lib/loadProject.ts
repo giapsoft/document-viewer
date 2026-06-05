@@ -10,7 +10,6 @@ import { EMPTY_RELATIONS, normalizeRelations } from './groupRelations';
 import { getDocsDirectoryIfPresent } from './docsFolder';
 import { mergeStyles } from './styles';
 import { isValidStatus, isValidType } from './componentDisplay';
-import { publicUrl } from './publicUrl';
 import { MD_FILE_EXT, componentIdFromMdFileName } from './mdFiles';
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|gif)$/i;
@@ -59,7 +58,12 @@ export interface RawProjectInput {
   mdFiles?: { componentId: string; content: string }[];
 }
 
-export function assembleProject(input: RawProjectInput): LoadedProject {
+export type AssembledProject = Omit<
+  LoadedProject,
+  'source' | 'remoteDocId' | 'remoteTitle' | 'folderHandle' | 'remoteSync'
+>;
+
+export function assembleProject(input: RawProjectInput): AssembledProject {
   const warnings: string[] = [];
   const pages: PageData[] = [];
   const relations = normalizeRelations(input.relations);
@@ -81,8 +85,10 @@ export function assembleProject(input: RawProjectInput): LoadedProject {
   pages.sort((a, b) => a.fileName.localeCompare(b.fileName));
 
   const imageUrls = new Map<string, string>();
+  const imageBlobs = new Map<string, Blob>();
   for (const { name, blob } of input.imageFiles) {
     imageUrls.set(name, URL.createObjectURL(blob));
+    imageBlobs.set(name, blob);
   }
 
   const mdFiles = new Map<string, string>();
@@ -108,6 +114,7 @@ export function assembleProject(input: RawProjectInput): LoadedProject {
     relations,
     styles: mergeStyles(input.stylesPartial),
     imageUrls,
+    imageBlobs,
     mdFiles,
     index,
     warnings,
@@ -169,62 +176,14 @@ export async function loadFromDirectoryHandle(
   }
 
   const project = assembleProject({ pageFiles, relations, stylesPartial, imageFiles, mdFiles });
-  return { ...project, folderHandle: root };
-}
-
-export async function loadSampleProject(): Promise<LoadedProject> {
-  const relationsRes = await fetch(publicUrl('sample-data/relations.json'));
-  if (!relationsRes.ok) throw new Error('Cannot load sample relations.json');
-  const relations = (await relationsRes.json()) as RelationsFile;
-
-  let stylesPartial: Partial<import('../types').AppStyles> | null = null;
-  try {
-    const stylesRes = await fetch(publicUrl('sample-data/styles.json'));
-    if (stylesRes.ok) stylesPartial = await stylesRes.json();
-  } catch {
-    // optional
-  }
-
-  const pageNames = [
-    'intro.p',
-    'detail.p',
-    'appendix.p',
-    'specs.p',
-    'integration.p',
-    'workflow.p',
-    'reference.p',
-    'changelog.p',
-  ];
-  const pageFiles: { name: string; content: unknown }[] = [];
-  for (const name of pageNames) {
-    const res = await fetch(publicUrl(`sample-data/docs/${name}`));
-    if (res.ok) pageFiles.push({ name, content: await res.json() });
-  }
-
-  const imageNames = ['diagram.png', 'architecture.jpg', 'overview.png'];
-  const imageFiles: { name: string; blob: Blob }[] = [];
-  for (const name of imageNames) {
-    const res = await fetch(publicUrl(`sample-data/docs/${name}`));
-    if (res.ok) imageFiles.push({ name, blob: await res.blob() });
-  }
-
-  const mdNames = ['intro.notes.md'];
-  const mdFiles: { componentId: string; content: string }[] = [];
-  for (const name of mdNames) {
-    const res = await fetch(publicUrl(`sample-data/docs/${name}`));
-    if (res.ok) {
-      const componentId = componentIdFromMdFileName(name);
-      if (componentId) {
-        mdFiles.push({ componentId, content: await res.text() });
-      }
-    }
-  }
-
-  if (pageFiles.length === 0) {
-    throw new Error('Cannot load sample page data');
-  }
-
-  return assembleProject({ pageFiles, relations, stylesPartial, imageFiles, mdFiles });
+  return {
+    ...project,
+    source: 'local' as const,
+    remoteDocId: null,
+    remoteTitle: null,
+    folderHandle: root,
+    remoteSync: null,
+  };
 }
 
 export function revokeProjectImageUrls(project: LoadedProject | null | undefined): void {

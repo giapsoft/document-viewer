@@ -54,6 +54,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         sidebarExpanded: true,
       };
 
+    case 'CLOSE_PROJECT':
+      return initialAppState;
+
     case 'RELOAD_PROJECT': {
       const project = action.project;
       const pageFiles = new Set(project.pages.map((p) => p.fileName));
@@ -543,19 +546,23 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'ADD_IMAGE': {
       if (!state.project) return state;
       const imageUrls = new Map(state.project.imageUrls);
+      const imageBlobs = new Map(state.project.imageBlobs);
       imageUrls.set(action.filename, action.objectUrl);
+      imageBlobs.set(action.filename, action.blob);
       return {
         ...state,
-        project: { ...state.project, imageUrls },
+        project: { ...state.project, imageUrls, imageBlobs },
       };
     }
 
     case 'APPEND_IMAGE_COMPONENT': {
       if (!state.project) return state;
-      const { pageFile, filename, objectUrl } = action;
+      const { pageFile, filename, objectUrl, blob } = action;
 
       const imageUrls = new Map(state.project.imageUrls);
+      const imageBlobs = new Map(state.project.imageBlobs);
       imageUrls.set(filename, objectUrl);
+      imageBlobs.set(filename, blob);
 
       const { project: withComponent, newComponent } = appendImageComponent(
         { ...state.project, imageUrls },
