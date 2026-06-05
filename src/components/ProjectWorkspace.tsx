@@ -3,9 +3,11 @@ import { PagePanel } from './PagePanel';
 import { EditBar } from './EditBar';
 import { LinkModeToggle } from './LinkModeToggle';
 import { ProjectToolbar } from './ProjectToolbar';
+import { SaveDestinationDialog, type SaveDestination } from './SaveDestinationDialog';
 import { SaveDocDialog } from './SaveDocDialog';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
+import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { useState } from 'react';
 
 type AppStore = ReturnType<typeof useAppStore>;
@@ -15,7 +17,7 @@ interface ProjectWorkspaceProps {
   supabaseReady: boolean;
 }
 
-export function ProjectWorkspace({ store, supabaseReady }: ProjectWorkspaceProps) {
+export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: ProjectWorkspaceProps) {
   const {
     state,
     dirty,
@@ -48,7 +50,9 @@ export function ProjectWorkspace({ store, supabaseReady }: ProjectWorkspaceProps
     appendClipboardImageToPage,
     reloadProject,
     selectProjectFolder,
-    saveProject,
+    saveToLocal,
+    saveToRemote,
+    deleteRemoteLink,
     closeProject,
     suggestNewPageFileName,
     normalizePageFileName,
@@ -101,8 +105,13 @@ export function ProjectWorkspace({ store, supabaseReady }: ProjectWorkspaceProps
     : activeGroupIndex !== null;
 
   const [toolbarLoading, setToolbarLoading] = useState(false);
-  const [toolbarError, setToolbarError] = useState<string | null>(null);
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [toolbarError, setToolbarError] = useState(null as string | null);
+  const [saveDestinationOpen, setSaveDestinationOpen] = useState(false);
+  const [remoteTitleOpen, setRemoteTitleOpen] = useState(false);
+
+  const canSaveLocal = Boolean(window.showDirectoryPicker);
+  const canSaveRemote = remoteStorageReady && isSupabaseConfigured();
+  const canSave = canSaveLocal || canSaveRemote;
 
   const runToolbarAction = async (action: () => Promise<{ ok: boolean; error?: string }>) => {
     setToolbarError(null);
@@ -117,19 +126,35 @@ export function ProjectWorkspace({ store, supabaseReady }: ProjectWorkspaceProps
     }
   };
 
-  const handleSave = async () => {
-    if (!supabaseReady) {
-      setToolbarError('Supabase is not configured.');
+  const handleSave = () => {
+    if (!canSave) {
+      setToolbarError('Saving requires Chrome/Edge (local) or remote storage on this site.');
       return;
     }
-    if (project.source === 'local') {
-      setSaveDialogOpen(true);
+    setSaveDestinationOpen(true);
+  };
+
+  const handleChooseDestination = (destination: SaveDestination) => {
+    setSaveDestinationOpen(false);
+
+    if (destination === 'local') {
+      void runToolbarAction(async () => {
+        const result = await saveToLocal();
+        if (!result.ok && result.cancelled) return { ok: true };
+        return result.ok ? { ok: true } : { ok: false, error: result.error };
+      });
       return;
     }
-    await runToolbarAction(async () => {
-      const result = await saveProject();
-      return result.ok ? { ok: true } : { ok: false, error: result.error };
-    });
+
+    if (project.remoteDocId) {
+      void runToolbarAction(async () => {
+        const result = await saveToRemote();
+        return result.ok ? { ok: true } : { ok: false, error: result.error };
+      });
+      return;
+    }
+
+    setRemoteTitleOpen(true);
   };
 
   const handleClose = () => {
@@ -140,12 +165,14 @@ export function ProjectWorkspace({ store, supabaseReady }: ProjectWorkspaceProps
     closeProject();
   };
 
-  const sourceLabel =
-    project.source === 'remote'
-      ? project.remoteTitle ?? 'Remote document'
-      : project.folderHandle
-        ? 'Local folder'
-        : 'Local';
+  const sourceParts: string[] = [];
+  if (project.remoteDocId) {
+    sourceParts.push(project.remoteTitle ?? 'Remote document');
+  }
+  if (project.folderHandle) {
+    sourceParts.push('Local folder');
+  }
+  const sourceLabel = sourceParts.length > 0 ? sourceParts.join(' · ') : 'Unsaved draft';
 
   return (
     <>
@@ -205,13 +232,13 @@ export function ProjectWorkspace({ store, supabaseReady }: ProjectWorkspaceProps
             <ProjectToolbar
               dirty={dirty}
               canReload
-              canSave={supabaseReady}
+              canSave={canSave}
               loading={toolbarLoading}
               error={toolbarError}
               saveStatus={saveStatus}
               saveError={saveError}
               sourceLabel={sourceLabel}
-              onSave={() => void handleSave()}
+              onSave={handleSave}
               onReload={() => void runToolbarAction(reloadProject)}
               onSelectFolder={() => void runToolbarAction(selectProjectFolder)}
               onClose={handleClose}
@@ -260,14 +287,26 @@ export function ProjectWorkspace({ store, supabaseReady }: ProjectWorkspaceProps
         </main>
       </div>
 
-      {saveDialogOpen && (
+      {saveDestinationOpen && (
+        <SaveDestinationDialog
+          project={project}
+          onClose={() => setSaveDestinationOpen(false)}
+          onChoose={handleChooseDestination}
+          onDeleteRemote={() => {
+            setSaveDestinationOpen(false);
+            void runToolbarAction(deleteRemoteLink);
+          }}
+        />
+      )}
+
+      {remoteTitleOpen && (
         <SaveDocDialog
           project={project}
-          onClose={() => setSaveDialogOpen(false)}
+          onClose={() => setRemoteTitleOpen(false)}
           onConfirm={(title) => {
-            setSaveDialogOpen(false);
+            setRemoteTitleOpen(false);
             void runToolbarAction(async () => {
-              const result = await saveProject(title);
+              const result = await saveToRemote(title);
               return result.ok ? { ok: true } : { ok: false, error: result.error };
             });
           }}

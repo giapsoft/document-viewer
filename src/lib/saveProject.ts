@@ -3,6 +3,7 @@ import { serializePageComponents } from './pageIds';
 import { normalizeRelations } from './groupRelations';
 import { mdSidecarFileName } from './mdFiles';
 import { ensureDocsDirectory } from './docsFolder';
+import { collectReferencedImageNames } from './projectBundle';
 
 export type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -61,9 +62,32 @@ async function ensureWritePermission(
   return true;
 }
 
+async function writeBlobFile(
+  dirHandle: FileSystemDirectoryHandle,
+  fileName: string,
+  blob: Blob,
+): Promise<void> {
+  const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+  if (!fileHandle.createWritable) {
+    throw new Error('This browser does not support saving files to the selected folder');
+  }
+  const writable = await fileHandle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+}
+
+export async function pickSaveFolder(): Promise<FileSystemDirectoryHandle | null> {
+  if (!window.showDirectoryPicker) {
+    throw new Error('Folder selection is not supported in this browser. Please use Chrome or Edge.');
+  }
+  return window.showDirectoryPicker({ mode: 'readwrite' });
+}
+
 export async function saveProjectToFolder(project: LoadedProject): Promise<void> {
   const root = project.folderHandle;
-  if (!root) return;
+  if (!root) {
+    throw new Error('No local folder is linked to this document.');
+  }
 
   const allowed = await ensureWritePermission(root);
   if (!allowed) {
@@ -83,6 +107,14 @@ export async function saveProjectToFolder(project: LoadedProject): Promise<void>
         const content = project.mdFiles.get(component.id) ?? '';
         await writeTextFile(docsHandle, mdSidecarFileName(component.id), content);
       }
+    }
+
+    for (const name of collectReferencedImageNames(project)) {
+      const blob = project.imageBlobs.get(name);
+      if (!blob) {
+        throw new Error(`Missing image data for "${name}"`);
+      }
+      await writeBlobFile(docsHandle, name, blob);
     }
   }
 

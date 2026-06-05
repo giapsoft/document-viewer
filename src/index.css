@@ -179,7 +179,7 @@ code {
   color: #6c757d;
 }
 
-.welcome-supabase-hint {
+.welcome-remote-unavailable-hint {
   margin-top: 1rem;
 }
 
@@ -504,6 +504,50 @@ code {
 
 .page-file-dialog-danger:hover {
   background: #f8d7da;
+}
+
+.save-destination-body {
+  gap: 1rem;
+}
+
+.save-destination-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.save-destination-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background: #f8f9fa;
+  text-align: left;
+  cursor: pointer;
+}
+
+.save-destination-option:hover:not(:disabled) {
+  border-color: #0d6efd;
+  background: #eef4ff;
+}
+
+.save-destination-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.save-destination-option-title {
+  font-weight: 600;
+  color: #212529;
+}
+
+.save-destination-option-hint {
+  font-size: 0.85rem;
+  color: #6c757d;
 }
 
 

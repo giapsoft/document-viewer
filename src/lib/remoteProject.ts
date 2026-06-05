@@ -268,3 +268,11 @@ export async function createRemoteDocument(
   const saveResult = await saveRemoteDocument(data.id, project, nextTitle);
   return { docId: data.id, remoteSync: saveResult.remoteSync };
 }
+
+export async function deleteRemoteDocument(docId: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  const paths = await listAllStoragePaths(docId);
+  await removeStoragePaths(paths);
+  const { error } = await supabase.from('documents').delete().eq('id', docId);
+  if (error) throw new Error(error.message);
+}

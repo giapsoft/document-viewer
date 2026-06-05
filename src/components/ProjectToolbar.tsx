@@ -65,7 +65,7 @@ export function ProjectToolbar({
         className="project-folder-btn project-folder-btn-primary"
         onClick={onSave}
         disabled={!canSave || loading || saveStatus === 'saving'}
-        title="Save document to Supabase"
+        title="Save document (local folder or remote storage)"
       >
         Save
       </button>

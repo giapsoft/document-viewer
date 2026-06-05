@@ -2,6 +2,7 @@ import { useReducer, useCallback, useRef, useEffect, useState } from 'react';
 import type { AppAction, Component, LoadedProject } from '../types';
 import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus } from '../lib/saveProject';
+import { pickSaveFolder, saveProjectToFolder } from '../lib/saveProject';
 import { importImageFromComputer, importImageFromClipboardSource, type ImportImageResult } from '../lib/importImage';
 import { clearPageScrollMemory } from '../lib/pageScrollMemory';
 import {
@@ -19,6 +20,7 @@ import {
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import {
   createRemoteDocument,
+  deleteRemoteDocument,
   loadRemoteDocument,
   saveRemoteDocument,
 } from '../lib/remoteProject';
@@ -26,7 +28,9 @@ import { defaultRemoteTitle } from '../lib/projectBundle';
 import { setDocIdInUrl } from '../lib/docUrl';
 
 export type PageActionResult = { ok: true } | { ok: false; error: string };
-export type SaveResult = { ok: true; docId?: string } | { ok: false; error: string };
+export type SaveResult =
+  | { ok: true; docId?: string }
+  | { ok: false; error: string; cancelled?: boolean };
 
 const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'UPDATE_COMPONENT',
@@ -396,7 +400,47 @@ export function useAppStore() {
     }
   }, [setProject]);
 
-  const saveProject = useCallback(async (title?: string): Promise<SaveResult> => {
+  const saveToLocal = useCallback(async (): Promise<SaveResult> => {
+    const project = projectRef.current;
+    if (!project) {
+      return { ok: false, error: 'No project is open.' };
+    }
+
+    setSaveStatus('saving');
+    setSaveError(null);
+
+    try {
+      let folderHandle = project.folderHandle ?? null;
+      if (!folderHandle) {
+        folderHandle = await pickSaveFolder();
+        if (!folderHandle) {
+          setSaveStatus('idle');
+          return { ok: false, error: '', cancelled: true };
+        }
+      }
+
+      const projectForSave: LoadedProject = { ...project, folderHandle };
+      await saveProjectToFolder(projectForSave);
+
+      const nextProject: LoadedProject = {
+        ...project,
+        folderHandle,
+      };
+      projectRef.current = nextProject;
+      dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
+      setDirty(false);
+      setSaveStatus('saved');
+      window.setTimeout(() => setSaveStatus('idle'), 2000);
+      return { ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not save to local folder';
+      setSaveStatus('error');
+      setSaveError(message);
+      return { ok: false, error: message };
+    }
+  }, [dispatch]);
+
+  const saveToRemote = useCallback(async (title?: string): Promise<SaveResult> => {
     const project = projectRef.current;
     if (!project) {
       return { ok: false, error: 'No project is open.' };
@@ -404,7 +448,7 @@ export function useAppStore() {
     if (!isSupabaseConfigured()) {
       return {
         ok: false,
-        error: 'Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env',
+        error: 'Remote storage is not available on this site.',
       };
     }
 
@@ -412,7 +456,7 @@ export function useAppStore() {
     setSaveError(null);
 
     try {
-      if (project.source === 'remote' && project.remoteDocId) {
+      if (project.remoteDocId) {
         const saveResult = await saveRemoteDocument(
           project.remoteDocId,
           project,
@@ -425,6 +469,7 @@ export function useAppStore() {
         };
         projectRef.current = nextProject;
         dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
+        setDocIdInUrl(project.remoteDocId);
         setDirty(false);
         setSaveStatus('saved');
         window.setTimeout(() => setSaveStatus('idle'), 2000);
@@ -441,7 +486,6 @@ export function useAppStore() {
       const created = await createRemoteDocument(project, nextTitle);
       const savedProject: LoadedProject = {
         ...project,
-        source: 'remote',
         remoteDocId: created.docId,
         remoteTitle: nextTitle,
         remoteSync: created.remoteSync,
@@ -462,10 +506,41 @@ export function useAppStore() {
     }
   }, [dispatch]);
 
+  const saveProject = saveToRemote;
+
+  const deleteRemoteLink = useCallback(async (): Promise<PageActionResult> => {
+    const project = projectRef.current;
+    if (!project?.remoteDocId) {
+      return { ok: false, error: 'This document is not linked to remote storage.' };
+    }
+    if (!isSupabaseConfigured()) {
+      return { ok: false, error: 'Remote storage is not available on this site.' };
+    }
+
+    try {
+      await deleteRemoteDocument(project.remoteDocId);
+      const nextProject: LoadedProject = {
+        ...project,
+        remoteDocId: null,
+        remoteTitle: null,
+        remoteSync: null,
+      };
+      projectRef.current = nextProject;
+      dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
+      setDocIdInUrl(null);
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not delete remote document.',
+      };
+    }
+  }, [dispatch]);
+
   const loadRemoteDoc = useCallback(
     async (docId: string): Promise<PageActionResult> => {
       if (!isSupabaseConfigured()) {
-        return { ok: false, error: 'Supabase is not configured.' };
+        return { ok: false, error: 'Remote storage is not available on this site.' };
       }
       try {
         const project = await loadRemoteDocument(docId);
@@ -489,6 +564,9 @@ export function useAppStore() {
     setProject,
     closeProject,
     loadRemoteDoc,
+    saveToLocal,
+    saveToRemote,
+    deleteRemoteLink,
     saveProject,
     reloadProject,
     selectProjectFolder,

@@ -98,7 +98,7 @@ export function WelcomeScreen({ onLoaded, onLoadRemoteDoc }: WelcomeScreenProps)
     <div className="welcome">
       <div className="welcome-card welcome-card-wide">
         <h1>Document Viewer</h1>
-        <p>Open a local folder or choose a saved document from Supabase.</p>
+        <p>Open a local folder or choose a saved document from remote storage.</p>
 
         <div className="welcome-actions">
           <button type="button" onClick={handlePickFolder} disabled={loading}>
@@ -147,18 +147,16 @@ export function WelcomeScreen({ onLoaded, onLoadRemoteDoc }: WelcomeScreenProps)
             )}
           </section>
         ) : (
-          <p className="welcome-hint welcome-supabase-hint">
-            Remote documents are disabled. Copy <code>.env.example</code> to <code>.env</code> and
-            set <code>VITE_SUPABASE_URL</code> / <code>VITE_SUPABASE_ANON_KEY</code>, then run{' '}
-            <code>supabase/schema.sql</code> in your Supabase project.
+          <p className="welcome-hint welcome-remote-unavailable-hint">
+            Remote storage is not available on this site.
           </p>
         )}
 
         {error && <p className="welcome-error">{error}</p>}
         <p className="welcome-hint">
-          Edits stay in memory until you press <strong>Save</strong>. Local folders are not written
-          automatically. Use Save to store changes on Supabase. Deep link:{' '}
-          <code>?doc=DOCUMENT_ID</code> (also accepts <code>?page=</code>).
+          Edits stay in memory until you press <strong>Save</strong> and choose local folder or
+          remote storage. Deep link: <code>?doc=DOCUMENT_ID</code> (also accepts{' '}
+          <code>?page=</code>).
         </p>
         <VersionBadge />
       </div>

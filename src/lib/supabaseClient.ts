@@ -10,9 +10,7 @@ export function isSupabaseConfigured(): boolean {
 
 export function getSupabaseClient(): SupabaseClient {
   if (!isSupabaseConfigured()) {
-    throw new Error(
-      'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env',
-    );
+    throw new Error('Remote storage is not configured for this deployment.');
   }
 
   if (!client) {

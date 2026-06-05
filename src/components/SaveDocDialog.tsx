@@ -11,10 +11,10 @@ interface SaveDocDialogProps {
 export function SaveDocDialog({ project, onClose, onConfirm }: SaveDocDialogProps) {
   return (
     <PageFileDialog
-      title="Save to Supabase"
+      title="Save to remote storage"
       label="Document title"
       initialValue={defaultRemoteTitle(project)}
-      hint="This creates a new saved document on Supabase."
+      hint="Creates a new saved document in remote storage."
       confirmLabel="Save"
       onClose={onClose}
       onConfirm={onConfirm}
