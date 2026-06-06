@@ -1,6 +1,9 @@
-interface LinkModeToggleProps {
-  enabled: boolean;
-  onToggle: () => void;
+interface WorkspaceTopBarProps {
+  linkMode?: boolean;
+  linkEditingListIndex?: number | null;
+  linkTargetMemberCount?: number;
+  pinModeActive?: boolean;
+  onExitPinMode?: () => void;
   canUnlink?: boolean;
   onUnlink?: () => void;
   sidebarCollapsed?: boolean;
@@ -9,14 +12,14 @@ interface LinkModeToggleProps {
   canGoNext?: boolean;
   onSelectionBack?: () => void;
   onSelectionNext?: () => void;
-  /** Locked list index in link mode, or null when creating a new list */
-  linkEditingListIndex?: number | null;
-  linkTargetMemberCount?: number;
 }
 
-export function LinkModeToggle({
-  enabled,
-  onToggle,
+export function WorkspaceTopBar({
+  linkMode = false,
+  linkEditingListIndex = null,
+  linkTargetMemberCount = 0,
+  pinModeActive = false,
+  onExitPinMode,
   canUnlink = false,
   onUnlink,
   sidebarCollapsed = false,
@@ -25,23 +28,39 @@ export function LinkModeToggle({
   canGoNext = false,
   onSelectionBack,
   onSelectionNext,
-  linkEditingListIndex = null,
-  linkTargetMemberCount = 0,
-}: LinkModeToggleProps) {
-  const creatingNewList = enabled && linkEditingListIndex === null;
+}: WorkspaceTopBarProps) {
+  const creatingNewList = linkMode && linkEditingListIndex === null;
 
   return (
     <>
       {sidebarCollapsed && onExpandSidebar && (
-        <button
-          type="button"
-          className="sidebar-expand-btn"
-          onClick={onExpandSidebar}
-        >
+        <button type="button" className="sidebar-expand-btn" onClick={onExpandSidebar}>
           Expand
         </button>
       )}
-      {!enabled && onSelectionBack && onSelectionNext && (
+
+      {pinModeActive && onExitPinMode && (
+        <div className="pin-mode-banner">
+          <span className="pin-mode-message">
+            You are in Pin mode. Only pinned pages are shown in the panel area.
+          </span>
+          <button
+            type="button"
+            className="pin-mode-toggle active"
+            onClick={onExitPinMode}
+            aria-pressed
+            title="Turn off Pin mode and unpin all pages"
+          >
+            <span className="pin-mode-toggle-track">
+              <span className="pin-mode-toggle-thumb" />
+            </span>
+            <span className="pin-mode-toggle-label">Pin mode</span>
+            <span className="pin-mode-status on">ON</span>
+          </button>
+        </div>
+      )}
+
+      {!linkMode && onSelectionBack && onSelectionNext && (
         <div className="selection-nav-group">
           <button
             type="button"
@@ -63,22 +82,7 @@ export function LinkModeToggle({
           </button>
         </div>
       )}
-      <button
-        type="button"
-        className={`link-mode-toggle ${enabled ? 'active' : ''}`}
-        onClick={onToggle}
-        aria-pressed={enabled}
-      >
-        <span className="link-mode-toggle-track">
-          <span className="link-mode-toggle-thumb" />
-        </span>
-        <span className="link-mode-toggle-label" title="Hold Ctrl for temporary link mode">
-          Link mode
-        </span>
-        <span className={`link-mode-status ${enabled ? 'on' : 'off'}`}>
-          {enabled ? 'ON' : 'OFF'}
-        </span>
-      </button>
+
       {onUnlink && (
         <button
           type="button"
@@ -87,7 +91,7 @@ export function LinkModeToggle({
           disabled={!canUnlink}
           title={
             canUnlink
-              ? enabled
+              ? linkMode
                 ? 'Delete the currently selected relation group'
                 : 'Remove all relation groups for this component'
               : 'Select a linked component to unlink'
@@ -96,11 +100,12 @@ export function LinkModeToggle({
           Unlink
         </button>
       )}
-      {enabled && (
+
+      {linkMode && (
         <span className="link-mode-hint">
           {creatingNewList
-            ? 'Creating a new list — click components to add them to this list.'
-            : `Editing list ${linkEditingListIndex! + 1} (${linkTargetMemberCount} members) — click to add or remove.`}
+            ? 'Creating a new list — click components to add them to this list. (Hold Ctrl)'
+            : `Editing list ${linkEditingListIndex! + 1} (${linkTargetMemberCount} members) — click to add or remove. (Hold Ctrl)`}
         </span>
       )}
     </>

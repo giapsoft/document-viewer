@@ -30,7 +30,14 @@ import {
   reorderPagesInProject,
 } from './pageMutations';
 import { reorderPanelsBySidebar } from './pageOrder';
-import { buildPanelsForPageContext, refreshPanelsWithPins, togglePinnedPage } from './pagePins';
+import {
+  buildPanelsForPageContext,
+  buildPanelsForPinList,
+  hasPinnedPages,
+  refreshPanelsWithPins,
+  shouldAutoScrollPanels,
+  togglePinnedPage,
+} from './pagePins';
 
 function applyExitLinkMode(state: AppState): AppState {
   if (!state.linkMode) return state;
@@ -94,12 +101,17 @@ export const initialAppState: AppState = {
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
-    case 'SET_PROJECT':
-      return {
+    case 'SET_PROJECT': {
+      const nextState: AppState = {
         ...initialAppState,
         project: action.project,
         sidebarExpanded: true,
       };
+      if (hasPinnedPages(action.project.relations)) {
+        return { ...nextState, panels: buildPanelsForPinList(nextState) };
+      }
+      return nextState;
+    }
 
     case 'CLOSE_PROJECT':
       return initialAppState;
@@ -127,7 +139,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selectionScrollNonce: 0,
       };
 
-      if (currentPage) {
+      if (hasPinnedPages(project.relations)) {
+        nextState = {
+          ...nextState,
+          panels: buildPanelsForPinList(nextState),
+        };
+      } else if (currentPage) {
         nextState = {
           ...nextState,
           panels: buildPanelsForPageContext(nextState, currentPage),
@@ -168,7 +185,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         { componentId, pageFile },
       );
 
-      const shouldScrollSecondaryPanels = applied.selection.relatedIds.size > 1;
+      const shouldScrollSecondaryPanels =
+        shouldAutoScrollPanels(state) && applied.selection.relatedIds.size > 1;
 
       return {
         ...state,
@@ -202,7 +220,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         ...applied,
         selectionHistoryIndex: newIndex,
-        scrollToComponent: scrollToHistoryEntry(state, entry),
+        scrollToComponent: shouldAutoScrollPanels(state)
+          ? scrollToHistoryEntry(state, entry)
+          : null,
       };
     }
 
@@ -231,7 +251,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         ...applied,
         selectionHistoryIndex: newIndex,
-        scrollToComponent: scrollToHistoryEntry(state, entry),
+        scrollToComponent: shouldAutoScrollPanels(state)
+          ? scrollToHistoryEntry(state, entry)
+          : null,
       };
     }
 
@@ -485,7 +507,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             nextState = {
               ...nextState,
               ...applied,
-              selectionScrollNonce: state.selectionScrollNonce + 1,
+              selectionScrollNonce: shouldAutoScrollPanels(state)
+                ? state.selectionScrollNonce + 1
+                : state.selectionScrollNonce,
             };
           } else {
             nextState = {
@@ -605,7 +629,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return applyDeletePageState(state, action.fileName);
 
     case 'TOGGLE_PIN_PAGE': {
-      if (!state.project || !state.currentPage) return state;
+      if (!state.project) return state;
       const pinnedPages = togglePinnedPage(
         state.project.relations.pinnedPages,
         action.pageFile,
@@ -617,6 +641,19 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const nextState: AppState = { ...state, project };
       const panels = refreshPanelsWithPins(nextState);
       return panels ? { ...nextState, panels } : nextState;
+    }
+
+    case 'CLEAR_ALL_PINS': {
+      if (!state.project) return state;
+      const project = rebuildProject({
+        ...state.project,
+        relations: { ...state.project.relations, pinnedPages: [] },
+      });
+      const nextState: AppState = { ...state, project };
+      const panels = state.currentPage
+        ? buildPanelsForPageContext(nextState, state.currentPage)
+        : [];
+      return { ...nextState, panels };
     }
 
     default:

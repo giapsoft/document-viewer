@@ -138,7 +138,7 @@ export function Sidebar({
           return (
             <li
               key={page.fileName}
-              className={`page-list-row ${isActive ? 'page-list-row-active' : ''} ${isDragging ? 'page-list-row-dragging' : ''} ${isDropTarget ? 'page-list-row-drop-target' : ''}`}
+              className={`page-list-row ${isActive ? 'page-list-row-active' : ''} ${isPinned ? 'page-list-row-pinned' : ''} ${isDragging ? 'page-list-row-dragging' : ''} ${isDropTarget ? 'page-list-row-drop-target' : ''}`}
               onDragOver={(event) => handleDragOver(event, index)}
               onDrop={(event) => handleDrop(event, index)}
               onDragLeave={() => {
@@ -176,8 +176,8 @@ export function Sidebar({
                   className={`page-list-action-btn page-list-action-pin${isPinned ? ' page-list-action-pin-active' : ''}`}
                   title={
                     isPinned
-                      ? 'Unpin — hide from secondary panels when not linked'
-                      : 'Pin — always show in secondary panels when not main page'
+                      ? 'Unpin — remove from panel list'
+                      : 'Pin — panel list shows pinned pages only (no link pages or scroll)'
                   }
                   aria-pressed={isPinned}
                   onClick={() => onTogglePinPage(page.fileName)}

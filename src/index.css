@@ -303,6 +303,18 @@ code {
   box-shadow: 0 0 0 1px rgba(13, 110, 253, 0.15);
 }
 
+.page-list-row-pinned {
+  border: 2px solid #dc3545;
+  background: #fff8f8;
+  box-shadow: 0 0 0 1px rgba(220, 53, 69, 0.35);
+}
+
+.page-list-row-pinned.page-list-row-active {
+  border-color: #dc3545;
+  background: #fff0f0;
+  box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.45);
+}
+
 .page-list-row-dragging {
   opacity: 0.55;
 }
@@ -431,9 +443,10 @@ code {
 }
 
 .page-list-action-pin-active {
-  color: #0d6efd;
-  border-color: #9ec5fe;
-  background: #e7f1ff;
+  color: #dc3545;
+  border-color: #f1aeb5;
+  background: #fff5f5;
+  font-weight: 700;
 }
 
 .page-list-action-image:hover:not(:disabled) {
@@ -615,6 +628,7 @@ code {
   border-bottom: 1px solid #ffecb5;
 }
 
+.workspace-top-bar,
 .link-mode-bar {
   flex-shrink: 0;
   display: flex;
@@ -624,6 +638,86 @@ code {
   padding: 0.45rem 0.75rem;
   background: #fff;
   border-bottom: 1px solid #dee2e6;
+}
+
+.pin-mode-banner {
+  display: flex;
+  flex: 1 1 16rem;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.4rem 0.65rem;
+  background: #fff5f5;
+  border: 1px solid #f1aeb5;
+  border-radius: 8px;
+}
+
+.pin-mode-message {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: #842029;
+}
+
+.pin-mode-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.55rem 0.3rem 0.35rem;
+  border: 1px solid #f1aeb5;
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+
+.pin-mode-toggle:hover {
+  background: #ffe3e3;
+  border-color: #dc3545;
+}
+
+.pin-mode-toggle.active {
+  background: #fff0f0;
+  border-color: #dc3545;
+}
+
+.pin-mode-toggle-track {
+  position: relative;
+  width: 2rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  background: #dc3545;
+}
+
+.pin-mode-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.pin-mode-toggle-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #842029;
+  white-space: nowrap;
+}
+
+.pin-mode-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.pin-mode-status.on {
+  color: #dc3545;
 }
 
 .project-folder-actions {
@@ -877,6 +971,21 @@ code {
 
 .page-panel.current {
   box-shadow: inset 3px 0 0 #0d6efd;
+}
+
+.page-panel.pinned {
+  outline: 3px solid #dc3545;
+  outline-offset: -3px;
+  box-shadow:
+    inset 0 0 0 1px rgba(220, 53, 69, 0.25),
+    0 0 12px rgba(220, 53, 69, 0.2);
+}
+
+.page-panel.pinned.current {
+  box-shadow:
+    inset 3px 0 0 #dc3545,
+    inset 0 0 0 1px rgba(220, 53, 69, 0.25),
+    0 0 12px rgba(220, 53, 69, 0.2);
 }
 
 .page-panel-header {

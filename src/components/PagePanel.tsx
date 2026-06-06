@@ -211,9 +211,11 @@ function shouldSkipScrollRestore(
   selection: SelectionState | null,
   selectionScrollNonce: number,
   linkMode: boolean,
+  autoScrollSecondary: boolean,
   linkGroupMembers?: Set<string>,
 ): boolean {
   if (
+    autoScrollSecondary &&
     scrollToComponentId &&
     scrollNonce > 0 &&
     page?.components.some((c) => c.id === scrollToComponentId)
@@ -223,7 +225,7 @@ function shouldSkipScrollRestore(
 
   if (linkMode) return false;
 
-  if (!isCurrent && selectionScrollNonce > 0 && page) {
+  if (autoScrollSecondary && !isCurrent && selectionScrollNonce > 0 && page) {
     const targetId = getFirstSelectedComponentId(
       page,
       selection,
@@ -251,6 +253,8 @@ interface PagePanelProps {
   scrollToComponentId?: string | null;
   scrollNonce?: number;
   selectionScrollNonce?: number;
+  autoScrollSecondary?: boolean;
+  isPinned?: boolean;
 }
 
 export function PagePanel({
@@ -267,6 +271,8 @@ export function PagePanel({
   scrollToComponentId = null,
   scrollNonce = 0,
   selectionScrollNonce = 0,
+  autoScrollSecondary = true,
+  isPinned = false,
 }: PagePanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -323,6 +329,7 @@ export function PagePanel({
         selection,
         selectionScrollNonce,
         linkMode,
+        autoScrollSecondary,
         linkGroupMembers,
       )
     ) {
@@ -343,10 +350,12 @@ export function PagePanel({
     selection,
     selectionScrollNonce,
     linkMode,
+    autoScrollSecondary,
     linkGroupMembers,
   ]);
 
   useEffect(() => {
+    if (!autoScrollSecondary) return;
     if (!scrollToComponentId || scrollNonce === 0 || !expanded) return;
     if (handledScrollNonceRef.current === scrollNonce) return;
     if (!page?.components.some((c) => c.id === scrollToComponentId)) return;
@@ -360,7 +369,7 @@ export function PagePanel({
         handledScrollNonceRef.current = scrollNonce;
       },
     );
-  }, [scrollToComponentId, scrollNonce, expanded, pageFile]);
+  }, [autoScrollSecondary, scrollToComponentId, scrollNonce, expanded, pageFile]);
 
   useEffect(() => {
     if (!expanded) {
@@ -371,7 +380,7 @@ export function PagePanel({
     const justExpanded = !wasExpandedRef.current;
     wasExpandedRef.current = true;
 
-    if (linkMode || isCurrent || !page || !selection) return;
+    if (!autoScrollSecondary || linkMode || isCurrent || !page || !selection) return;
 
     const targetId = getFirstSelectedComponentId(
       page,
@@ -402,6 +411,7 @@ export function PagePanel({
     page,
     selection,
     selectionScrollNonce,
+    autoScrollSecondary,
     linkGroupMembers,
   ]);
 
@@ -420,7 +430,7 @@ export function PagePanel({
   return (
     <div
       ref={panelRef}
-      className={`page-panel ${expanded ? 'expanded' : 'shrunk'} ${isCurrent ? 'current' : ''}`}
+      className={`page-panel ${expanded ? 'expanded' : 'shrunk'} ${isCurrent ? 'current' : ''} ${isPinned ? 'pinned' : ''}`}
       data-page={pageFile}
     >
       <div className="page-panel-header">

@@ -1,7 +1,7 @@
 import { Sidebar } from './Sidebar';
 import { PagePanel } from './PagePanel';
 import { EditBar } from './EditBar';
-import { LinkModeToggle } from './LinkModeToggle';
+import { WorkspaceTopBar } from './WorkspaceTopBar';
 import { ProjectToolbar } from './ProjectToolbar';
 import { SaveDestinationDialog, type SaveDestination } from './SaveDestinationDialog';
 import { SaveDocDialog } from './SaveDocDialog';
@@ -35,8 +35,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     insertComponentAbove,
     insertComponentBelow,
     deleteComponent,
-    toggleLinkMode,
     setLinkMode,
+    clearAllPins,
     deleteActiveGroup,
     toggleLinkComponent,
     goBackSelection,
@@ -88,6 +88,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   }));
   const canManagePages = true;
   const pinnedPages = project.relations.pinnedPages ?? [];
+  const pinModeActive = pinnedPages.length > 0;
+  const autoScrollSecondary = !pinModeActive;
   const handleComponentClick = state.linkMode ? toggleLinkComponent : selectComponent;
 
   const matchingGroupIndices = state.selection?.matchingGroupIndices ?? [];
@@ -208,10 +210,11 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             </div>
           )}
 
-          <div className="link-mode-bar">
-            <LinkModeToggle
-              enabled={state.linkMode}
-              onToggle={toggleLinkMode}
+          <div className="workspace-top-bar">
+            <WorkspaceTopBar
+              linkMode={state.linkMode}
+              pinModeActive={pinModeActive}
+              onExitPinMode={clearAllPins}
               canUnlink={canUnlinkGroup}
               onUnlink={deleteActiveGroup}
               sidebarCollapsed={!state.sidebarExpanded}
@@ -263,6 +266,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 scrollToComponentId={state.scrollToComponent?.componentId ?? null}
                 scrollNonce={state.scrollToComponent?.nonce ?? 0}
                 selectionScrollNonce={state.selectionScrollNonce}
+                autoScrollSecondary={autoScrollSecondary}
+                isPinned={pinnedPages.includes(panel.pageFile)}
               />
             ))}
           </div>

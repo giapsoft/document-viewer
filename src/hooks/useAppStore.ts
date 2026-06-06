@@ -47,6 +47,7 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'REORDER_PAGES',
   'DELETE_PAGE',
   'TOGGLE_PIN_PAGE',
+  'CLEAR_ALL_PINS',
   'DELETE_COMPONENT',
   'ADD_IMAGE',
 ]);
@@ -183,10 +184,6 @@ export function useAppStore() {
     [dispatch],
   );
 
-  const toggleLinkMode = useCallback(() => {
-    dispatch({ type: 'TOGGLE_LINK_MODE' });
-  }, [dispatch]);
-
   const setLinkMode = useCallback(
     (enabled: boolean) => {
       dispatch({ type: 'SET_LINK_MODE', enabled });
@@ -285,6 +282,11 @@ export function useAppStore() {
   const togglePinPage = useCallback((fileName: string) => {
     if (!projectRef.current?.pages.some((p) => p.fileName === fileName)) return;
     dispatch({ type: 'TOGGLE_PIN_PAGE', pageFile: fileName });
+  }, [dispatch]);
+
+  const clearAllPins = useCallback(() => {
+    if (!projectRef.current) return;
+    dispatch({ type: 'CLEAR_ALL_PINS' });
   }, [dispatch]);
 
   const deletePage = useCallback(async (fileName: string): Promise<PageActionResult> => {
@@ -606,8 +608,8 @@ export function useAppStore() {
     insertComponentAbove,
     insertComponentBelow,
     deleteComponent,
-    toggleLinkMode,
     setLinkMode,
+    clearAllPins,
     deleteActiveGroup,
     toggleLinkComponent,
     goBackSelection,

@@ -7,7 +7,8 @@ import {
 import { buildPanelsInSidebarOrder, getStoredPageOrder } from './pageOrder';
 import {
   getPinnedPages,
-  mergePinnedPagesIntoOrder,
+  hasPinnedPages,
+  resolveVisiblePageFiles,
   validPageFileSet,
 } from './pagePins';
 
@@ -64,19 +65,25 @@ export function buildSelectionForComponent(
   const hasLinks = relatedIds.size > 1;
   const validFiles = validPageFileSet(state);
   const pinnedPages = getPinnedPages(state.project.relations);
+  const pinModeActive = hasPinnedPages(state.project.relations);
   const sidebarOrder = getStoredPageOrder(
     state.project.relations,
     state.project.pages.map((p) => p.fileName),
   );
 
+  const basePages = hasLinks
+    ? orderPagesForSelection(pageFile, relatedIds, index, groupMemberOrder)
+    : [pageFile];
+  const orderedPages = resolveVisiblePageFiles(
+    basePages,
+    pageFile,
+    pinnedPages,
+    validFiles,
+    sidebarOrder,
+    pinModeActive,
+  );
+
   if (!hasLinks) {
-    const orderedPages = mergePinnedPagesIntoOrder(
-      [pageFile],
-      pageFile,
-      pinnedPages,
-      validFiles,
-      sidebarOrder,
-    );
     return {
       panels: buildPanelsInSidebarOrder(state.panels, orderedPages, sidebarOrder, pageFile),
       currentPage: pageFile,
@@ -88,14 +95,6 @@ export function buildSelectionForComponent(
       },
     };
   }
-
-  const orderedPages = mergePinnedPagesIntoOrder(
-    orderPagesForSelection(pageFile, relatedIds, index, groupMemberOrder),
-    pageFile,
-    pinnedPages,
-    validFiles,
-    sidebarOrder,
-  );
 
   return {
     panels: buildPanelsInSidebarOrder(state.panels, orderedPages, sidebarOrder, pageFile),
