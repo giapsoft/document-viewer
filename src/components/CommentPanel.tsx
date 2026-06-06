@@ -162,11 +162,7 @@ function CommentTreeItem({
                 {comment.author}
               </span>
               {isSelected && (
-                <span
-                  className={`comment-selected-badge${linkPreviewActive ? ' comment-selected-badge-preview' : ' comment-selected-badge-primary'}`}
-                >
-                  Selected
-                </span>
+                <span className="comment-selected-badge">Selected</span>
               )}
               <time className="comment-time" dateTime={new Date(comment.createdAt).toISOString()}>
                 {formatCommentTime(comment.createdAt)}
@@ -308,10 +304,7 @@ function CommentTreeItem({
       </article>
 
         {showLinkHint && (
-          <p
-            className={`comment-link-hint-float${linkPreviewActive ? ' comment-link-hint-float-preview' : ' comment-link-hint-float-primary'}`}
-            role="status"
-          >
+          <p className="comment-link-hint-float" role="status">
             {linkPreviewActive
               ? 'Hold Ctrl — click a component to preview the link, or select text in markdown. Release Ctrl to save. Click the same component again to clear.'
               : 'Comment selected — hold Ctrl to link to a component or markdown selection. Release Ctrl to save.'}
