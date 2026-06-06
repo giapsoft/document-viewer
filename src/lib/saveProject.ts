@@ -22,18 +22,52 @@ function notify(status: SaveStatus, message?: string) {
   statusListener?.(status, message);
 }
 
+async function writeFileWithRetry(
+  dirHandle: FileSystemDirectoryHandle,
+  fileName: string,
+  contents: string | Blob,
+  maxAttempts = 5,
+): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      // Exponential back-off: 300ms, 600ms, 1200ms, 2400ms
+      // Windows indexer / antivirus can hold a file for several hundred ms
+      // after each write; short delays are not enough on slow machines.
+      await new Promise((resolve) => setTimeout(resolve, 300 * (1 << (attempt - 1))));
+    }
+    // Re-acquire file handle every attempt — a handle from a previous cycle
+    // can be stale on Windows (indexer / antivirus holds the file briefly
+    // after each write, causing NotReadableError on the next createWritable).
+    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+    if (!fileHandle.createWritable) {
+      throw new Error('This browser does not support saving files to the selected folder');
+    }
+    let writable: FileSystemWritableFileStream | null = null;
+    try {
+      writable = await fileHandle.createWritable();
+      await writable.write(contents);
+      await writable.close();
+      return; // success
+    } catch (err) {
+      lastErr = err;
+      // Always abort the writable so the file lock is released before the
+      // next attempt. Without this, a failed write keeps the lock open for
+      // the lifetime of the tab and every subsequent save fails.
+      if (writable) {
+        try { await writable.abort(); } catch { /* ignore abort errors */ }
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function writeTextFile(
   dirHandle: FileSystemDirectoryHandle,
   fileName: string,
   contents: string,
 ): Promise<void> {
-  const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-  if (!fileHandle.createWritable) {
-    throw new Error('This browser does not support saving files to the selected folder');
-  }
-  const writable = await fileHandle.createWritable();
-  await writable.write(contents);
-  await writable.close();
+  await writeFileWithRetry(dirHandle, fileName, contents);
 }
 
 async function writeJsonFile(
@@ -41,13 +75,7 @@ async function writeJsonFile(
   fileName: string,
   data: unknown,
 ): Promise<void> {
-  const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-  if (!fileHandle.createWritable) {
-    throw new Error('This browser does not support saving files to the selected folder');
-  }
-  const writable = await fileHandle.createWritable();
-  await writable.write(`${JSON.stringify(data, null, 2)}\n`);
-  await writable.close();
+  await writeFileWithRetry(dirHandle, fileName, `${JSON.stringify(data, null, 2)}\n`);
 }
 
 async function ensureWritePermission(
@@ -67,13 +95,7 @@ async function writeBlobFile(
   fileName: string,
   blob: Blob,
 ): Promise<void> {
-  const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-  if (!fileHandle.createWritable) {
-    throw new Error('This browser does not support saving files to the selected folder');
-  }
-  const writable = await fileHandle.createWritable();
-  await writable.write(blob);
-  await writable.close();
+  await writeFileWithRetry(dirHandle, fileName, blob);
 }
 
 export async function pickSaveFolder(): Promise<FileSystemDirectoryHandle | null> {

@@ -186,7 +186,9 @@ export async function loadFromDirectoryHandle(
         }
       } else if (IMAGE_EXT.test(name)) {
         const file = await (entry as FileSystemFileHandle).getFile();
-        imageFiles.push({ name, blob: file });
+        // Use a plain Blob (not File) so Chromium doesn't invalidate the blob URL
+        // when the file is overwritten on disk during save (ERR_UPLOAD_FILE_CHANGED).
+        imageFiles.push({ name, blob: new Blob([await file.arrayBuffer()], { type: file.type }) });
       } else if (MD_FILE_EXT.test(name)) {
         const componentId = componentIdFromMdFileName(name);
         if (!componentId) continue;
