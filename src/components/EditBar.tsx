@@ -52,7 +52,7 @@ export function EditBar({
   onImportImage,
   onImportImageFromClipboard,
 }: EditBarProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [bodyExpanded, setBodyExpanded] = useState(false);
 
   if (!selection) {
     return (
@@ -83,8 +83,8 @@ export function EditBar({
       pageFile={pageFile}
       component={component}
       canDelete={canDelete}
-      expanded={expanded}
-      onToggleExpanded={() => setExpanded((value) => !value)}
+      bodyExpanded={bodyExpanded}
+      onToggleBodyExpanded={() => setBodyExpanded((value) => !value)}
       onUpdate={onUpdate}
       onInsertAbove={onInsertAbove}
       onInsertBelow={onInsertBelow}
@@ -102,8 +102,8 @@ interface EditBarFormProps {
   pageFile: string;
   component: Component;
   canDelete: boolean;
-  expanded: boolean;
-  onToggleExpanded: () => void;
+  bodyExpanded: boolean;
+  onToggleBodyExpanded: () => void;
   onUpdate: EditBarProps['onUpdate'];
   onInsertAbove: EditBarProps['onInsertAbove'];
   onInsertBelow: EditBarProps['onInsertBelow'];
@@ -119,8 +119,8 @@ function EditBarForm({
   pageFile,
   component,
   canDelete,
-  expanded,
-  onToggleExpanded,
+  bodyExpanded,
+  onToggleBodyExpanded,
   onUpdate,
   onInsertAbove,
   onInsertBelow,
@@ -155,159 +155,124 @@ function EditBarForm({
       <span className="edit-bar-list-badge">{selection.matchingGroupIndices.length} lists</span>
     ) : null;
 
+  const hasBodyEditor = component.type !== 'img';
+
   return (
-    <footer className={`edit-bar ${expanded ? 'edit-bar-expanded' : 'edit-bar-collapsed'}`}>
-      {!expanded ? (
-        <div className="edit-bar-top">
-          <button
-            type="button"
-            className="edit-bar-toggle"
-            onClick={onToggleExpanded}
-            aria-expanded={false}
-            title="Expand editor"
-          >
-            ▶
-          </button>
-          {contentEditable && (
-            <button
-              type="button"
-              className="edit-bar-icon-btn"
-              onClick={() => setFullscreenOpen(true)}
-              title="Full screen editor"
-            >
-              ⛶
-            </button>
-          )}
-          <button
-            type="button"
-            className="edit-bar-collapsed-summary"
-            onClick={onToggleExpanded}
-            title="Expand editor"
-          >
-            <span className="edit-bar-icon" aria-hidden>
-              ✎
-            </span>
-            <ComponentIdHeader componentId={component.id} />
-            <span className="edit-bar-sep">·</span>
-            <span>{component.type}</span>
-            <span className="edit-bar-sep">·</span>
-            <span>{component.status}</span>
-          </button>
-        </div>
-      ) : (
-        <div className="edit-bar-expanded-inner">
-          <div className="edit-bar-row">
+    <footer className={`edit-bar ${bodyExpanded ? 'edit-bar-body-expanded' : ''}`}>
+      <div className="edit-bar-inner">
+        <div className="edit-bar-row">
+          {hasBodyEditor && (
             <button
               type="button"
               className="edit-bar-toggle"
-              onClick={onToggleExpanded}
-              aria-expanded
-              title="Collapse editor"
+              onClick={onToggleBodyExpanded}
+              aria-expanded={bodyExpanded}
+              title={bodyExpanded ? 'Collapse content' : 'Expand content'}
             >
-              ▼
+              {bodyExpanded ? '▼' : '▶'}
             </button>
-            <span className="edit-bar-icon" title="Edit component" aria-hidden>
-              ✎
-            </span>
-            <span className="edit-bar-meta">
-              <ComponentIdHeader componentId={component.id} listBadge={listBadge} />
-            </span>
-            <div className="edit-bar-actions">
-              {contentEditable && (
-                <button
-                  type="button"
-                  className="edit-bar-icon-btn"
-                  onClick={() => setFullscreenOpen(true)}
-                  title="Full screen editor"
-                >
-                  ⛶
-                </button>
-              )}
+          )}
+          <span className="edit-bar-icon" title="Edit component" aria-hidden>
+            ✎
+          </span>
+          <span className="edit-bar-meta">
+            <ComponentIdHeader componentId={component.id} listBadge={listBadge} />
+          </span>
+          <div className="edit-bar-actions">
+            {contentEditable && (
               <button
                 type="button"
                 className="edit-bar-icon-btn"
-                onClick={() => onInsertAbove(pageFile, component.id)}
-                title="Insert above"
+                onClick={() => setFullscreenOpen(true)}
+                title="Full screen editor"
               >
-                ↑
+                ⛶
               </button>
-              <button
-                type="button"
-                className="edit-bar-icon-btn"
-                onClick={() => onInsertBelow(pageFile, component.id)}
-                title="Insert below"
-              >
-                ↓
-              </button>
-              <button
-                type="button"
-                className="edit-bar-icon-btn edit-bar-icon-btn-danger"
-                disabled={!canDelete}
-                onClick={() => setConfirmDelete(true)}
-                title={canDelete ? 'Delete component' : 'Cannot delete the only component on this page'}
-              >
-                ×
-              </button>
-            </div>
-            <div className="edit-bar-fields">
-              <select
-                className="edit-bar-input edit-bar-input-type"
-                value={component.type}
-                title="Type"
-                onChange={(e) => patch({ type: e.target.value as ComponentType })}
-              >
-                {TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="edit-bar-input edit-bar-input-status"
-                value={component.status}
-                title="Status"
-                onChange={(e) => patch({ status: e.target.value as ComponentStatus })}
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              {component.type === 'img' && (
-                <button
-                  type="button"
-                  className="edit-bar-input edit-bar-file-picker"
-                  onClick={() => setPickerOpen(true)}
-                  title="Image file"
-                >
-                  {imgLabel}
-                </button>
-              )}
-            </div>
+            )}
+            <button
+              type="button"
+              className="edit-bar-icon-btn"
+              onClick={() => onInsertAbove(pageFile, component.id)}
+              title="Insert above"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              className="edit-bar-icon-btn"
+              onClick={() => onInsertBelow(pageFile, component.id)}
+              title="Insert below"
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              className="edit-bar-icon-btn edit-bar-icon-btn-danger"
+              disabled={!canDelete}
+              onClick={() => setConfirmDelete(true)}
+              title={canDelete ? 'Delete component' : 'Cannot delete the only component on this page'}
+            >
+              ×
+            </button>
           </div>
-          {component.type !== 'img' && component.type !== 'md' && (
-            <textarea
-              className="edit-bar-input edit-bar-input-content"
-              rows={3}
-              value={component.content}
-              title="Content"
-              placeholder="Content…"
-              onChange={(e) => patch({ content: e.target.value })}
-            />
-          )}
-          {component.type === 'md' && (
-            <textarea
-              className="edit-bar-input edit-bar-input-content edit-bar-input-md"
-              rows={8}
-              value={mdContent}
-              title="Markdown"
-              placeholder="Markdown…"
-              onChange={(e) => onUpdateMdContent(component.id, e.target.value)}
-            />
-          )}
+          <div className="edit-bar-fields">
+            <select
+              className="edit-bar-input edit-bar-input-type"
+              value={component.type}
+              title="Type"
+              onChange={(e) => patch({ type: e.target.value as ComponentType })}
+            >
+              {TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <select
+              className="edit-bar-input edit-bar-input-status"
+              value={component.status}
+              title="Status"
+              onChange={(e) => patch({ status: e.target.value as ComponentStatus })}
+            >
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            {component.type === 'img' && (
+              <button
+                type="button"
+                className="edit-bar-input edit-bar-file-picker"
+                onClick={() => setPickerOpen(true)}
+                title="Image file"
+              >
+                {imgLabel}
+              </button>
+            )}
+          </div>
         </div>
-      )}
+        {bodyExpanded && hasBodyEditor && component.type !== 'md' && (
+          <textarea
+            className="edit-bar-input edit-bar-input-content"
+            rows={3}
+            value={component.content}
+            title="Content"
+            placeholder="Content…"
+            onChange={(e) => patch({ content: e.target.value })}
+          />
+        )}
+        {bodyExpanded && component.type === 'md' && (
+          <textarea
+            className="edit-bar-input edit-bar-input-content edit-bar-input-md"
+            rows={8}
+            value={mdContent}
+            title="Markdown"
+            placeholder="Markdown…"
+            onChange={(e) => onUpdateMdContent(component.id, e.target.value)}
+          />
+        )}
+      </div>
 
       {confirmDelete && (
         <ConfirmDialog

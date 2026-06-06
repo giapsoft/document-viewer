@@ -1332,22 +1332,13 @@ code {
   flex-shrink: 0;
   background: #fff;
   border-top: 1px solid #dee2e6;
-}
-
-.edit-bar-expanded {
   padding: 0.4rem 0.55rem;
-  box-shadow: none;
 }
 
-.edit-bar-expanded-inner {
+.edit-bar-inner {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-}
-
-.edit-bar-collapsed {
-  padding: 0.2rem 0.6rem;
-  box-shadow: none;
 }
 
 .edit-bar-row {
@@ -1356,14 +1347,6 @@ code {
   gap: 0.35rem;
   min-width: 0;
   min-height: 1.75rem;
-}
-
-.edit-bar-top {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
-  min-height: 1.5rem;
 }
 
 .edit-bar-icon {
@@ -1421,37 +1404,6 @@ code {
 .edit-bar-toggle:hover {
   background: #f1f3f5;
   color: #212529;
-}
-
-.edit-bar-collapsed-summary {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 0.5rem;
-  padding: 0;
-  border: none;
-  background: none;
-  font: inherit;
-  font-size: 0.75rem;
-  color: #495057;
-  text-align: left;
-  cursor: pointer;
-}
-
-.edit-bar-collapsed-summary:hover {
-  color: #0d6efd;
-}
-
-.edit-bar-collapsed-summary .edit-bar-component-id {
-  font-size: 0.75rem;
-}
-
-.edit-bar-sep {
-  flex-shrink: 0;
-  color: #adb5bd;
-  font-size: 0.7rem;
 }
 
 .edit-bar-empty {
