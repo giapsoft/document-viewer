@@ -30,50 +30,64 @@ import {
   getHighlightNavTargetsForPage,
 } from '../lib/selectionHighlight';
 import { ScrollbarMarkers } from './ScrollbarMarkers';
-import type { MdTextRange } from '../lib/mdSelection';
+import type { MdHighlightRange, MdTextRange } from '../lib/mdSelection';
+import { resolveMdHighlightSegments } from '../lib/mdSelection';
 
 function mdAnchorToHighlightRanges(
   anchor: Extract<NonNullable<DocComment['anchor']>, { kind: 'md-range' }>,
   className: string,
-): Array<{ start: number; end: number; className?: string; segments?: Array<{ start: number; end: number }> }> {
-  if (anchor.segments?.length) {
-    return [
-      {
-        start: anchor.start,
-        end: anchor.end,
-        segments: anchor.segments,
-        className,
-      },
-    ];
-  }
-  return [{ start: anchor.start, end: anchor.end, className }];
+  mdSource: string,
+  commentId?: string,
+): MdHighlightRange[] {
+  const segments = resolveMdHighlightSegments(mdSource, anchor);
+  if (segments.length === 0) return [];
+  return [
+    {
+      start: Math.min(...segments.map((segment) => segment.start)),
+      end: Math.max(...segments.map((segment) => segment.end)),
+      segments,
+      className,
+      commentId,
+    },
+  ];
 }
 
 function getPreviewMdHighlightRanges(
   preview: CommentAnchor | null | undefined,
   componentId: string,
-): Array<{ start: number; end: number; className?: string; segments?: Array<{ start: number; end: number }> }> {
+  mdSource: string,
+): MdHighlightRange[] {
   if (!preview || preview.kind !== 'md-range' || preview.componentId !== componentId) {
     return [];
   }
   return mdAnchorToHighlightRanges(
     preview,
     'md-comment-highlight md-comment-highlight-preview',
+    mdSource,
   );
 }
 
-function isPreviewComponentAnchor(
-  preview: CommentAnchor | null | undefined,
-  componentId: string,
-): boolean {
-  return preview?.kind === 'component' && preview.componentId === componentId;
+function mdHighlightClassName(
+  commentId: string,
+  highlightCommentId: string | null,
+  outstandingCommentId: string | null,
+): string {
+  if (commentId === outstandingCommentId) {
+    return 'md-comment-highlight md-comment-highlight-outstanding';
+  }
+  if (commentId === highlightCommentId) {
+    return 'md-comment-highlight md-comment-highlight-focused';
+  }
+  return 'md-comment-highlight';
 }
 
 function getMdHighlightRanges(
   comments: DocComment[],
   componentId: string,
+  mdSource: string,
   highlightCommentId: string | null,
-): Array<{ start: number; end: number; className?: string; segments?: Array<{ start: number; end: number }> }> {
+  outstandingCommentId: string | null,
+): MdHighlightRange[] {
   if (highlightCommentId) {
     const highlighted = comments.find((comment) => comment.id === highlightCommentId);
     if (
@@ -82,7 +96,9 @@ function getMdHighlightRanges(
     ) {
       return mdAnchorToHighlightRanges(
         highlighted.anchor,
-        'md-comment-highlight md-comment-highlight-focused',
+        mdHighlightClassName(highlightCommentId, highlightCommentId, outstandingCommentId),
+        mdSource,
+        highlightCommentId,
       );
     }
   }
@@ -98,14 +114,20 @@ function getMdHighlightRanges(
         NonNullable<DocComment['anchor']>,
         { kind: 'md-range' }
       >;
-      const isHighlighted = comment.id === highlightCommentId;
       return mdAnchorToHighlightRanges(
         anchor,
-        isHighlighted
-          ? 'md-comment-highlight md-comment-highlight-focused'
-          : 'md-comment-highlight',
+        mdHighlightClassName(comment.id, highlightCommentId, outstandingCommentId),
+        mdSource,
+        comment.id,
       );
     });
+}
+
+function isPreviewComponentAnchor(
+  preview: CommentAnchor | null | undefined,
+  componentId: string,
+): boolean {
+  return preview?.kind === 'component' && preview.componentId === componentId;
 }
 
 function hasComponentCommentAnchor(
@@ -139,7 +161,7 @@ interface ComponentBlockProps {
   linkGroupMembers?: Set<string>;
   commentLinkMode?: boolean;
   commentLinkPreviewAnchor?: CommentAnchor | null;
-  mdHighlightRanges?: Array<{ start: number; end: number; className?: string }>;
+  mdHighlightRanges?: MdHighlightRange[];
   hasComponentCommentAnchor?: boolean;
   onSelect: (componentId: string, pageFile: string) => void;
   onCommentLinkComponent?: (componentId: string, pageFile: string) => void;
@@ -148,6 +170,7 @@ interface ComponentBlockProps {
     pageFile: string,
     range: MdTextRange,
   ) => void;
+  onCommentMarkClick?: (commentId: string, componentId: string, pageFile: string) => void;
   registerRef: (id: string, el: HTMLElement | null) => void;
 }
 
@@ -227,6 +250,7 @@ export function ComponentBlock({
   onSelect,
   onCommentLinkComponent,
   onCommentLinkMdRange,
+  onCommentMarkClick,
   registerRef,
 }: ComponentBlockProps) {
   const resolved = resolveComponentForDisplay(component, project.mdFiles);
@@ -342,6 +366,11 @@ export function ComponentBlock({
               mdSelectionHandledRef.current = true;
               onCommentLinkMdRange?.(component.id, pageFile, range);
             }}
+            onCommentMarkClick={
+              commentLinkMode || linkMode
+                ? undefined
+                : (commentId) => onCommentMarkClick?.(commentId, component.id, pageFile)
+            }
           />
         ) : (
           <span className="component-md-empty">Empty markdown</span>
@@ -448,12 +477,14 @@ interface PagePanelProps {
   commentLinkMode?: boolean;
   commentLinkPreviewAnchor?: CommentAnchor | null;
   commentAnchorHighlightId?: string | null;
+  outstandingCommentId?: string | null;
   onCommentLinkComponent?: (componentId: string, pageFile: string) => void;
   onCommentLinkMdRange?: (
     componentId: string,
     pageFile: string,
     range: MdTextRange,
   ) => void;
+  onCommentMarkClick?: (commentId: string, componentId: string, pageFile: string) => void;
 }
 
 export function PagePanel({
@@ -470,8 +501,10 @@ export function PagePanel({
   commentLinkMode = false,
   commentLinkPreviewAnchor = null,
   commentAnchorHighlightId = null,
+  outstandingCommentId = null,
   onCommentLinkComponent,
   onCommentLinkMdRange,
+  onCommentMarkClick,
   scrollToComponentId = null,
   scrollNonce = 0,
   selectionScrollNonce = 0,
@@ -775,7 +808,12 @@ export function PagePanel({
                 if (e.target === e.currentTarget) onClearSelection();
               }}
             >
-              {page.components.map((component) => (
+              {page.components.map((component) => {
+                const mdSource =
+                  component.type === 'md'
+                    ? resolveComponentForDisplay(component, project.mdFiles).content
+                    : '';
+                return (
                 <ComponentBlock
                   key={component.id}
                   component={component}
@@ -790,11 +828,17 @@ export function PagePanel({
                   commentLinkPreviewAnchor={commentLinkPreviewAnchor}
                   mdHighlightRanges={
                     commentLinkMode
-                      ? getPreviewMdHighlightRanges(commentLinkPreviewAnchor, component.id)
+                      ? getPreviewMdHighlightRanges(
+                          commentLinkPreviewAnchor,
+                          component.id,
+                          mdSource,
+                        )
                       : getMdHighlightRanges(
                           comments,
                           component.id,
+                          mdSource,
                           commentAnchorHighlightId,
+                          outstandingCommentId,
                         )
                   }
                   hasComponentCommentAnchor={
@@ -809,9 +853,11 @@ export function PagePanel({
                   onSelect={onSelect}
                   onCommentLinkComponent={onCommentLinkComponent}
                   onCommentLinkMdRange={onCommentLinkMdRange}
+                  onCommentMarkClick={onCommentMarkClick}
                   registerRef={registerRef}
                 />
-              ))}
+                );
+              })}
             </div>
           </div>
           {!linkMode && selection && (

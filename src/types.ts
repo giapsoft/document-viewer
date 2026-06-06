@@ -171,8 +171,10 @@ export interface AppState {
   commentAuthorId: string;
   /** Comment selected in the panel (click to toggle). */
   selectedCommentId: string | null;
-  /** Comment whose anchor is highlighted after clicking ↗ (navigation only). */
-  focusedCommentId: string | null;
+  /** Comment emphasized when navigating from a linked component/passage. */
+  outstandingCommentId: string | null;
+  /** Bumped to scroll the comment panel to outstandingCommentId. */
+  commentPanelScrollNonce: number;
   /** Preview anchor while holding Ctrl during comment link mode (not persisted until commit). */
   commentLinkPreviewAnchor: CommentAnchor | null;
   /** True while Control is held during comment link mode. */
@@ -248,7 +250,8 @@ export type AppAction =
   | { type: 'CLEAR_COMMENT_ANCHOR'; commentId: string }
   | { type: 'UPDATE_COMMENT'; commentId: string; body: string }
   | { type: 'DELETE_COMMENT'; commentId: string }
-  | { type: 'FOCUS_COMMENT'; commentId: string | null };
+  | { type: 'FOCUS_COMMENT'; commentId: string | null }
+  | { type: 'OUTSTANDING_COMMENT'; commentId: string | null };
 
 declare global {
   interface Window {

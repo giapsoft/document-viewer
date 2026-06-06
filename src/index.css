@@ -2265,9 +2265,17 @@ code {
   line-height: 1.35;
 }
 
-.comment-thread-item-focused > .comment-card:not(.comment-card-selected) {
-  border-color: #74c0fc;
-  box-shadow: 0 0 0 1px rgba(13, 110, 253, 0.2);
+.comment-thread-item-focused > .comment-card:not(.comment-card-selected),
+.comment-card-outstanding:not(.comment-card-selected) {
+  border-color: #ffa94d;
+  box-shadow: 0 0 0 2px rgba(232, 89, 12, 0.28);
+  background: #fff4e6;
+}
+
+.comment-thread-item-outstanding > .comment-card:not(.comment-card-selected) {
+  border-color: #ffa94d;
+  box-shadow: 0 0 0 2px rgba(232, 89, 12, 0.28);
+  background: #fff4e6;
 }
 
 .comment-card {
@@ -2465,13 +2473,15 @@ code {
 }
 
 .component-md-selectable ::selection {
-  background: rgba(255, 192, 120, 0.75);
+  background: rgba(255, 192, 120, 0.45);
   color: inherit;
 }
 
 /* While drag-selecting a new range, hide preview marks but keep them in the DOM. */
 .component-md-selectable.is-dragging mark.md-comment-highlight,
 .component-md-selectable.is-dragging .md-comment-highlight,
+.component-md-selectable.is-dragging mark.md-comment-highlight-outstanding,
+.component-md-selectable.is-dragging .md-comment-highlight-outstanding,
 .component-md-selectable.is-dragging mark.md-comment-highlight-focused,
 .component-md-selectable.is-dragging .md-comment-highlight-focused,
 .component-md-selectable.is-dragging mark.md-comment-highlight-preview,
@@ -2484,12 +2494,30 @@ code {
 }
 
 .component-md mark.md-comment-highlight,
-.component-md .md-comment-highlight,
+.component-md .md-comment-highlight {
+  background: rgba(255, 192, 120, 0.28);
+  color: inherit;
+  padding: 0.05em 0;
+  border-radius: 2px;
+  user-select: text;
+}
+
+.component-md mark.md-comment-highlight-outstanding,
+.component-md .md-comment-highlight-outstanding {
+  background: rgba(255, 169, 77, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(232, 89, 12, 0.28);
+  cursor: pointer;
+}
+
+.component-md mark[data-comment-id]:not(.md-comment-highlight-outstanding) {
+  cursor: pointer;
+}
+
 .component-md mark.md-comment-highlight-focused,
 .component-md .md-comment-highlight-focused,
 .component-md mark.md-comment-highlight-preview,
 .component-md .md-comment-highlight-preview {
-  background: #ffc078;
+  background: rgba(255, 192, 120, 0.38);
   color: inherit;
   padding: 0.05em 0;
   border-radius: 2px;
@@ -2498,12 +2526,14 @@ code {
 
 .component-md pre mark.md-comment-highlight,
 .component-md pre .md-comment-highlight,
+.component-md pre mark.md-comment-highlight-outstanding,
+.component-md pre .md-comment-highlight-outstanding,
 .component-md pre mark.md-comment-highlight-focused,
 .component-md pre .md-comment-highlight-focused,
 .component-md pre mark.md-comment-highlight-preview,
 .component-md pre .md-comment-highlight-preview {
   display: inline;
-  background: rgba(255, 192, 120, 0.55);
+  background: rgba(255, 192, 120, 0.22);
   padding: 0;
   border-radius: 2px;
 }

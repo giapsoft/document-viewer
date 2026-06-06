@@ -17,11 +17,10 @@ export interface MdHighlightRange {
   end: number;
   className?: string;
   segments?: MdSourceSegment[];
+  commentId?: string;
 }
 
 type AnnotatedToken = Token & { mdOffset?: number };
-
-const SANITIZE_ATTRS = ['class', 'data-md-offset-start'];
 
 interface SourceRegion {
   contentStart: number;
@@ -55,6 +54,91 @@ function getTextBoundsInRange(range: Range, textNode: Text): { start: number; en
   const end = range.endContainer === textNode ? range.endOffset : len;
   if (start >= end) return null;
   return { start, end };
+}
+
+function normalizeExcerptCompare(value: string): string {
+  return value.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** True when a source slice plausibly belongs to the user-facing selection excerpt. */
+export function segmentTextMatchesExcerpt(
+  source: string,
+  start: number,
+  end: number,
+  excerpt: string,
+): boolean {
+  if (!excerpt.trim()) return true;
+  const text = normalizeExcerptCompare(source.slice(start, end));
+  if (!text) return false;
+  const normExcerpt = normalizeExcerptCompare(excerpt);
+  if (normExcerpt.includes(text) || text.includes(normExcerpt)) return true;
+  const minLen = Math.min(text.length, normExcerpt.length, 6);
+  if (minLen >= 2) {
+    const head = text.slice(0, minLen);
+    const tail = text.slice(-minLen);
+    if (normExcerpt.includes(head) || normExcerpt.includes(tail)) return true;
+  }
+  return false;
+}
+
+/** Merge segments separated only by markdown syntax (e.g. inline-code backticks). */
+export function mergeAdjacentMdSegments(
+  segments: MdSourceSegment[],
+  maxGap = 4,
+): MdSourceSegment[] {
+  if (segments.length <= 1) return segments;
+  const sorted = [...segments].sort((a, b) => a.start - b.start);
+  const merged: MdSourceSegment[] = [];
+  let current = { ...sorted[0]! };
+  for (let i = 1; i < sorted.length; i++) {
+    const next = sorted[i]!;
+    if (next.start - current.end <= maxGap) {
+      current.end = Math.max(current.end, next.end);
+    } else {
+      merged.push(current);
+      current = { ...next };
+    }
+  }
+  merged.push(current);
+  return merged;
+}
+
+/** Resolve highlight spans from a stored anchor; never paint the start/end envelope blindly. */
+export function resolveMdHighlightSegments(
+  source: string,
+  anchor: { start: number; end: number; excerpt: string; segments?: MdSourceSegment[] },
+): MdSourceSegment[] {
+  const located = fallbackRangeFromExcerpt(source, anchor.excerpt);
+  if (located) {
+    return [{ start: located.start, end: located.end }];
+  }
+
+  let segments: MdSourceSegment[] = [];
+
+  if (anchor.segments?.length) {
+    segments = anchor.segments.filter(
+      (segment) =>
+        segment.start >= 0 &&
+        segment.end > segment.start &&
+        segment.end <= source.length &&
+        segmentTextMatchesExcerpt(source, segment.start, segment.end, anchor.excerpt),
+    );
+    segments = mergeAdjacentMdSegments(segments);
+  }
+
+  if (segments.length === 0) {
+    if (
+      anchor.start >= 0 &&
+      anchor.end > anchor.start &&
+      anchor.end <= source.length &&
+      segmentTextMatchesExcerpt(source, anchor.start, anchor.end, anchor.excerpt)
+    ) {
+      return [{ start: anchor.start, end: anchor.end }];
+    }
+    return [];
+  }
+
+  return segments;
 }
 
 /** Collect source offsets for each visible text node touched by the DOM range. */
@@ -95,7 +179,9 @@ export function mdRangeFromSelection(
   const range = selection.getRangeAt(0);
   if (!root.contains(range.commonAncestorContainer)) return null;
 
-  const segments = collectSelectedSourceSegments(source, root, range);
+  const segments = mergeAdjacentMdSegments(
+    collectSelectedSourceSegments(source, root, range),
+  ).filter((segment) => segmentTextMatchesExcerpt(source, segment.start, segment.end, excerpt));
   if (segments.length === 0) {
     const fallback = fallbackRangeFromExcerpt(source, excerpt);
     if (!fallback) return null;
@@ -357,7 +443,10 @@ export function parseMarkdownWithOffsets(source: string): string {
 
 function expandHighlightParts(range: MdHighlightRange): MdSourceSegment[] {
   if (range.segments?.length) return range.segments;
-  return [{ start: range.start, end: range.end }];
+  if (range.start >= 0 && range.end > range.start) {
+    return [{ start: range.start, end: range.end }];
+  }
+  return [];
 }
 
 function highlightSourceSegmentInRoot(
@@ -366,6 +455,7 @@ function highlightSourceSegmentInRoot(
   start: number,
   end: number,
   className: string,
+  commentId?: string,
 ): void {
   const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const wraps: Array<{ node: Text; localStart: number; localEnd: number }> = [];
@@ -389,7 +479,7 @@ function highlightSourceSegmentInRoot(
   }
 
   for (const wrap of wraps.sort((a, b) => b.localStart - a.localStart)) {
-    wrapSingleTextNode(wrap.node, wrap.localStart, wrap.localEnd, className);
+    wrapSingleTextNode(wrap.node, wrap.localStart, wrap.localEnd, className, commentId);
   }
 }
 
@@ -417,8 +507,9 @@ function applySourceRangeHighlightsToOffsetHtml(
 
   for (const range of sorted) {
     const cls = range.className ?? 'md-comment-highlight';
+    const commentId = range.commentId;
     for (const part of expandHighlightParts(range)) {
-      const slice: MdHighlightRange = { ...part, className: cls };
+      const slice: MdHighlightRange = { ...part, className: cls, commentId };
       const kind = classifyHighlightRange(slice, fencedBlocks, inlineSpans);
 
       if (kind === 'fenced') {
@@ -433,6 +524,7 @@ function applySourceRangeHighlightsToOffsetHtml(
           part.start - block.contentStart,
           part.end - block.contentStart,
           cls,
+          commentId,
         );
         continue;
       }
@@ -449,12 +541,12 @@ function applySourceRangeHighlightsToOffsetHtml(
           part.start - span.contentStart,
           part.end - span.contentStart,
           cls,
+          commentId,
         );
         continue;
       }
 
-      // prose and mixed — highlight each mapped text node in the DOM
-      highlightSourceSegmentInRoot(root, source, part.start, part.end, cls);
+      highlightSourceSegmentInRoot(root, source, part.start, part.end, cls, commentId);
     }
   }
 
@@ -473,7 +565,7 @@ export function renderSelectableMarkdown(
   return html;
 }
 
-export { SANITIZE_ATTRS as MD_PREVIEW_SANITIZE_ATTRS };
+export const MD_PREVIEW_SANITIZE_ATTRS = ['class', 'data-md-offset-start', 'data-comment-id'] as const;
 
 export function findFencedCodeBlocks(source: string): SourceRegion[] {
   const blocks: SourceRegion[] = [];
@@ -636,12 +728,16 @@ function wrapSingleTextNode(
   start: number,
   end: number,
   className: string,
+  commentId?: string,
 ): void {
   if (start >= end) return;
 
   const doc = node.ownerDocument;
   const mark = doc.createElement('mark');
   mark.className = className;
+  if (commentId) {
+    mark.setAttribute('data-comment-id', commentId);
+  }
   const parent = node.parentNode;
   if (!parent) return;
 
@@ -676,6 +772,7 @@ function highlightTextInElement(
   relStart: number,
   relEnd: number,
   className: string,
+  commentId?: string,
 ): void {
   if (relStart >= relEnd) return;
 
@@ -690,9 +787,12 @@ function highlightTextInElement(
 
   const mark = doc.createElement('mark');
   mark.className = className;
+  if (commentId) {
+    mark.setAttribute('data-comment-id', commentId);
+  }
 
   if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
-    wrapSingleTextNode(range.startContainer as Text, range.startOffset, range.endOffset, className);
+    wrapSingleTextNode(range.startContainer as Text, range.startOffset, range.endOffset, className, commentId);
     return;
   }
 

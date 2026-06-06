@@ -52,6 +52,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     addRootComment,
     addReplyComment,
     focusComment,
+    outstandComment,
     updateComment,
     deleteComment,
     deleteActiveGroup,
@@ -119,10 +120,16 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const commentAnchorHighlightId = resolveCommentAnchorHighlightId(
     comments,
     state.selectedCommentId,
-    state.focusedCommentId,
+    state.outstandingCommentId,
     state.commentAuthorId,
     state.commentUsername,
   );
+
+  const handleCommentMarkClick = (commentId: string, componentId: string, pageFile: string) => {
+    if (commentLinkMode || state.linkMode) return;
+    selectComponent(componentId, pageFile);
+    outstandComment(commentId);
+  };
 
   const findComponentType = (componentId: string) => {
     for (const page of project.pages) {
@@ -400,8 +407,10 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 commentLinkMode={commentLinkMode}
                 commentLinkPreviewAnchor={commentLinkPreviewAnchor}
                 commentAnchorHighlightId={commentAnchorHighlightId}
+                outstandingCommentId={state.outstandingCommentId}
                 onCommentLinkComponent={handleCommentLinkComponent}
                 onCommentLinkMdRange={handleCommentLinkMdRange}
+                onCommentMarkClick={handleCommentMarkClick}
               />
             ))}
             <CommentPanel
@@ -410,6 +419,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               username={state.commentUsername}
               authorId={state.commentAuthorId}
               selectedCommentId={state.selectedCommentId}
+              outstandingCommentId={state.outstandingCommentId}
+              commentPanelScrollNonce={state.commentPanelScrollNonce}
               commentLinkCtrlActive={state.commentLinkCtrlActive}
               canLinkSelectedComment={canLinkSelectedComment}
               onSelectComment={selectComment}

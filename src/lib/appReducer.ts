@@ -48,6 +48,7 @@ import {
   clearCommentAnchor,
   commentAnchorsEqual,
   deleteCommentSubtree,
+  pickComponentAnchorCommentId,
   setCommentAnchor,
   updateCommentBody,
 } from './comments';
@@ -74,6 +75,20 @@ function applyExitLinkMode(state: AppState): AppState {
 
   const applied = applyComponentSelection(nextState, focusId, pageFile);
   return applied ? { ...nextState, ...applied } : nextState;
+}
+
+function bumpOutstandingComment(
+  state: AppState,
+  commentId: string | null,
+): Partial<AppState> {
+  if (!commentId) {
+    return { outstandingCommentId: null };
+  }
+  return {
+    outstandingCommentId: commentId,
+    commentPanelExpanded: true,
+    commentPanelScrollNonce: state.commentPanelScrollNonce + 1,
+  };
 }
 
 function applyEnterLinkPreview(state: AppState): AppState {
@@ -126,7 +141,8 @@ export const initialAppState: AppState = {
   commentUsername: null,
   commentAuthorId: getOrCreateCommentAuthorId(),
   selectedCommentId: null,
-  focusedCommentId: null,
+  outstandingCommentId: null,
+  commentPanelScrollNonce: 0,
   commentLinkPreviewAnchor: null,
   commentLinkCtrlActive: false,
 };
@@ -227,13 +243,19 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const shouldScrollSecondaryPanels =
         shouldAutoScrollPanels(state) && applied.selection.relatedIds.size > 1;
 
+      const resolved = findComponent(state.project, componentId);
+      const isMd = resolved?.component.type === 'md';
+      const anchorCommentId = !isMd
+        ? pickComponentAnchorCommentId(state.project.relations.comments ?? [], componentId)
+        : null;
+
       return {
         ...state,
         ...applied,
         selectionHistory: history,
         selectionHistoryIndex: index,
         scrollToComponent: null,
-        focusedCommentId: null,
+        ...(isMd ? { outstandingCommentId: null } : bumpOutstandingComment(state, anchorCommentId)),
         selectionScrollNonce: shouldScrollSecondaryPanels
           ? state.selectionScrollNonce + 1
           : state.selectionScrollNonce,
@@ -737,7 +759,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         return {
           ...state,
           selectedCommentId: null,
-          focusedCommentId: null,
+          outstandingCommentId: null,
           commentLinkPreviewAnchor: null,
           commentLinkCtrlActive: false,
         };
@@ -746,7 +768,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         selectedCommentId: commentId,
-        focusedCommentId: null,
+        outstandingCommentId: null,
         commentLinkPreviewAnchor: comment.anchor ?? null,
         commentLinkCtrlActive: false,
         linkMode: false,
@@ -832,23 +854,23 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'FOCUS_COMMENT': {
       if (!action.commentId || !state.project) {
-        return { ...state, focusedCommentId: null };
+        return { ...state, outstandingCommentId: null };
       }
       const comment = (state.project.relations.comments ?? []).find(
         (c) => c.id === action.commentId,
       );
       if (!comment) {
-        return { ...state, focusedCommentId: action.commentId };
+        return { ...state, ...bumpOutstandingComment(state, action.commentId) };
       }
 
       const componentId = comment.anchor?.componentId ?? null;
       if (!componentId) {
-        return { ...state, focusedCommentId: action.commentId };
+        return { ...state, ...bumpOutstandingComment(state, action.commentId) };
       }
 
       const found = findComponent(state.project, componentId);
       if (!found) {
-        return { ...state, focusedCommentId: action.commentId };
+        return { ...state, ...bumpOutstandingComment(state, action.commentId) };
       }
 
       const { pageFile } = found;
@@ -860,7 +882,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       const base = {
         ...state,
-        focusedCommentId: action.commentId,
+        ...bumpOutstandingComment(state, action.commentId),
         currentPage: pageFile,
         panels: singlePagePanels,
         scrollToComponent,
@@ -891,6 +913,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selectionHistory: history,
         selectionHistoryIndex: index,
       };
+    }
+
+    case 'OUTSTANDING_COMMENT': {
+      if (!state.project) return state;
+      if (!action.commentId) {
+        return { ...state, outstandingCommentId: null };
+      }
+      const exists = (state.project.relations.comments ?? []).some(
+        (c) => c.id === action.commentId && c.deletedAt == null,
+      );
+      if (!exists) return state;
+      return { ...state, ...bumpOutstandingComment(state, action.commentId) };
     }
 
     case 'ADD_ROOT_COMMENT': {
@@ -990,6 +1024,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           state.selectedCommentId && removedIds.has(state.selectedCommentId)
             ? null
             : state.selectedCommentId,
+        outstandingCommentId:
+          state.outstandingCommentId && removedIds.has(state.outstandingCommentId)
+            ? null
+            : state.outstandingCommentId,
         commentLinkPreviewAnchor:
           state.selectedCommentId && removedIds.has(state.selectedCommentId)
             ? null

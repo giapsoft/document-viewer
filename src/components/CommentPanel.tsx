@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { CommentAnchor, DocComment, LoadedProject, AppStyles } from '../types';
 import {
   activeComments,
@@ -19,6 +19,8 @@ interface CommentPanelProps {
   username: string | null;
   authorId: string;
   selectedCommentId: string | null;
+  outstandingCommentId?: string | null;
+  commentPanelScrollNonce?: number;
   commentLinkCtrlActive?: boolean;
   canLinkSelectedComment?: boolean;
   onToggle: () => void;
@@ -62,6 +64,7 @@ function formatCommentTime(timestamp: number): string {
 function CommentTreeItem({
   node,
   selectedCommentId,
+  outstandingCommentId,
   commentLinkCtrlActive,
   canLinkSelectedComment,
   appStyles,
@@ -78,6 +81,7 @@ function CommentTreeItem({
 }: {
   node: CommentTreeNode;
   selectedCommentId: string | null;
+  outstandingCommentId: string | null;
   commentLinkCtrlActive: boolean;
   canLinkSelectedComment: boolean;
   appStyles: AppStyles;
@@ -99,6 +103,7 @@ function CommentTreeItem({
   const [editBody, setEditBody] = useState(comment.body);
   const isOwner = canOwnComment(comment, authorId, username);
   const isSelected = isOwner && selectedCommentId === comment.id;
+  const isOutstanding = outstandingCommentId === comment.id && !isSelected;
   const showLinkHint = isSelected;
   const linkPreviewActive = showLinkHint && commentLinkCtrlActive;
   const selectionStyle: CSSProperties | undefined = isSelected
@@ -124,11 +129,12 @@ function CommentTreeItem({
 
   return (
     <li
-      className={`comment-thread-item ${isReply ? 'comment-thread-item-reply' : ''} ${isSelected ? 'comment-thread-item-selected' : ''}`}
+      className={`comment-thread-item ${isReply ? 'comment-thread-item-reply' : ''} ${isSelected ? 'comment-thread-item-selected' : ''} ${isOutstanding ? 'comment-thread-item-outstanding' : ''}`}
     >
       <div className="comment-thread-item-head">
         <article
-          className={`comment-card${isOwner ? ' comment-card-selectable' : ''}${isSelected ? ' comment-card-selected' : ''}`}
+          id={`comment-${comment.id}`}
+          className={`comment-card${isOwner ? ' comment-card-selectable' : ''}${isSelected ? ' comment-card-selected' : ''}${isOutstanding ? ' comment-card-outstanding' : ''}`}
           style={selectionStyle}
           onClick={isOwner ? handleToggleSelect : undefined}
         onKeyDown={
@@ -320,6 +326,7 @@ function CommentTreeItem({
               node={child}
               isReply
               selectedCommentId={selectedCommentId}
+              outstandingCommentId={outstandingCommentId}
               commentLinkCtrlActive={commentLinkCtrlActive}
               canLinkSelectedComment={canLinkSelectedComment}
               appStyles={appStyles}
@@ -346,6 +353,8 @@ export function CommentPanel({
   username,
   authorId,
   selectedCommentId,
+  outstandingCommentId = null,
+  commentPanelScrollNonce = 0,
   commentLinkCtrlActive = false,
   canLinkSelectedComment = false,
   onToggle,
@@ -379,6 +388,12 @@ export function CommentPanel({
     setEditingUsername(false);
     setUsernameDraft(name);
   };
+
+  useEffect(() => {
+    if (!expanded || !outstandingCommentId || commentPanelScrollNonce === 0) return;
+    const el = document.getElementById(`comment-${outstandingCommentId}`);
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [expanded, outstandingCommentId, commentPanelScrollNonce]);
 
   return (
     <div
@@ -513,6 +528,7 @@ export function CommentPanel({
                     key={node.comment.id}
                     node={node}
                     selectedCommentId={selectedCommentId}
+                    outstandingCommentId={outstandingCommentId}
                     commentLinkCtrlActive={commentLinkCtrlActive}
                     canLinkSelectedComment={canLinkSelectedComment}
                     appStyles={appStyles}

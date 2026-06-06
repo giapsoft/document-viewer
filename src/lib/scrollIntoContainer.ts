@@ -319,7 +319,9 @@ export function scrollMdHighlightInContainer(
 
   const componentEl = componentRefs.get(componentId);
   const mark =
+    componentEl?.querySelector<HTMLElement>('.md-comment-highlight-outstanding') ??
     componentEl?.querySelector<HTMLElement>('.md-comment-highlight-focused') ??
+    container.querySelector<HTMLElement>('.md-comment-highlight-outstanding') ??
     container.querySelector<HTMLElement>('.md-comment-highlight-focused');
   if (!mark) return false;
 

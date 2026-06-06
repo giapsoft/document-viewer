@@ -5,14 +5,16 @@ import {
   MD_PREVIEW_SANITIZE_ATTRS,
   mdRangeFromSelection,
   renderSelectableMarkdown,
+  type MdHighlightRange,
 } from '../lib/mdSelection';
 
 interface MarkdownPreviewProps {
   source: string;
   className?: string;
-  highlightRanges?: Array<{ start: number; end: number; className?: string }>;
+  highlightRanges?: MdHighlightRange[];
   selectable?: boolean;
   onTextSelect?: (range: import('../lib/mdSelection').MdTextRange) => void;
+  onCommentMarkClick?: (commentId: string) => void;
 }
 
 export function MarkdownPreview({
@@ -21,6 +23,7 @@ export function MarkdownPreview({
   highlightRanges = [],
   selectable = false,
   onTextSelect,
+  onCommentMarkClick,
 }: MarkdownPreviewProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -29,7 +32,7 @@ export function MarkdownPreview({
       selectable || highlightRanges.length > 0
         ? renderSelectableMarkdown(source, highlightRanges)
         : (marked.parse(source, { async: false }) as string);
-    return DOMPurify.sanitize(raw, { ADD_ATTR: MD_PREVIEW_SANITIZE_ATTRS });
+    return DOMPurify.sanitize(raw, { ADD_ATTR: [...MD_PREVIEW_SANITIZE_ATTRS] });
   }, [source, highlightRanges, selectable]);
 
   useEffect(() => {
@@ -67,6 +70,24 @@ export function MarkdownPreview({
       document.removeEventListener('mouseup', onMouseUp);
     };
   }, [selectable, onTextSelect, source]);
+
+  useEffect(() => {
+    if (!onCommentMarkClick) return;
+
+    const root = rootRef.current;
+    if (!root) return;
+
+    const handleClick = (event: MouseEvent) => {
+      const mark = (event.target as HTMLElement).closest('[data-comment-id]');
+      if (!mark || !root.contains(mark)) return;
+      event.stopPropagation();
+      const commentId = mark.getAttribute('data-comment-id');
+      if (commentId) onCommentMarkClick(commentId);
+    };
+
+    root.addEventListener('click', handleClick);
+    return () => root.removeEventListener('click', handleClick);
+  }, [onCommentMarkClick]);
 
   return (
     <div

@@ -166,12 +166,12 @@ export function canOwnComment(
 export function resolveCommentAnchorHighlightId(
   comments: DocComment[],
   selectedCommentId: string | null,
-  focusedCommentId: string | null,
+  outstandingCommentId: string | null,
   authorId: string,
   username: string | null,
 ): string | null {
-  if (focusedCommentId && comments.some((c) => c.id === focusedCommentId)) {
-    return focusedCommentId;
+  if (outstandingCommentId && comments.some((c) => c.id === outstandingCommentId)) {
+    return outstandingCommentId;
   }
   if (selectedCommentId) {
     const selected = comments.find((c) => c.id === selectedCommentId);
@@ -180,6 +180,18 @@ export function resolveCommentAnchorHighlightId(
     }
   }
   return null;
+}
+
+/** Most recent comment with a whole-component anchor on this component. */
+export function pickComponentAnchorCommentId(
+  comments: DocComment[] | undefined,
+  componentId: string,
+): string | null {
+  const matches = activeComments(comments ?? []).filter(
+    (c) => c.anchor?.kind === 'component' && c.anchor.componentId === componentId,
+  );
+  if (matches.length === 0) return null;
+  return matches.sort((a, b) => commentTimestamp(b) - commentTimestamp(a))[0]!.id;
 }
 
 /**

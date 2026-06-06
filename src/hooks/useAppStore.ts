@@ -413,6 +413,10 @@ export function useAppStore() {
     dispatch({ type: 'FOCUS_COMMENT', commentId });
   }, [dispatch]);
 
+  const outstandComment = useCallback((commentId: string | null) => {
+    dispatch({ type: 'OUTSTANDING_COMMENT', commentId });
+  }, [dispatch]);
+
   const updateComment = useCallback((commentId: string, body: string) => {
     dispatch({ type: 'UPDATE_COMMENT', commentId, body });
   }, [dispatch]);
@@ -909,6 +913,7 @@ export function useAppStore() {
     setCommentAnchor,
     clearCommentAnchor: clearCommentAnchorAction,
     focusComment,
+    outstandComment,
     updateComment,
     deleteComment,
     deleteActiveGroup,
