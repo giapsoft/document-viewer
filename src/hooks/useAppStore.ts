@@ -1,9 +1,10 @@
 import { useReducer, useCallback, useRef, useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { AppAction, CommentAnchor, Component, LoadedProject } from '../types';
 import { setStoredCommentUsername } from '../lib/commentSession';
 import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus } from '../lib/saveProject';
-import { pickSaveFolder, saveProjectToFolder } from '../lib/saveProject';
+import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave } from '../lib/saveProject';
 import { importImageFromComputer, importImageFromClipboardSource, type ImportImageResult } from '../lib/importImage';
 import { clearPageExpandMemory } from '../lib/pageExpandMemory';
 import { clearPageScrollMemory } from '../lib/pageScrollMemory';
@@ -26,6 +27,7 @@ import {
   fetchRemoteDocumentUpdatedAt,
   loadRemoteDocument,
   saveRemoteDocument,
+  syncRemoteComments,
   syncRemoteRelations,
 } from '../lib/remoteProject';
 import {
@@ -70,11 +72,17 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
 export function useAppStore() {
   const [state, baseDispatch] = useReducer(appReducer, initialAppState);
   const projectRef = useRef(state.project);
+  const dirtyRef = useRef(false);
   const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
 
   projectRef.current = state.project;
+  dirtyRef.current = dirty;
+
+  const runRemoteAutoSaveRef = useRef<
+    () => Promise<import('../lib/remoteAutoSave').RemoteAutoSaveResult>
+  >(async () => ({ ok: true, skipped: true }));
 
   useEffect(() => {
     setRemoteSaveStatusListener((status, message) => {
@@ -101,10 +109,23 @@ export function useAppStore() {
       setSaveStatus('idle');
       setSaveError(null);
     }
-    baseDispatch(action);
+    flushSync(() => baseDispatch(action));
+
+    const project = projectRef.current;
+    if (DIRTY_ACTIONS.has(action.type) && project?.folderHandle) {
+      scheduleAutoSave(() => projectRef.current);
+    }
+    if (
+      DIRTY_ACTIONS.has(action.type) &&
+      project?.remoteDocId &&
+      isSupabaseConfigured()
+    ) {
+      scheduleRemoteAutoSave(() => runRemoteAutoSaveRef.current());
+    }
   }, []);
 
   const setProject = useCallback((project: LoadedProject) => {
+    cancelRemoteAutoSave();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
     clearPageExpandMemory();
@@ -112,7 +133,7 @@ export function useAppStore() {
     setSaveStatus('idle');
     setSaveError(null);
     dispatch({ type: 'SET_PROJECT', project });
-    if (project.source === 'remote' && project.remoteDocId) {
+    if (project.remoteDocId) {
       setDocIdInUrl(project.remoteDocId);
     } else {
       setDocIdInUrl(null);
@@ -120,6 +141,7 @@ export function useAppStore() {
   }, [dispatch]);
 
   const closeProject = useCallback(() => {
+    cancelRemoteAutoSave();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
     clearPageExpandMemory();
@@ -549,26 +571,41 @@ export function useAppStore() {
     setSaveError(null);
 
     try {
+      let projectToSave = project;
+
       if (project.remoteDocId && !options?.force) {
         const serverUpdatedAt = await fetchRemoteDocumentUpdatedAt(project.remoteDocId);
         if (isRemoteVersionStale(project.remoteUpdatedAt, serverUpdatedAt)) {
-          setSaveStatus('idle');
-          return {
-            ok: false,
-            conflict: true,
-            error: 'A newer version of this document exists on the server.',
-          };
+          const merged = await syncRemoteComments(project);
+          if (merged) {
+            projectToSave = merged;
+            projectRef.current = merged;
+            dispatch({ type: 'PATCH_PROJECT', project: merged });
+          }
+          const serverUpdatedAtAfterMerge = await fetchRemoteDocumentUpdatedAt(
+            project.remoteDocId,
+          );
+          if (
+            isRemoteVersionStale(projectToSave.remoteUpdatedAt, serverUpdatedAtAfterMerge)
+          ) {
+            setSaveStatus('idle');
+            return {
+              ok: false,
+              conflict: true,
+              error: 'A newer version of this document exists on the server.',
+            };
+          }
         }
       }
 
       if (project.remoteDocId) {
         const saveResult = await saveRemoteDocument(
           project.remoteDocId,
-          project,
+          projectToSave,
           title ?? project.remoteTitle ?? undefined,
         );
         const nextProject: LoadedProject = {
-          ...project,
+          ...saveResult.mergedProject,
           remoteTitle: title?.trim() || project.remoteTitle || defaultRemoteTitle(project),
           remoteSync: saveResult.remoteSync,
           remoteUpdatedAt: saveResult.remoteUpdatedAt,
@@ -684,30 +721,28 @@ export function useAppStore() {
     if (!project?.remoteDocId || !isSupabaseConfigured()) {
       return { ok: true, skipped: true };
     }
+    const docId = project.remoteDocId;
 
     try {
-      const serverUpdatedAt = await fetchRemoteDocumentUpdatedAt(project.remoteDocId);
-      if (isRemoteVersionStale(project.remoteUpdatedAt, serverUpdatedAt)) {
-        return { ok: false, conflict: true };
-      }
-
+      // Single save call: merges remote comments then uploads all changed files atomically.
       const saveResult = await saveRemoteDocument(
-        project.remoteDocId,
+        docId,
         project,
         project.remoteTitle ?? undefined,
       );
+
+      const nextProject: LoadedProject = {
+        ...saveResult.mergedProject,
+        remoteSync: saveResult.remoteSync,
+        remoteUpdatedAt: saveResult.remoteUpdatedAt,
+      };
+      projectRef.current = nextProject;
+      dispatch({ type: 'PATCH_PROJECT', project: nextProject });
 
       if (saveResult.skippedUpload) {
         return { ok: true, skipped: true };
       }
 
-      const nextProject: LoadedProject = {
-        ...project,
-        remoteSync: saveResult.remoteSync,
-        remoteUpdatedAt: saveResult.remoteUpdatedAt,
-      };
-      projectRef.current = nextProject;
-      dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
       setDirty(false);
       return { ok: true };
     } catch (err) {
@@ -718,51 +753,50 @@ export function useAppStore() {
     }
   }, [dispatch]);
 
-  useEffect(() => {
-    const project = state.project;
-    if (!dirty || !project?.remoteDocId || !isSupabaseConfigured()) {
-      cancelRemoteAutoSave();
-      return;
-    }
-
-    scheduleRemoteAutoSave(() => runRemoteAutoSave());
-    return () => cancelRemoteAutoSave();
-  }, [dirty, state.project, runRemoteAutoSave]);
+  runRemoteAutoSaveRef.current = runRemoteAutoSave;
 
   useEffect(() => {
     const project = state.project;
-    if (dirty || !project?.remoteDocId || !isSupabaseConfigured()) return;
+    if (!project?.remoteDocId || !isSupabaseConfigured()) return;
 
     let cancelled = false;
+    const REMOTE_COMMENT_SYNC_MS = 3_000;
 
-    const pullRelations = async () => {
+    const pullRemoteChanges = async () => {
       const current = projectRef.current;
       if (!current?.remoteDocId || cancelled) return;
 
       try {
-        const serverUpdatedAt = await fetchRemoteDocumentUpdatedAt(current.remoteDocId);
-        if (!isRemoteVersionStale(current.remoteUpdatedAt, serverUpdatedAt)) return;
-
-        const merged = await syncRemoteRelations(current);
-        if (!merged || cancelled) return;
-
-        projectRef.current = merged;
-        dispatch({ type: 'RELOAD_PROJECT', project: merged });
+        if (dirtyRef.current) {
+          // Only merge comments — never touch page/group data while user is editing
+          const commentMerged = await syncRemoteComments(current);
+          if (commentMerged && !cancelled) {
+            projectRef.current = commentMerged;
+            dispatch({ type: 'PATCH_PROJECT', project: commentMerged });
+          }
+        } else {
+          // Full relations sync already merges comments internally
+          const relationsMerged = await syncRemoteRelations(current);
+          if (relationsMerged && !cancelled) {
+            projectRef.current = relationsMerged;
+            dispatch({ type: 'PATCH_PROJECT', project: relationsMerged });
+          }
+        }
       } catch {
         // ignore background sync errors
       }
     };
 
-    void pullRelations();
+    void pullRemoteChanges();
     const timer = window.setInterval(() => {
-      void pullRelations();
-    }, 45_000);
+      void pullRemoteChanges();
+    }, REMOTE_COMMENT_SYNC_MS);
 
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [dirty, state.project?.remoteDocId, dispatch]);
+  }, [state.project?.remoteDocId, dispatch]);
 
   return {
     state,

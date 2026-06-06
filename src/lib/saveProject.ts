@@ -1,4 +1,4 @@
-import type { LoadedProject, RelationsFile, Component } from '../types';
+import type { LoadedProject, Component } from '../types';
 import { serializePageComponents } from './pageIds';
 import { normalizeRelations } from './groupRelations';
 import { mdSidecarFileName } from './mdFiles';
@@ -118,11 +118,10 @@ export async function saveProjectToFolder(project: LoadedProject): Promise<void>
     }
   }
 
-  await writeJsonFile(
-    root,
-    'relations.json',
-    normalizeRelations(project.relations) as RelationsFile,
-  );
+  const { groups, comments, ...relationsMeta } = normalizeRelations(project.relations);
+  await writeJsonFile(root, 'relations.json', relationsMeta);
+  await writeJsonFile(root, 'groups.json', groups ?? []);
+  await writeJsonFile(root, 'comments.json', comments ?? []);
 }
 
 export function scheduleAutoSave(getProject: () => LoadedProject | null): void {

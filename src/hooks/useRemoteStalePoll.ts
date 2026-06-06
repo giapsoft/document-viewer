@@ -6,6 +6,8 @@ export function useRemoteStalePoll(
   enabled: boolean,
   checkStale: () => Promise<boolean>,
   intervalMs = DEFAULT_INTERVAL_MS,
+  /** Re-run stale check when this value changes (e.g. after reload). */
+  refreshKey?: string | null,
 ): boolean {
   const [stale, setStale] = useState(false);
 
@@ -35,7 +37,7 @@ export function useRemoteStalePoll(
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [enabled, checkStale, intervalMs]);
+  }, [enabled, checkStale, intervalMs, refreshKey]);
 
   return stale;
 }

@@ -2096,6 +2096,17 @@ code {
   font-weight: 600;
 }
 
+.comment-storage-hint {
+  margin: 0 0 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 5px;
+  background: #fff9db;
+  border: 1px solid #ffe066;
+  color: #862e00;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .comment-compose-form {
   display: flex;
   flex-direction: column;

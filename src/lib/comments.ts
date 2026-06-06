@@ -25,6 +25,11 @@ export function normalizeComments(raw: unknown): DocComment[] {
       typeof record.createdAt === 'number' && Number.isFinite(record.createdAt)
         ? record.createdAt
         : Date.now();
+    // Fall back to createdAt so old comments without updatedAt still compare correctly
+    const updatedAt =
+      typeof record.updatedAt === 'number' && Number.isFinite(record.updatedAt)
+        ? record.updatedAt
+        : createdAt;
 
     if (!id || !author) continue;
 
@@ -59,6 +64,7 @@ export function normalizeComments(raw: unknown): DocComment[] {
       ...(authorId ? { authorId } : {}),
       body,
       createdAt,
+      updatedAt,
       ...(anchor ? { anchor } : {}),
     });
   }
@@ -83,11 +89,74 @@ export function canOwnComment(
   authorId: string | null,
   username: string | null,
 ): boolean {
-  if (authorId && comment.authorId) {
-    return comment.authorId === authorId;
+  if (authorId && comment.authorId && comment.authorId === authorId) {
+    return true;
   }
   if (!username) return false;
   return comment.author.trim().toLowerCase() === username.trim().toLowerCase();
+}
+
+/**
+ * Merge server and local comment lists for multi-session sync.
+ *
+ * Rules:
+ * - Comments only on server (from another session) are always kept.
+ * - Comments only on local (just created, not yet saved) are always kept.
+ * - For the same id: pick whichever has the higher updatedAt (falling back
+ *   to createdAt for old comments that predate the updatedAt field).
+ *   This means edits/deletes from another session win when they are newer.
+ */
+export function mergeCommentsFromServer(
+  server: DocComment[],
+  local: DocComment[],
+): DocComment[] {
+  const localById = new Map<string, DocComment>();
+  for (const comment of local) {
+    localById.set(comment.id, comment);
+  }
+
+  const byId = new Map<string, DocComment>();
+
+  // Start with server state as the base
+  for (const serverComment of server) {
+    const localComment = localById.get(serverComment.id);
+    if (!localComment) {
+      // Only on server — keep it (written by another session)
+      byId.set(serverComment.id, serverComment);
+      continue;
+    }
+    // Both sides have this id — pick the newer version
+    const serverTs = serverComment.updatedAt ?? serverComment.createdAt;
+    const localTs = localComment.updatedAt ?? localComment.createdAt;
+    byId.set(serverComment.id, localTs > serverTs ? localComment : serverComment);
+  }
+
+  // Add local-only comments (created in this session, not yet on server)
+  for (const localComment of local) {
+    if (!byId.has(localComment.id)) {
+      byId.set(localComment.id, localComment);
+    }
+  }
+
+  return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export function commentsEqual(a: DocComment[], b: DocComment[]): boolean {
+  if (a.length !== b.length) return false;
+  const bById = new Map(b.map((comment) => [comment.id, comment]));
+  return a.every((comment) => {
+    const other = bById.get(comment.id);
+    if (!other) return false;
+    return (
+      comment.body === other.body &&
+      comment.parentId === other.parentId &&
+      comment.author === other.author &&
+      comment.authorId === other.authorId &&
+      comment.createdAt === other.createdAt &&
+      (comment.updatedAt ?? comment.createdAt) === (other.updatedAt ?? other.createdAt) &&
+      JSON.stringify(comment.anchor ?? null) === JSON.stringify(other.anchor ?? null)
+    );
+  });
 }
 
 export function buildCommentTree(comments: DocComment[]): CommentTreeNode[] {
@@ -119,6 +188,7 @@ export function addRootComment(
 ): DocComment[] {
   const trimmed = body.trim();
   if (!trimmed) return comments;
+  const now = Date.now();
   return [
     ...comments,
     {
@@ -127,7 +197,8 @@ export function addRootComment(
       author: author.trim(),
       authorId,
       body: trimmed,
-      createdAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     },
   ];
 }
@@ -142,6 +213,7 @@ export function addReplyComment(
   const trimmed = body.trim();
   if (!trimmed) return comments;
   if (!comments.some((c) => c.id === parentId)) return comments;
+  const now = Date.now();
   return [
     ...comments,
     {
@@ -150,7 +222,8 @@ export function addReplyComment(
       author: author.trim(),
       authorId,
       body: trimmed,
-      createdAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     },
   ];
 }
@@ -165,7 +238,7 @@ export function setCommentAnchor(
   return comments.map((comment) => {
     if (comment.id !== commentId) return comment;
     if (!canOwnComment(comment, authorId, username)) return comment;
-    return { ...comment, anchor };
+    return { ...comment, anchor, updatedAt: Date.now() };
   });
 }
 
@@ -179,7 +252,7 @@ export function clearCommentAnchor(
     if (comment.id !== commentId) return comment;
     if (!canOwnComment(comment, authorId, username)) return comment;
     const { anchor: _removed, ...rest } = comment;
-    return rest;
+    return { ...rest, updatedAt: Date.now() };
   });
 }
 
@@ -196,7 +269,7 @@ export function updateCommentBody(
   return comments.map((comment) => {
     if (comment.id !== commentId) return comment;
     if (!canOwnComment(comment, authorId, username)) return comment;
-    return { ...comment, body: trimmed };
+    return { ...comment, body: trimmed, updatedAt: Date.now() };
   });
 }
 

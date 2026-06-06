@@ -1,6 +1,6 @@
 import type { SaveStatus } from './saveProject';
 
-const REMOTE_SAVE_DEBOUNCE_MS = 2_000;
+const REMOTE_SAVE_DEBOUNCE_MS = 800;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let statusListener: ((status: SaveStatus, message?: string) => void) | null = null;

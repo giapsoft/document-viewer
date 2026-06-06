@@ -186,6 +186,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const remoteStaleOnServer = useRemoteStalePoll(
     Boolean(project.remoteDocId && project.remoteUpdatedAt),
     checkRemoteDocumentStale,
+    undefined,
+    project.remoteUpdatedAt,
   );
 
   const runRemoteSave = useCallback(

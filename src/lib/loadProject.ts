@@ -126,15 +126,31 @@ export function assembleProject(input: RawProjectInput): AssembledProject {
   };
 }
 
-async function loadRelationsFromRoot(root: FileSystemDirectoryHandle): Promise<RelationsFile> {
+async function tryReadJsonFile<T>(
+  dir: FileSystemDirectoryHandle,
+  name: string,
+): Promise<T | null> {
   try {
-    const relHandle = await root.getFileHandle('relations.json');
-    const relFile = await relHandle.getFile();
-    const parsed = await readJsonFile<RelationsFile>(relFile);
-    return normalizeRelations(parsed);
+    const handle = await dir.getFileHandle(name);
+    const file = await handle.getFile();
+    return await readJsonFile<T>(file);
   } catch {
-    return EMPTY_RELATIONS;
+    return null;
   }
+}
+
+async function loadRelationsFromRoot(root: FileSystemDirectoryHandle): Promise<RelationsFile> {
+  const meta = await tryReadJsonFile<RelationsFile>(root, 'relations.json');
+  if (!meta) return EMPTY_RELATIONS;
+
+  // New format: groups and comments in separate files
+  // Old format: embedded in relations.json (backward compat)
+  const groups = await tryReadJsonFile<string[][]>(root, 'groups.json')
+    ?? (meta.groups ?? []);
+  const comments = await tryReadJsonFile<RelationsFile['comments']>(root, 'comments.json')
+    ?? (meta.comments ?? []);
+
+  return normalizeRelations({ ...meta, groups, comments });
 }
 
 export async function loadFromDirectoryHandle(

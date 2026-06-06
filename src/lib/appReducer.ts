@@ -172,6 +172,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return nextState;
     }
 
+    case 'PATCH_PROJECT':
+      return { ...state, project: action.project };
+
     case 'TOGGLE_SIDEBAR':
       return { ...state, sidebarExpanded: !state.sidebarExpanded };
 

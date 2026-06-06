@@ -11,6 +11,8 @@ const IMAGE_EXT = /\.(jpg|jpeg|png|gif)$/i;
 export const STORAGE_BUCKET = 'docs';
 export const BUNDLE_FILE_NAME = 'bundle.zip';
 const RELATIONS_ZIP_PATH = 'relations.json';
+const GROUPS_ZIP_PATH = 'groups.json';
+const COMMENTS_ZIP_PATH = 'comments.json';
 const DOCS_ZIP_PREFIX = 'docs/';
 
 export function storagePrefix(docId: string): string {
@@ -25,8 +27,24 @@ export function relationsStoragePath(docId: string): string {
   return `${docId}/relations.json`;
 }
 
+export function groupsStoragePath(docId: string): string {
+  return `${docId}/groups.json`;
+}
+
+export function commentsStoragePath(docId: string): string {
+  return `${docId}/comments.json`;
+}
+
 export function docsStoragePath(docId: string, fileName: string): string {
   return `${docId}/docs/${fileName}`;
+}
+
+export function isGroupsPath(path: string, docId: string): boolean {
+  return path === groupsStoragePath(docId);
+}
+
+export function isCommentsPath(path: string, docId: string): boolean {
+  return path === commentsStoragePath(docId);
 }
 
 export function projectToRawInput(project: LoadedProject): RawProjectInput {
@@ -57,10 +75,21 @@ export function projectToRawInput(project: LoadedProject): RawProjectInput {
   };
 }
 
+/** Strip groups and comments — those go in their own ZIP entries. */
+function relationsMetaOnly(relations: RelationsFile): Omit<RelationsFile, 'groups' | 'comments'> {
+  const { groups: _g, comments: _c, ...meta } = relations;
+  return meta;
+}
+
 export async function packProjectBundle(project: LoadedProject): Promise<Blob> {
   const raw = projectToRawInput(project);
   const zip = new JSZip();
-  zip.file(RELATIONS_ZIP_PATH, `${JSON.stringify(raw.relations, null, 2)}\n`);
+
+  // relations.json — page metadata only (names, order, pins)
+  zip.file(RELATIONS_ZIP_PATH, `${JSON.stringify(relationsMetaOnly(raw.relations), null, 2)}\n`);
+  // groups.json and comments.json as separate entries
+  zip.file(GROUPS_ZIP_PATH, `${JSON.stringify(raw.relations.groups ?? [], null, 2)}\n`);
+  zip.file(COMMENTS_ZIP_PATH, `${JSON.stringify(raw.relations.comments ?? [], null, 2)}\n`);
 
   for (const page of raw.pageFiles) {
     zip.file(`${DOCS_ZIP_PREFIX}${page.name}`, `${JSON.stringify(page.content, null, 2)}\n`);
@@ -89,13 +118,28 @@ export async function unpackProjectBundle(bundle: Blob): Promise<RawProjectInput
     throw new Error('Bundle is missing relations.json');
   }
 
-  const relations = relationsFromRaw(JSON.parse(await relationsEntry.async('text')));
+  const relationsMeta = relationsFromRaw(JSON.parse(await relationsEntry.async('text')));
+
+  // New bundles have separate group/comment files; fall back to reading from relations.json
+  const groupsEntry = zip.file(GROUPS_ZIP_PATH);
+  const groups: string[][] = groupsEntry
+    ? (JSON.parse(await groupsEntry.async('text')) as string[][])
+    : ((relationsMeta as RelationsFile).groups ?? []);
+
+  const commentsEntry = zip.file(COMMENTS_ZIP_PATH);
+  const comments = commentsEntry
+    ? (JSON.parse(await commentsEntry.async('text')) as unknown[])
+    : ((relationsMeta as RelationsFile).comments ?? []);
+
+  const relations: RelationsFile = { ...relationsMeta, groups, comments: comments as RelationsFile['comments'] };
+
   const pageFiles: { name: string; content: unknown }[] = [];
   const imageFiles: { name: string; blob: Blob }[] = [];
   const mdFiles: { componentId: string; content: string }[] = [];
 
+  const skipPaths = new Set([RELATIONS_ZIP_PATH, GROUPS_ZIP_PATH, COMMENTS_ZIP_PATH]);
   for (const [path, entry] of Object.entries(zip.files)) {
-    if (entry.dir || path === RELATIONS_ZIP_PATH) continue;
+    if (entry.dir || skipPaths.has(path)) continue;
     if (!path.startsWith(DOCS_ZIP_PREFIX)) continue;
 
     const fileName = path.slice(DOCS_ZIP_PREFIX.length);

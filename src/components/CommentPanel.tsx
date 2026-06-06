@@ -393,6 +393,12 @@ export function CommentPanel({
 
       {expanded && (
         <div className="page-panel-body comment-panel-body">
+          {!project.remoteDocId && !project.folderHandle && (
+            <p className="comment-storage-hint">
+              Comments are only in memory. Use Save → remote storage (or a local folder) so they
+              persist and sync across browsers.
+            </p>
+          )}
           {!username ? (
             <UsernamePrompt
               title="Sign in to comment"

@@ -26,6 +26,8 @@ export interface DocComment {
   authorId?: string;
   body: string;
   createdAt: number;
+  /** Last time body or anchor changed — used for multi-session merge conflict resolution */
+  updatedAt?: number;
   /** Optional link to a component or md passage */
   anchor?: CommentAnchor;
 }
@@ -173,6 +175,7 @@ export type AppAction =
   | { type: 'SET_PROJECT'; project: LoadedProject }
   | { type: 'CLOSE_PROJECT' }
   | { type: 'RELOAD_PROJECT'; project: LoadedProject }
+  | { type: 'PATCH_PROJECT'; project: LoadedProject }
   | { type: 'TOGGLE_SIDEBAR' }
   | { type: 'EXPAND_SIDEBAR' }
   | { type: 'OPEN_PAGE'; pageFile: string }
