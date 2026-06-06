@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { CommentAnchor, DocComment, LoadedProject } from '../types';
+import { useState, type CSSProperties } from 'react';
+import type { CommentAnchor, DocComment, LoadedProject, AppStyles } from '../types';
 import {
   activeComments,
   buildCommentTree,
@@ -7,6 +7,7 @@ import {
   formatCommentAnchorLabel,
   type CommentTreeNode,
 } from '../lib/comments';
+import { getCommentCardSelectionStyle } from '../lib/styles';
 import { UsernamePrompt } from './UsernamePrompt';
 import { isTypingTarget } from '../lib/keyboard';
 import { setStoredCommentUsername } from '../lib/commentSession';
@@ -17,11 +18,12 @@ interface CommentPanelProps {
   project: LoadedProject;
   username: string | null;
   authorId: string;
-  linkTargetId: string | null;
-  focusedCommentId: string | null;
+  selectedCommentId: string | null;
+  commentLinkCtrlActive?: boolean;
+  canLinkSelectedComment?: boolean;
   onToggle: () => void;
   onSetUsername: (username: string) => void;
-  onSelectLinkTarget: (commentId: string | null) => void;
+  onSelectComment: (commentId: string) => void;
   onAddRoot: (body: string) => void;
   onAddReply: (parentId: string, body: string) => void;
   onFocusComment: (commentId: string) => void;
@@ -59,12 +61,14 @@ function formatCommentTime(timestamp: number): string {
 
 function CommentTreeItem({
   node,
-  linkTargetId,
-  focusedCommentId,
+  selectedCommentId,
+  commentLinkCtrlActive,
+  canLinkSelectedComment,
+  appStyles,
   componentLabels,
   authorId,
   username,
-  onSelectLinkTarget,
+  onSelectComment,
   onReply,
   onFocusComment,
   onUpdateComment,
@@ -73,12 +77,14 @@ function CommentTreeItem({
   isReply = false,
 }: {
   node: CommentTreeNode;
-  linkTargetId: string | null;
-  focusedCommentId: string | null;
+  selectedCommentId: string | null;
+  commentLinkCtrlActive: boolean;
+  canLinkSelectedComment: boolean;
+  appStyles: AppStyles;
   componentLabels: Map<string, string>;
   authorId: string;
   username: string | null;
-  onSelectLinkTarget: (commentId: string | null) => void;
+  onSelectComment: (commentId: string) => void;
   onReply: (parentId: string, body: string) => void;
   onFocusComment: (commentId: string) => void;
   onUpdateComment: (commentId: string, body: string) => void;
@@ -91,10 +97,13 @@ function CommentTreeItem({
   const [replyBody, setReplyBody] = useState('');
   const [editOpen, setEditOpen] = useState(false);
   const [editBody, setEditBody] = useState(comment.body);
-  const isLinkTarget = linkTargetId === comment.id;
-  const isFocused = focusedCommentId === comment.id;
+  const isSelected = selectedCommentId === comment.id;
   const isOwner = canOwnComment(comment, authorId, username);
-  const canLink = isOwner;
+  const showLinkHint = isSelected && isOwner;
+  const linkPreviewActive = showLinkHint && commentLinkCtrlActive;
+  const selectionStyle: CSSProperties | undefined = isSelected
+    ? getCommentCardSelectionStyle(linkPreviewActive, appStyles)
+    : undefined;
 
   const anchorLabel = comment.anchor
     ? formatCommentAnchorLabel(
@@ -104,9 +113,9 @@ function CommentTreeItem({
     : null;
   const authorColors = authorAvatarColors(comment.author);
 
-  const handleSelectForLink = () => {
-    if (!canLink || editOpen) return;
-    onSelectLinkTarget(isLinkTarget ? null : comment.id);
+  const handleToggleSelect = () => {
+    if (editOpen) return;
+    onSelectComment(comment.id);
   };
 
   const stopCardClick = (event: React.MouseEvent | React.KeyboardEvent) => {
@@ -115,33 +124,24 @@ function CommentTreeItem({
 
   return (
     <li
-      className={`comment-thread-item ${isReply ? 'comment-thread-item-reply' : ''} ${isLinkTarget ? 'comment-thread-item-linking' : ''} ${isFocused ? 'comment-thread-item-focused' : ''}`}
+      className={`comment-thread-item ${isReply ? 'comment-thread-item-reply' : ''} ${isSelected ? 'comment-thread-item-selected' : ''}`}
     >
       <article
-        className={`comment-card${canLink ? ' comment-card-selectable' : ''}${isLinkTarget ? ' comment-card-selected' : ''}`}
-        onClick={canLink ? handleSelectForLink : undefined}
-        onKeyDown={
-          canLink
-            ? (event) => {
-                if (isTypingTarget(event.target)) return;
-                if (event.target !== event.currentTarget) return;
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  handleSelectForLink();
-                }
-              }
-            : undefined
-        }
-        role={canLink ? 'button' : undefined}
-        tabIndex={canLink ? 0 : undefined}
-        aria-pressed={canLink ? isLinkTarget : undefined}
-        aria-label={
-          canLink
-            ? isLinkTarget
-              ? 'Comment selected for linking — press to cancel'
-              : 'Select comment for linking'
-            : undefined
-        }
+        className={`comment-card comment-card-selectable${isSelected ? ' comment-card-selected' : ''}`}
+        style={selectionStyle}
+        onClick={handleToggleSelect}
+        onKeyDown={(event) => {
+          if (isTypingTarget(event.target)) return;
+          if (event.target !== event.currentTarget) return;
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            handleToggleSelect();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-pressed={isSelected}
+        aria-label={isSelected ? 'Comment selected — press to deselect' : 'Select comment'}
       >
         <div className="comment-card-row">
           <AuthorAvatar name={comment.author} />
@@ -150,8 +150,12 @@ function CommentTreeItem({
               <span className="comment-author" style={{ color: authorColors.color }}>
                 {comment.author}
               </span>
-              {isLinkTarget && (
-                <span className="comment-linking-badge">Selected for link</span>
+              {isSelected && (
+                <span
+                  className={`comment-selected-badge${linkPreviewActive ? ' comment-selected-badge-preview' : ' comment-selected-badge-primary'}`}
+                >
+                  Selected
+                </span>
               )}
               <time className="comment-time" dateTime={new Date(comment.createdAt).toISOString()}>
                 {formatCommentTime(comment.createdAt)}
@@ -217,15 +221,6 @@ function CommentTreeItem({
             <footer className="comment-card-actions" onClick={stopCardClick}>
               {!editOpen && (
                 <>
-                  {canLink && (
-                    <button
-                      type="button"
-                      className={`comment-text-btn ${isLinkTarget ? 'comment-text-btn-active' : ''}`}
-                      onClick={() => onSelectLinkTarget(isLinkTarget ? null : comment.id)}
-                    >
-                      {isLinkTarget ? 'Cancel' : 'Link'}
-                    </button>
-                  )}
                   {hasUsername && (
                     <button
                       type="button"
@@ -301,6 +296,17 @@ function CommentTreeItem({
         </div>
       </article>
 
+      {showLinkHint && (
+        <p
+          className={`comment-link-hint-float${linkPreviewActive ? ' comment-link-hint-float-preview' : ' comment-link-hint-float-primary'}`}
+          role="status"
+        >
+          {linkPreviewActive
+            ? 'Hold Ctrl — click a component to preview the link, or select text in markdown. Release Ctrl to save. Click the same component again to clear.'
+            : 'Comment selected — hold Ctrl to link to a component or markdown selection. Release Ctrl to save.'}
+        </p>
+      )}
+
       {node.replies.length > 0 && (
         <ul className="comment-thread comment-thread-nested">
           {node.replies.map((child) => (
@@ -308,12 +314,14 @@ function CommentTreeItem({
               key={child.comment.id}
               node={child}
               isReply
-              linkTargetId={linkTargetId}
-              focusedCommentId={focusedCommentId}
+              selectedCommentId={selectedCommentId}
+              commentLinkCtrlActive={commentLinkCtrlActive}
+              canLinkSelectedComment={canLinkSelectedComment}
+              appStyles={appStyles}
               componentLabels={componentLabels}
               authorId={authorId}
               username={username}
-              onSelectLinkTarget={onSelectLinkTarget}
+              onSelectComment={onSelectComment}
               onReply={onReply}
               onFocusComment={onFocusComment}
               onUpdateComment={onUpdateComment}
@@ -332,11 +340,12 @@ export function CommentPanel({
   project,
   username,
   authorId,
-  linkTargetId,
-  focusedCommentId,
+  selectedCommentId,
+  commentLinkCtrlActive = false,
+  canLinkSelectedComment = false,
   onToggle,
   onSetUsername,
-  onSelectLinkTarget,
+  onSelectComment,
   onAddRoot,
   onAddReply,
   onFocusComment,
@@ -357,6 +366,7 @@ export function CommentPanel({
       componentLabels.set(component.id, `${page.pageName} · ${component.id}`);
     }
   }
+  const appStyles = project.styles;
 
   const handleSetUsername = (name: string) => {
     setStoredCommentUsername(name);
@@ -459,12 +469,6 @@ export function CommentPanel({
                 )}
               </div>
 
-              {linkTargetId && (
-                <p className="comment-link-banner comment-link-banner-active">
-                  Click a component to link, or select text in markdown. Click the same component again to unlink.
-                </p>
-              )}
-
               <form
                 className="comment-compose-form"
                 onSubmit={(event) => {
@@ -503,12 +507,14 @@ export function CommentPanel({
                   <CommentTreeItem
                     key={node.comment.id}
                     node={node}
-                    linkTargetId={linkTargetId}
-                    focusedCommentId={focusedCommentId}
+                    selectedCommentId={selectedCommentId}
+                    commentLinkCtrlActive={commentLinkCtrlActive}
+                    canLinkSelectedComment={canLinkSelectedComment}
+                    appStyles={appStyles}
                     componentLabels={componentLabels}
                     authorId={authorId}
                     username={username}
-                    onSelectLinkTarget={onSelectLinkTarget}
+                    onSelectComment={onSelectComment}
                     onReply={onAddReply}
                     onFocusComment={onFocusComment}
                     onUpdateComment={onUpdateComment}

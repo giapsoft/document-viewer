@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { AppStyles } from '../types';
 
 export const DEFAULT_STYLES: AppStyles = {
@@ -30,12 +31,45 @@ export const DEFAULT_STYLES: AppStyles = {
   },
 };
 
+/** Fixed highlight for comment-link preview (Ctrl held). */
+export const COMMENT_LINK_PREVIEW_HIGHLIGHT = {
+  borderColor: '#E8590C',
+  borderWidth: '4px',
+  borderStyle: 'solid',
+} as const;
+
 /** Fixed highlight for components selected in link mode. */
 export const LINK_MODE_HIGHLIGHT = {
   borderColor: '#E8590C',
   borderWidth: '4px',
   borderStyle: 'solid',
 } as const;
+
+export function getCommentCardSelectionStyle(
+  linkPreviewActive: boolean,
+  styles: AppStyles,
+): CSSProperties {
+  if (linkPreviewActive) {
+    const h = COMMENT_LINK_PREVIEW_HIGHLIGHT;
+    return {
+      borderColor: h.borderColor,
+      borderWidth: h.borderWidth,
+      borderStyle: h.borderStyle,
+      boxShadow:
+        '0 0 0 2px rgba(232, 89, 12, 0.55), 0 0 14px rgba(253, 126, 20, 0.35)',
+      backgroundColor: '#fff',
+    };
+  }
+
+  const s = styles.selectedComponent;
+  return {
+    borderColor: s.borderColor,
+    borderWidth: s.borderWidth,
+    borderStyle: s.borderStyle,
+    boxShadow: '0 0 0 1px rgba(13, 110, 253, 0.2)',
+    backgroundColor: '#fff',
+  };
+}
 
 export function mergeStyles(partial?: Partial<AppStyles> | null): AppStyles {
   if (!partial) return DEFAULT_STYLES;

@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type {
   AppStyles,
+  CommentAnchor,
   Component,
   DocComment,
   LoadedProject,
@@ -20,7 +21,7 @@ import { isTypingTarget } from '../lib/keyboard';
 import { resolveComponentForDisplay, isTextType } from '../lib/componentDisplay';
 import { PageLabel } from './PageLabel';
 import { MarkdownPreview } from './MarkdownPreview';
-import { LINK_MODE_HIGHLIGHT } from '../lib/styles';
+import { COMMENT_LINK_PREVIEW_HIGHLIGHT, LINK_MODE_HIGHLIGHT } from '../lib/styles';
 import { scheduleScrollToComponent, scheduleScrollToMdCommentHighlight } from '../lib/scrollIntoContainer';
 import { getPageScrollTop, setPageScrollTop } from '../lib/pageScrollMemory';
 import {
@@ -48,19 +49,39 @@ function mdAnchorToHighlightRanges(
   return [{ start: anchor.start, end: anchor.end, className }];
 }
 
+function getPreviewMdHighlightRanges(
+  preview: CommentAnchor | null | undefined,
+  componentId: string,
+): Array<{ start: number; end: number; className?: string; segments?: Array<{ start: number; end: number }> }> {
+  if (!preview || preview.kind !== 'md-range' || preview.componentId !== componentId) {
+    return [];
+  }
+  return mdAnchorToHighlightRanges(
+    preview,
+    'md-comment-highlight md-comment-highlight-preview',
+  );
+}
+
+function isPreviewComponentAnchor(
+  preview: CommentAnchor | null | undefined,
+  componentId: string,
+): boolean {
+  return preview?.kind === 'component' && preview.componentId === componentId;
+}
+
 function getMdHighlightRanges(
   comments: DocComment[],
   componentId: string,
-  focusedCommentId: string | null,
+  selectedCommentId: string | null,
 ): Array<{ start: number; end: number; className?: string; segments?: Array<{ start: number; end: number }> }> {
-  if (focusedCommentId) {
-    const focused = comments.find((comment) => comment.id === focusedCommentId);
+  if (selectedCommentId) {
+    const selected = comments.find((comment) => comment.id === selectedCommentId);
     if (
-      focused?.anchor?.kind === 'md-range' &&
-      focused.anchor.componentId === componentId
+      selected?.anchor?.kind === 'md-range' &&
+      selected.anchor.componentId === componentId
     ) {
       return mdAnchorToHighlightRanges(
-        focused.anchor,
+        selected.anchor,
         'md-comment-highlight md-comment-highlight-focused',
       );
     }
@@ -77,10 +98,10 @@ function getMdHighlightRanges(
         NonNullable<DocComment['anchor']>,
         { kind: 'md-range' }
       >;
-      const isFocused = comment.id === focusedCommentId;
+      const isSelected = comment.id === selectedCommentId;
       return mdAnchorToHighlightRanges(
         anchor,
-        isFocused
+        isSelected
           ? 'md-comment-highlight md-comment-highlight-focused'
           : 'md-comment-highlight',
       );
@@ -90,13 +111,13 @@ function getMdHighlightRanges(
 function hasComponentCommentAnchor(
   comments: DocComment[],
   componentId: string,
-  focusedCommentId: string | null,
+  selectedCommentId: string | null,
 ): boolean {
-  if (focusedCommentId) {
-    const focused = comments.find((comment) => comment.id === focusedCommentId);
+  if (selectedCommentId) {
+    const selected = comments.find((comment) => comment.id === selectedCommentId);
     return (
-      focused?.anchor?.kind === 'component' &&
-      focused.anchor.componentId === componentId
+      selected?.anchor?.kind === 'component' &&
+      selected.anchor.componentId === componentId
     );
   }
 
@@ -117,6 +138,7 @@ interface ComponentBlockProps {
   linkMode?: boolean;
   linkGroupMembers?: Set<string>;
   commentLinkMode?: boolean;
+  commentLinkPreviewAnchor?: CommentAnchor | null;
   mdHighlightRanges?: Array<{ start: number; end: number; className?: string }>;
   hasComponentCommentAnchor?: boolean;
   onSelect: (componentId: string, pageFile: string) => void;
@@ -131,7 +153,7 @@ interface ComponentBlockProps {
 
 interface ComponentShellProps {
   component: Component;
-  highlightKind: 'none' | 'primary' | 'related' | 'link';
+  highlightKind: 'none' | 'primary' | 'related' | 'link' | 'comment-link';
   isDimmed: boolean;
   className: string;
   style: CSSProperties;
@@ -159,7 +181,7 @@ function ComponentShell({
   return (
     <div
       ref={(el) => registerRef(component.id, el)}
-      className={`component-block ${className} ${highlightKind !== 'none' ? 'selected' : ''} ${highlightKind === 'primary' ? 'selected-primary' : ''} ${highlightKind === 'related' ? 'selected-related' : ''} ${highlightKind === 'link' ? 'link-selected' : ''} ${isDimmed ? 'dimmed' : ''}`}
+      className={`component-block ${className} ${highlightKind !== 'none' ? 'selected' : ''} ${highlightKind === 'primary' ? 'selected-primary' : ''} ${highlightKind === 'related' ? 'selected-related' : ''} ${highlightKind === 'link' ? 'link-selected' : ''} ${highlightKind === 'comment-link' ? 'comment-link-preview' : ''} ${isDimmed ? 'dimmed' : ''}`}
       style={style}
       onClick={(e) => {
         e.stopPropagation();
@@ -199,6 +221,7 @@ export function ComponentBlock({
   linkMode = false,
   linkGroupMembers,
   commentLinkMode = false,
+  commentLinkPreviewAnchor = null,
   mdHighlightRanges = [],
   hasComponentCommentAnchor = false,
   onSelect,
@@ -209,24 +232,36 @@ export function ComponentBlock({
   const resolved = resolveComponentForDisplay(component, project.mdFiles);
   const mdSelectionHandledRef = useRef(false);
 
+  const isCommentLinkPreview =
+    commentLinkMode &&
+    (isPreviewComponentAnchor(commentLinkPreviewAnchor, component.id) ||
+      (commentLinkPreviewAnchor?.kind === 'md-range' &&
+        commentLinkPreviewAnchor.componentId === component.id));
+
   const isLinkSelected = linkMode && (linkGroupMembers?.has(component.id) ?? false);
   const isPrimarySelected =
-    !linkMode && selection?.componentId === component.id;
-  const isHighlighted = !linkMode && (highlightedIds?.has(component.id) ?? false);
+    !linkMode && !commentLinkMode && selection?.componentId === component.id;
+  const isHighlighted = !linkMode && !commentLinkMode && (highlightedIds?.has(component.id) ?? false);
   const isRelatedSelected = isHighlighted && !isPrimarySelected;
-  const isDimmed = linkMode
-    ? linkGroupMembers != null && linkGroupMembers.size > 0 && !isLinkSelected
-    : selection !== null && !isHighlighted;
+  const isDimmed = commentLinkMode
+    ? commentLinkPreviewAnchor != null && !isCommentLinkPreview
+    : linkMode
+      ? linkGroupMembers != null && linkGroupMembers.size > 0 && !isLinkSelected
+      : selection !== null && !isHighlighted;
 
-  const highlightKind: ComponentShellProps['highlightKind'] = linkMode
-    ? isLinkSelected
-      ? 'link'
+  const highlightKind: ComponentShellProps['highlightKind'] = commentLinkMode
+    ? isCommentLinkPreview
+      ? 'comment-link'
       : 'none'
-    : isPrimarySelected
-      ? 'primary'
-      : isRelatedSelected
-        ? 'related'
-        : 'none';
+    : linkMode
+      ? isLinkSelected
+        ? 'link'
+        : 'none'
+      : isPrimarySelected
+        ? 'primary'
+        : isRelatedSelected
+          ? 'related'
+          : 'none';
 
   const highlightStyle =
     highlightKind === 'primary'
@@ -235,7 +270,9 @@ export function ComponentBlock({
         ? styles.linkedComponent
         : highlightKind === 'link'
           ? LINK_MODE_HIGHLIGHT
-          : null;
+          : highlightKind === 'comment-link'
+            ? COMMENT_LINK_PREVIEW_HIGHLIGHT
+            : null;
   const statusStyle = styles.statuses[resolved.status];
 
   const shellStyle: CSSProperties = {
@@ -269,7 +306,8 @@ export function ComponentBlock({
     registerRef,
   };
 
-  const shellClassExtra = hasComponentCommentAnchor ? ' comment-component-anchor' : '';
+  const shellClassExtra =
+    !commentLinkMode && hasComponentCommentAnchor ? ' comment-component-anchor' : '';
 
   if (resolved.type === 'img') {
     const src = project.imageUrls.get(resolved.content);
@@ -408,7 +446,8 @@ interface PagePanelProps {
   autoScrollSecondary?: boolean;
   isPinned?: boolean;
   commentLinkMode?: boolean;
-  focusedCommentId?: string | null;
+  commentLinkPreviewAnchor?: CommentAnchor | null;
+  selectedCommentId?: string | null;
   onCommentLinkComponent?: (componentId: string, pageFile: string) => void;
   onCommentLinkMdRange?: (
     componentId: string,
@@ -429,7 +468,8 @@ export function PagePanel({
   onSelect,
   onClearSelection,
   commentLinkMode = false,
-  focusedCommentId = null,
+  commentLinkPreviewAnchor = null,
+  selectedCommentId = null,
   onCommentLinkComponent,
   onCommentLinkMdRange,
   scrollToComponentId = null,
@@ -549,12 +589,12 @@ export function PagePanel({
     if (handledScrollNonceRef.current === scrollNonce) return;
     if (!page?.components.some((c) => c.id === scrollToComponentId)) return;
 
-    const focusedComment = focusedCommentId
-      ? comments.find((comment) => comment.id === focusedCommentId)
+    const selectedComment = selectedCommentId
+      ? comments.find((comment) => comment.id === selectedCommentId)
       : null;
     const scrollToMdHighlight =
-      focusedComment?.anchor?.kind === 'md-range' &&
-      focusedComment.anchor.componentId === scrollToComponentId;
+      selectedComment?.anchor?.kind === 'md-range' &&
+      selectedComment.anchor.componentId === scrollToComponentId;
 
     const markScrollHandled = () => {
       handledScrollNonceRef.current = scrollNonce;
@@ -595,7 +635,7 @@ export function PagePanel({
     expanded,
     pageFile,
     page,
-    focusedCommentId,
+    selectedCommentId,
     comments,
   ]);
 
@@ -747,16 +787,25 @@ export function PagePanel({
                   linkMode={linkMode}
                   linkGroupMembers={linkGroupMembers}
                   commentLinkMode={commentLinkMode}
-                  mdHighlightRanges={getMdHighlightRanges(
-                    comments,
-                    component.id,
-                    focusedCommentId,
-                  )}
-                  hasComponentCommentAnchor={hasComponentCommentAnchor(
-                    comments,
-                    component.id,
-                    focusedCommentId,
-                  )}
+                  commentLinkPreviewAnchor={commentLinkPreviewAnchor}
+                  mdHighlightRanges={
+                    commentLinkMode
+                      ? getPreviewMdHighlightRanges(commentLinkPreviewAnchor, component.id)
+                      : getMdHighlightRanges(
+                          comments,
+                          component.id,
+                          selectedCommentId,
+                        )
+                  }
+                  hasComponentCommentAnchor={
+                    commentLinkMode
+                      ? false
+                      : hasComponentCommentAnchor(
+                          comments,
+                          component.id,
+                          selectedCommentId,
+                        )
+                  }
                   onSelect={onSelect}
                   onCommentLinkComponent={onCommentLinkComponent}
                   onCommentLinkMdRange={onCommentLinkMdRange}

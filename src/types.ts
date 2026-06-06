@@ -165,9 +165,12 @@ export interface AppState {
   commentPanelExpanded: boolean;
   commentUsername: string | null;
   commentAuthorId: string;
-  /** Comment selected for anchor linking */
-  commentLinkTargetId: string | null;
-  focusedCommentId: string | null;
+  /** Comment selected in the panel (click to toggle). */
+  selectedCommentId: string | null;
+  /** Preview anchor while holding Ctrl during comment link mode (not persisted until commit). */
+  commentLinkPreviewAnchor: CommentAnchor | null;
+  /** True while Control is held during comment link mode. */
+  commentLinkCtrlActive: boolean;
 }
 
 export interface SelectionHistoryEntry {
@@ -223,7 +226,10 @@ export type AppAction =
   | { type: 'DELETE_COMPONENT'; pageFile: string; componentId: string }
   | { type: 'TOGGLE_COMMENT_PANEL' }
   | { type: 'SET_COMMENT_USERNAME'; username: string }
-  | { type: 'SELECT_COMMENT_LINK_TARGET'; commentId: string | null }
+  | { type: 'SELECT_COMMENT'; commentId: string }
+  | { type: 'SET_COMMENT_LINK_PREVIEW'; anchor: CommentAnchor | null }
+  | { type: 'SET_COMMENT_LINK_CTRL_ACTIVE'; active: boolean }
+  | { type: 'END_COMMENT_LINK_SESSION' }
   | { type: 'ADD_ROOT_COMMENT'; body: string }
   | { type: 'ADD_REPLY_COMMENT'; parentId: string; body: string }
   | {

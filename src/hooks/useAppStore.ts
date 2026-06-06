@@ -67,6 +67,7 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'ADD_REPLY_COMMENT',
   'SET_COMMENT_ANCHOR',
   'CLEAR_COMMENT_ANCHOR',
+  'END_COMMENT_LINK_SESSION',
   'UPDATE_COMMENT',
   'DELETE_COMMENT',
 ]);
@@ -74,12 +75,14 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
 export function useAppStore() {
   const [state, baseDispatch] = useReducer(appReducer, initialAppState);
   const projectRef = useRef(state.project);
+  const appStateRef = useRef(state);
   const dirtyRef = useRef(false);
   const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
 
   projectRef.current = state.project;
+  appStateRef.current = state;
   dirtyRef.current = dirty;
 
   const runRemoteAutoSaveRef = useRef<
@@ -106,22 +109,37 @@ export function useAppStore() {
   }, [dirty]);
 
   const dispatch = useCallback((action: AppAction) => {
-    if (DIRTY_ACTIONS.has(action.type)) {
-      setDirty(true);
-      setSaveStatus('idle');
-      setSaveError(null);
+    if (
+      appStateRef.current.commentLinkCtrlActive &&
+      (action.type === 'SET_COMMENT_ANCHOR' || action.type === 'CLEAR_COMMENT_ANCHOR')
+    ) {
+      return;
     }
+
+    const prevProject = projectRef.current;
+    const isDirtyAction = DIRTY_ACTIONS.has(action.type);
+
     flushSync(() => baseDispatch(action));
 
+    if (appStateRef.current.commentLinkCtrlActive) {
+      return;
+    }
+
+    if (!isDirtyAction) return;
+
+    if (action.type === 'END_COMMENT_LINK_SESSION' && prevProject === projectRef.current) {
+      return;
+    }
+
+    setDirty(true);
+    setSaveStatus('idle');
+    setSaveError(null);
+
     const project = projectRef.current;
-    if (DIRTY_ACTIONS.has(action.type) && project?.folderHandle) {
+    if (project?.folderHandle) {
       scheduleAutoSave(() => projectRef.current);
     }
-    if (
-      DIRTY_ACTIONS.has(action.type) &&
-      project?.remoteDocId &&
-      isSupabaseConfigured()
-    ) {
+    if (project?.remoteDocId && isSupabaseConfigured()) {
       scheduleRemoteAutoSave(() => runRemoteAutoSaveRef.current());
     }
   }, []);
@@ -344,8 +362,20 @@ export function useAppStore() {
     dispatch({ type: 'SET_COMMENT_USERNAME', username });
   }, [dispatch]);
 
-  const selectCommentLinkTarget = useCallback((commentId: string | null) => {
-    dispatch({ type: 'SELECT_COMMENT_LINK_TARGET', commentId });
+  const selectComment = useCallback((commentId: string) => {
+    dispatch({ type: 'SELECT_COMMENT', commentId });
+  }, [dispatch]);
+
+  const setCommentLinkPreview = useCallback((anchor: import('../types').CommentAnchor | null) => {
+    dispatch({ type: 'SET_COMMENT_LINK_PREVIEW', anchor });
+  }, [dispatch]);
+
+  const setCommentLinkCtrlActive = useCallback((active: boolean) => {
+    dispatch({ type: 'SET_COMMENT_LINK_CTRL_ACTIVE', active });
+  }, [dispatch]);
+
+  const finishCommentLinkSession = useCallback(() => {
+    dispatch({ type: 'END_COMMENT_LINK_SESSION' });
   }, [dispatch]);
 
   const addRootComment = useCallback((body: string) => {
@@ -357,10 +387,12 @@ export function useAppStore() {
   }, [dispatch]);
 
   const setCommentAnchor = useCallback((commentId: string, anchor: CommentAnchor) => {
+    if (appStateRef.current.commentLinkCtrlActive) return;
     dispatch({ type: 'SET_COMMENT_ANCHOR', commentId, anchor });
   }, [dispatch]);
 
   const clearCommentAnchorAction = useCallback((commentId: string) => {
+    if (appStateRef.current.commentLinkCtrlActive) return;
     dispatch({ type: 'CLEAR_COMMENT_ANCHOR', commentId });
   }, [dispatch]);
 
@@ -517,6 +549,12 @@ export function useAppStore() {
     if (!project) {
       return { ok: false, error: 'No project is open.' };
     }
+    if (appStateRef.current.commentLinkCtrlActive) {
+      return {
+        ok: false,
+        error: 'Release Ctrl to finish linking the comment before saving.',
+      };
+    }
 
     setSaveStatus('saving');
     setSaveError(null);
@@ -557,6 +595,12 @@ export function useAppStore() {
     const project = projectRef.current;
     if (!project) {
       return { ok: false, error: 'No project is open.' };
+    }
+    if (appStateRef.current.commentLinkCtrlActive) {
+      return {
+        ok: false,
+        error: 'Release Ctrl to finish linking the comment before saving.',
+      };
     }
     if (!isSupabaseConfigured()) {
       return {
@@ -716,6 +760,9 @@ export function useAppStore() {
   const runRemoteAutoSave = useCallback(async (): Promise<
     import('../lib/remoteAutoSave').RemoteAutoSaveResult
   > => {
+    if (appStateRef.current.commentLinkCtrlActive) {
+      return { ok: true, skipped: true };
+    }
     const project = projectRef.current;
     if (!project?.remoteDocId || !isSupabaseConfigured()) {
       return { ok: true, skipped: true };
@@ -771,6 +818,7 @@ export function useAppStore() {
     const pullRemoteChanges = async () => {
       const current = projectRef.current;
       if (!current?.remoteDocId || cancelled) return;
+      if (appStateRef.current.commentLinkCtrlActive) return;
       if (dirtyRef.current && isRemoteAutoSaveBusy()) return;
 
       try {
@@ -837,7 +885,10 @@ export function useAppStore() {
     clearAllPins,
     toggleCommentPanel,
     setCommentUsername,
-    selectCommentLinkTarget,
+    selectComment,
+    setCommentLinkPreview,
+    setCommentLinkCtrlActive,
+    finishCommentLinkSession,
     addRootComment,
     addReplyComment,
     setCommentAnchor,

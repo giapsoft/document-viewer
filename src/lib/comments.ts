@@ -336,6 +336,35 @@ export function clearCommentAnchor(
   });
 }
 
+function mdRangeSpanKeys(anchor: Extract<CommentAnchor, { kind: 'md-range' }>): string {
+  const spans =
+    anchor.segments && anchor.segments.length > 0
+      ? anchor.segments
+      : [{ start: anchor.start, end: anchor.end }];
+  return spans.map((segment) => `${segment.start}:${segment.end}`).join('|');
+}
+
+export function commentAnchorsEqual(
+  a: CommentAnchor | null | undefined,
+  b: CommentAnchor | null | undefined,
+): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'component' && b.kind === 'component') {
+    return a.componentId === b.componentId;
+  }
+  if (a.kind !== 'md-range' || b.kind !== 'md-range') return false;
+  if (
+    a.componentId !== b.componentId ||
+    a.start !== b.start ||
+    a.end !== b.end
+  ) {
+    return false;
+  }
+  return mdRangeSpanKeys(a) === mdRangeSpanKeys(b);
+}
+
 export function updateCommentBody(
   comments: DocComment[],
   commentId: string,

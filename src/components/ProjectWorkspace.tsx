@@ -9,9 +9,10 @@ import { RemoteConflictDialog } from './RemoteConflictDialog';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
 import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
+import { useCtrlCommentLinkHold } from '../hooks/useCtrlCommentLinkHold';
 import { useRemoteStalePoll } from '../hooks/useRemoteStalePoll';
 import { CommentPanel } from './CommentPanel';
-import { activeComments } from '../lib/comments';
+import { activeComments, canOwnComment } from '../lib/comments';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { useCallback, useState } from 'react';
 
@@ -43,11 +44,12 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     clearAllPins,
     toggleCommentPanel,
     setCommentUsername,
-    selectCommentLinkTarget,
+    selectComment,
+    setCommentLinkPreview,
+    setCommentLinkCtrlActive,
+    finishCommentLinkSession,
     addRootComment,
     addReplyComment,
-    setCommentAnchor,
-    clearCommentAnchor,
     focusComment,
     updateComment,
     deleteComment,
@@ -81,21 +83,37 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     state.selectionHistoryIndex < state.selectionHistory.length - 1;
 
   useSelectionNavigationShortcuts({
-    enabled: !state.linkMode,
+    enabled: !state.linkMode && !state.commentLinkCtrlActive,
     canGoBack,
     canGoNext,
     onBack: goBackSelection,
     onNext: goNextSelection,
   });
 
+  const comments = activeComments(project.relations.comments ?? []);
+  const selectedComment = state.selectedCommentId
+    ? comments.find((c) => c.id === state.selectedCommentId)
+    : null;
+  const canLinkSelectedComment = Boolean(
+    selectedComment &&
+      canOwnComment(selectedComment, state.commentAuthorId, state.commentUsername),
+  );
+
   useCtrlLinkModeHold({
-    enabled: !state.commentLinkTargetId,
+    enabled: !state.commentLinkCtrlActive && !canLinkSelectedComment,
     linkMode: state.linkMode,
     setLinkMode,
   });
 
-  const commentLinkMode = Boolean(state.commentLinkTargetId);
-  const comments = activeComments(project.relations.comments ?? []);
+  useCtrlCommentLinkHold({
+    enabled: canLinkSelectedComment,
+    ctrlActive: state.commentLinkCtrlActive,
+    setCtrlActive: setCommentLinkCtrlActive,
+    onRelease: finishCommentLinkSession,
+  });
+
+  const commentLinkMode = canLinkSelectedComment && state.commentLinkCtrlActive;
+  const commentLinkPreviewAnchor = state.commentLinkPreviewAnchor;
 
   const findComponentType = (componentId: string) => {
     for (const page of project.pages) {
@@ -106,20 +124,17 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   };
 
   const handleCommentLinkComponent = (componentId: string, _pageFile: string) => {
-    const targetId = state.commentLinkTargetId;
-    if (!targetId) return;
-
-    const comment = comments.find((c) => c.id === targetId);
-    if (!comment) return;
-
-    if (comment.anchor?.componentId === componentId) {
-      clearCommentAnchor(targetId);
-      return;
-    }
+    if (!commentLinkMode) return;
 
     if (findComponentType(componentId) === 'md') return;
 
-    setCommentAnchor(targetId, {
+    const preview = commentLinkPreviewAnchor;
+    if (preview?.kind === 'component' && preview.componentId === componentId) {
+      setCommentLinkPreview(null);
+      return;
+    }
+
+    setCommentLinkPreview({
       kind: 'component',
       componentId,
     });
@@ -142,8 +157,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     _pageFile: string,
     range: import('../lib/mdSelection').MdTextRange,
   ) => {
-    if (!state.commentLinkTargetId) return;
-    setCommentAnchor(state.commentLinkTargetId, {
+    if (!commentLinkMode) return;
+    setCommentLinkPreview({
       kind: 'md-range',
       componentId,
       start: range.start,
@@ -374,7 +389,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 autoScrollSecondary={autoScrollSecondary}
                 isPinned={pinnedPages.includes(panel.pageFile)}
                 commentLinkMode={commentLinkMode}
-                focusedCommentId={state.focusedCommentId}
+                commentLinkPreviewAnchor={commentLinkPreviewAnchor}
+                selectedCommentId={state.selectedCommentId}
                 onCommentLinkComponent={handleCommentLinkComponent}
                 onCommentLinkMdRange={handleCommentLinkMdRange}
               />
@@ -384,11 +400,12 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               project={project}
               username={state.commentUsername}
               authorId={state.commentAuthorId}
-              linkTargetId={state.commentLinkTargetId}
-              focusedCommentId={state.focusedCommentId}
+              selectedCommentId={state.selectedCommentId}
+              commentLinkCtrlActive={state.commentLinkCtrlActive}
+              canLinkSelectedComment={canLinkSelectedComment}
+              onSelectComment={selectComment}
               onToggle={toggleCommentPanel}
               onSetUsername={setCommentUsername}
-              onSelectLinkTarget={selectCommentLinkTarget}
               onAddRoot={addRootComment}
               onAddReply={addReplyComment}
               onFocusComment={focusComment}

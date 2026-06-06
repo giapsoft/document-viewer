@@ -44,6 +44,7 @@ import {
   addRootComment,
   canOwnComment,
   clearCommentAnchor,
+  commentAnchorsEqual,
   deleteCommentSubtree,
   setCommentAnchor,
   updateCommentBody,
@@ -122,8 +123,9 @@ export const initialAppState: AppState = {
   commentPanelExpanded: true,
   commentUsername: null,
   commentAuthorId: getOrCreateCommentAuthorId(),
-  commentLinkTargetId: null,
-  focusedCommentId: null,
+  selectedCommentId: null,
+  commentLinkPreviewAnchor: null,
+  commentLinkCtrlActive: false,
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -696,43 +698,133 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, commentUsername: username };
     }
 
-    case 'SELECT_COMMENT_LINK_TARGET': {
-      const commentId = action.commentId;
-      if (commentId === null) {
-        return { ...state, commentLinkTargetId: null };
-      }
+    case 'SELECT_COMMENT': {
       if (!state.project) return state;
-      const linkTarget = (state.project.relations.comments ?? []).find(
-        (comment) => comment.id === commentId,
+      const { commentId } = action;
+      const comments = state.project.relations.comments ?? [];
+      const comment = comments.find((c) => c.id === commentId);
+      if (!comment) return state;
+
+      if (state.selectedCommentId === commentId) {
+        return {
+          ...state,
+          selectedCommentId: null,
+          commentLinkPreviewAnchor: null,
+          commentLinkCtrlActive: false,
+        };
+      }
+
+      return {
+        ...state,
+        selectedCommentId: commentId,
+        commentLinkPreviewAnchor: comment.anchor ?? null,
+        commentLinkCtrlActive: false,
+        linkMode: false,
+        linkTargetGroupIndex: null,
+        linkFocusComponentId: null,
+      };
+    }
+
+    case 'SET_COMMENT_LINK_PREVIEW':
+      if (!state.selectedCommentId) return state;
+      return { ...state, commentLinkPreviewAnchor: action.anchor };
+
+    case 'SET_COMMENT_LINK_CTRL_ACTIVE': {
+      if (!state.selectedCommentId || !state.project) return state;
+      if (!action.active) {
+        return { ...state, commentLinkCtrlActive: false };
+      }
+      const selected = (state.project.relations.comments ?? []).find(
+        (c) => c.id === state.selectedCommentId,
       );
       if (
-        !linkTarget ||
-        !canOwnComment(linkTarget, state.commentAuthorId, state.commentUsername)
+        !selected ||
+        !canOwnComment(selected, state.commentAuthorId, state.commentUsername)
       ) {
         return state;
       }
-      return { ...state, commentLinkTargetId: commentId };
+      return {
+        ...state,
+        commentLinkCtrlActive: true,
+        commentLinkPreviewAnchor: selected.anchor ?? null,
+        linkMode: false,
+        linkTargetGroupIndex: null,
+        linkFocusComponentId: null,
+      };
+    }
+
+    case 'END_COMMENT_LINK_SESSION': {
+      if (!state.project || !state.selectedCommentId) {
+        return { ...state, commentLinkCtrlActive: false };
+      }
+      const commentId = state.selectedCommentId;
+      const preview = state.commentLinkPreviewAnchor;
+      const saved = (state.project.relations.comments ?? []).find(
+        (c) => c.id === commentId,
+      );
+      const savedAnchor = saved?.anchor;
+
+      if (commentAnchorsEqual(preview, savedAnchor)) {
+        return {
+          ...state,
+          commentLinkCtrlActive: false,
+          commentLinkPreviewAnchor: savedAnchor ?? null,
+        };
+      }
+
+      const comments = preview
+        ? setCommentAnchor(
+            state.project.relations.comments ?? [],
+            commentId,
+            preview,
+            state.commentAuthorId,
+            state.commentUsername,
+          )
+        : clearCommentAnchor(
+            state.project.relations.comments ?? [],
+            commentId,
+            state.commentAuthorId,
+            state.commentUsername,
+          );
+      const project = updateProjectComments(state.project, comments);
+      return {
+        ...state,
+        project,
+        selectedCommentId: null,
+        commentLinkPreviewAnchor: null,
+        commentLinkCtrlActive: false,
+      };
     }
 
     case 'FOCUS_COMMENT': {
       if (!action.commentId || !state.project) {
-        return { ...state, focusedCommentId: null };
+        return { ...state, selectedCommentId: null };
       }
       const comment = (state.project.relations.comments ?? []).find(
         (c) => c.id === action.commentId,
       );
       if (!comment) {
-        return { ...state, focusedCommentId: action.commentId };
+        return { ...state, selectedCommentId: action.commentId };
       }
 
       const componentId = comment.anchor?.componentId ?? null;
       if (!componentId) {
-        return { ...state, focusedCommentId: action.commentId };
+        return {
+          ...state,
+          selectedCommentId: action.commentId,
+          commentLinkPreviewAnchor: comment.anchor ?? null,
+          commentLinkCtrlActive: false,
+        };
       }
 
       const found = findComponent(state.project, componentId);
       if (!found) {
-        return { ...state, focusedCommentId: action.commentId };
+        return {
+          ...state,
+          selectedCommentId: action.commentId,
+          commentLinkPreviewAnchor: comment.anchor ?? null,
+          commentLinkCtrlActive: false,
+        };
       }
 
       const { pageFile } = found;
@@ -744,7 +836,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       const base = {
         ...state,
-        focusedCommentId: action.commentId,
+        selectedCommentId: action.commentId,
+        commentLinkPreviewAnchor: comment.anchor ?? null,
+        commentLinkCtrlActive: false,
         currentPage: pageFile,
         panels: singlePagePanels,
         scrollToComponent,
@@ -790,8 +884,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         project,
-        commentLinkTargetId: newId,
-        focusedCommentId: newId,
+        selectedCommentId: newId,
+        commentLinkPreviewAnchor: null,
+        commentLinkCtrlActive: false,
       };
     }
 
@@ -806,11 +901,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       );
       const project = updateProjectComments(state.project, comments);
       const newId = comments[comments.length - 1]?.id ?? null;
-      return { ...state, project, focusedCommentId: newId };
+      return { ...state, project, selectedCommentId: newId };
     }
 
     case 'SET_COMMENT_ANCHOR': {
-      if (!state.project) return state;
+      if (state.commentLinkCtrlActive || !state.project) return state;
       const comments = setCommentAnchor(
         state.project.relations.comments ?? [],
         action.commentId,
@@ -823,7 +918,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
 
     case 'CLEAR_COMMENT_ANCHOR': {
-      if (!state.project) return state;
+      if (state.commentLinkCtrlActive || !state.project) return state;
       const comments = clearCommentAnchor(
         state.project.relations.comments ?? [],
         action.commentId,
@@ -870,14 +965,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         project,
-        commentLinkTargetId:
-          state.commentLinkTargetId && removedIds.has(state.commentLinkTargetId)
+        selectedCommentId:
+          state.selectedCommentId && removedIds.has(state.selectedCommentId)
             ? null
-            : state.commentLinkTargetId,
-        focusedCommentId:
-          state.focusedCommentId && removedIds.has(state.focusedCommentId)
+            : state.selectedCommentId,
+        commentLinkPreviewAnchor:
+          state.selectedCommentId && removedIds.has(state.selectedCommentId)
             ? null
-            : state.focusedCommentId,
+            : state.commentLinkPreviewAnchor,
+        commentLinkCtrlActive:
+          state.selectedCommentId && removedIds.has(state.selectedCommentId)
+            ? false
+            : state.commentLinkCtrlActive,
       };
     }
 
