@@ -12,7 +12,7 @@ import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
 import { useCtrlCommentLinkHold } from '../hooks/useCtrlCommentLinkHold';
 import { useRemoteStalePoll } from '../hooks/useRemoteStalePoll';
 import { CommentPanel } from './CommentPanel';
-import { activeComments, canOwnComment } from '../lib/comments';
+import { activeComments, canOwnComment, resolveCommentAnchorHighlightId } from '../lib/comments';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { useCallback, useState } from 'react';
 
@@ -40,7 +40,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     insertComponentAbove,
     insertComponentBelow,
     deleteComponent,
-    setLinkMode,
+    setLinkCtrlActive,
+    finishLinkSession,
     clearAllPins,
     toggleCommentPanel,
     setCommentUsername,
@@ -101,8 +102,9 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   useCtrlLinkModeHold({
     enabled: !state.commentLinkCtrlActive && !canLinkSelectedComment,
-    linkMode: state.linkMode,
-    setLinkMode,
+    ctrlActive: state.linkCtrlActive,
+    setCtrlActive: setLinkCtrlActive,
+    onRelease: finishLinkSession,
   });
 
   useCtrlCommentLinkHold({
@@ -114,6 +116,13 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   const commentLinkMode = canLinkSelectedComment && state.commentLinkCtrlActive;
   const commentLinkPreviewAnchor = state.commentLinkPreviewAnchor;
+  const commentAnchorHighlightId = resolveCommentAnchorHighlightId(
+    comments,
+    state.selectedCommentId,
+    state.focusedCommentId,
+    state.commentAuthorId,
+    state.commentUsername,
+  );
 
   const findComponentType = (componentId: string) => {
     for (const page of project.pages) {
@@ -181,7 +190,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   const matchingGroupIndices = state.selection?.matchingGroupIndices ?? [];
 
-  const groups = project.relations.groups;
+  const groups = state.linkPreviewGroups ?? project.relations.groups;
   const linkEditingListIndex = state.linkTargetGroupIndex;
   const linkGroupMembers =
     state.linkMode && linkEditingListIndex !== null
@@ -390,7 +399,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 isPinned={pinnedPages.includes(panel.pageFile)}
                 commentLinkMode={commentLinkMode}
                 commentLinkPreviewAnchor={commentLinkPreviewAnchor}
-                selectedCommentId={state.selectedCommentId}
+                commentAnchorHighlightId={commentAnchorHighlightId}
                 onCommentLinkComponent={handleCommentLinkComponent}
                 onCommentLinkMdRange={handleCommentLinkMdRange}
               />

@@ -3,44 +3,53 @@ import { isTypingTarget } from '../lib/keyboard';
 
 interface UseCtrlLinkModeHoldOptions {
   enabled: boolean;
-  linkMode: boolean;
-  setLinkMode: (enabled: boolean) => void;
+  ctrlActive: boolean;
+  setCtrlActive: (active: boolean) => void;
+  /** End Ctrl session — persist only when preview changed. */
+  onRelease: () => void;
 }
 
-/** Hold Control to enter link mode; release to exit (when entered via Ctrl). */
+/** Hold Control to preview component links in temp state; release to persist if changed. */
 export function useCtrlLinkModeHold({
   enabled,
-  linkMode,
-  setLinkMode,
+  ctrlActive,
+  setCtrlActive,
+  onRelease,
 }: UseCtrlLinkModeHoldOptions) {
   const heldViaCtrlRef = useRef(false);
-  const linkModeRef = useRef(linkMode);
-  linkModeRef.current = linkMode;
+  const endingSessionRef = useRef(false);
+  const ctrlActiveRef = useRef(ctrlActive);
+  ctrlActiveRef.current = ctrlActive;
 
   useEffect(() => {
     if (!enabled) return;
 
-    const exitIfHeld = () => {
-      if (!heldViaCtrlRef.current) return;
+    const endSession = () => {
+      if (!heldViaCtrlRef.current || endingSessionRef.current) return;
+      endingSessionRef.current = true;
       heldViaCtrlRef.current = false;
-      setLinkMode(false);
+      try {
+        onRelease();
+      } finally {
+        endingSessionRef.current = false;
+      }
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Control' || e.repeat) return;
       if (isTypingTarget(e.target)) return;
-      if (linkModeRef.current && !heldViaCtrlRef.current) return;
+      if (ctrlActiveRef.current && !heldViaCtrlRef.current) return;
 
       heldViaCtrlRef.current = true;
-      setLinkMode(true);
+      setCtrlActive(true);
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key !== 'Control') return;
-      exitIfHeld();
+      endSession();
     };
 
-    const onBlur = () => exitIfHeld();
+    const onBlur = () => endSession();
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
@@ -51,5 +60,5 @@ export function useCtrlLinkModeHold({
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [enabled, setLinkMode]);
+  }, [enabled, setCtrlActive, onRelease]);
 }

@@ -33,11 +33,20 @@ export function MarkdownPreview({
   }, [source, highlightRanges, selectable]);
 
   useEffect(() => {
-    if (!selectable || !onTextSelect) return;
+    if (!selectable) return;
 
-    const handleMouseUp = () => {
+    const onMouseDown = (event: MouseEvent) => {
       const root = rootRef.current;
-      if (!root) return;
+      if (!root?.contains(event.target as Node)) return;
+      // Hide preview marks via CSS only — no DOM rebuild so drag-select still works.
+      root.classList.add('is-dragging');
+    };
+
+    const onMouseUp = () => {
+      const root = rootRef.current;
+      root?.classList.remove('is-dragging');
+
+      if (!root || !onTextSelect) return;
 
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) return;
@@ -51,8 +60,12 @@ export function MarkdownPreview({
       selection.removeAllRanges();
     };
 
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => document.removeEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
   }, [selectable, onTextSelect, source]);
 
   return (

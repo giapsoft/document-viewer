@@ -16,6 +16,8 @@ import {
   createGroup,
   getGroupIndicesForComponent,
   withRelationsGroups,
+  cloneGroups,
+  groupsEqual,
 } from './groupRelations';
 import {
   appendSelectionHistory,
@@ -60,6 +62,8 @@ function applyExitLinkMode(state: AppState): AppState {
     linkMode: false,
     linkTargetGroupIndex: null,
     linkFocusComponentId: null,
+    linkPreviewGroups: null,
+    linkCtrlActive: false,
   };
 
   if (!focusId || !state.project) return nextState;
@@ -72,26 +76,21 @@ function applyExitLinkMode(state: AppState): AppState {
   return applied ? { ...nextState, ...applied } : nextState;
 }
 
-function applyEnterLinkMode(state: AppState): AppState {
+function applyEnterLinkPreview(state: AppState): AppState {
   if (state.linkMode || !state.project) return state;
 
-  let project = state.project;
-  const groups = project.relations.groups;
+  let linkPreviewGroups = cloneGroups(state.project.relations.groups);
   const selectedId = state.selection?.componentId ?? null;
   let linkTargetGroupIndex: number | null = null;
   let linkFocusComponentId: string | null = selectedId;
 
   if (selectedId) {
-    const matching = getGroupIndicesForComponent(groups, selectedId);
+    const matching = getGroupIndicesForComponent(linkPreviewGroups, selectedId);
     if (matching.length > 0) {
       linkTargetGroupIndex = matching[0];
     } else {
-      const nextGroups = createGroup(groups, [selectedId]);
-      linkTargetGroupIndex = nextGroups.length - 1;
-      project = rebuildProject({
-        ...project,
-        relations: withRelationsGroups(project.relations, nextGroups),
-      });
+      linkPreviewGroups = createGroup(linkPreviewGroups, [selectedId]);
+      linkTargetGroupIndex = linkPreviewGroups.length - 1;
     }
   } else {
     linkFocusComponentId = null;
@@ -99,8 +98,9 @@ function applyEnterLinkMode(state: AppState): AppState {
 
   return {
     ...state,
-    project,
     linkMode: true,
+    linkCtrlActive: true,
+    linkPreviewGroups,
     linkTargetGroupIndex,
     linkFocusComponentId,
     selection: null,
@@ -116,6 +116,8 @@ export const initialAppState: AppState = {
   linkMode: false,
   linkTargetGroupIndex: null,
   linkFocusComponentId: null,
+  linkPreviewGroups: null,
+  linkCtrlActive: false,
   selectionHistory: [],
   selectionHistoryIndex: -1,
   scrollToComponent: null,
@@ -124,6 +126,7 @@ export const initialAppState: AppState = {
   commentUsername: null,
   commentAuthorId: getOrCreateCommentAuthorId(),
   selectedCommentId: null,
+  focusedCommentId: null,
   commentLinkPreviewAnchor: null,
   commentLinkCtrlActive: false,
 };
@@ -164,6 +167,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         linkMode: false,
         linkTargetGroupIndex: null,
         linkFocusComponentId: null,
+        linkPreviewGroups: null,
+        linkCtrlActive: false,
         selectionHistory: [],
         selectionHistoryIndex: -1,
         scrollToComponent: null,
@@ -228,6 +233,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selectionHistory: history,
         selectionHistoryIndex: index,
         scrollToComponent: null,
+        focusedCommentId: null,
         selectionScrollNonce: shouldScrollSecondaryPanels
           ? state.selectionScrollNonce + 1
           : state.selectionScrollNonce,
@@ -433,32 +439,25 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         position,
       );
 
-      if (state.linkMode) {
-        let relations = project.relations;
+      if (state.linkMode && state.linkPreviewGroups) {
+        let linkPreviewGroups = cloneGroups(state.linkPreviewGroups);
         let linkTargetGroupIndex = state.linkTargetGroupIndex;
 
         if (linkTargetGroupIndex === null) {
-          relations = withRelationsGroups(
-            relations,
-            createGroup(relations.groups, [newComponent.id]),
-          );
-          linkTargetGroupIndex = relations.groups.length - 1;
+          linkPreviewGroups = createGroup(linkPreviewGroups, [newComponent.id]);
+          linkTargetGroupIndex = linkPreviewGroups.length - 1;
         } else {
-          relations = withRelationsGroups(
-            relations,
-            addComponentToGroup(
-              relations.groups,
-              linkTargetGroupIndex,
-              newComponent.id,
-            ),
+          linkPreviewGroups = addComponentToGroup(
+            linkPreviewGroups,
+            linkTargetGroupIndex,
+            newComponent.id,
           );
         }
 
-        const rebuilt = rebuildProject({ ...project, relations });
-
         const nextState: AppState = {
           ...state,
-          project: rebuilt,
+          project,
+          linkPreviewGroups,
           currentPage: pageFile,
           selection: null,
           linkTargetGroupIndex,
@@ -495,20 +494,55 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
 
     case 'TOGGLE_LINK_MODE':
-      return state.linkMode ? applyExitLinkMode(state) : applyEnterLinkMode(state);
+      return state.linkMode ? applyExitLinkMode(state) : applyEnterLinkPreview(state);
 
     case 'SET_LINK_MODE':
-      return action.enabled ? applyEnterLinkMode(state) : applyExitLinkMode(state);
+      return action.enabled ? applyEnterLinkPreview(state) : applyExitLinkMode(state);
+
+    case 'SET_LINK_CTRL_ACTIVE': {
+      if (!action.active) {
+        return { ...state, linkCtrlActive: false };
+      }
+      if (state.commentLinkCtrlActive || state.linkMode) return state;
+      return applyEnterLinkPreview(state);
+    }
+
+    case 'END_LINK_SESSION': {
+      if (!state.project || !state.linkMode) {
+        return { ...state, linkCtrlActive: false };
+      }
+      const preview = state.linkPreviewGroups;
+      const saved = state.project.relations.groups;
+
+      if (!preview || groupsEqual(preview, saved)) {
+        return applyExitLinkMode({ ...state, linkCtrlActive: false });
+      }
+
+      const project = rebuildProject({
+        ...state.project,
+        relations: withRelationsGroups(state.project.relations, preview),
+      });
+      return applyExitLinkMode({ ...state, project, linkCtrlActive: false });
+    }
 
     case 'DELETE_ACTIVE_GROUP': {
       if (!state.project) return state;
 
+      if (state.linkMode) {
+        if (state.linkTargetGroupIndex === null || !state.linkPreviewGroups) return state;
+        return {
+          ...state,
+          linkPreviewGroups: removeGroupAtIndex(
+            state.linkPreviewGroups,
+            state.linkTargetGroupIndex,
+          ),
+          linkTargetGroupIndex: null,
+        };
+      }
+
       let groups = state.project.relations.groups;
 
-      if (state.linkMode) {
-        if (state.linkTargetGroupIndex === null) return state;
-        groups = removeGroupAtIndex(groups, state.linkTargetGroupIndex);
-      } else if (!state.selection?.matchingGroupIndices.length) {
+      if (!state.selection?.matchingGroupIndices.length) {
         return state;
       } else {
         const indicesToRemove = [...state.selection.matchingGroupIndices].sort(
@@ -525,12 +559,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       let nextState: AppState = { ...state, project };
 
-      if (state.linkMode) {
-        nextState = {
-          ...nextState,
-          linkTargetGroupIndex: null,
-        };
-      } else if (state.selection) {
+      if (state.selection) {
         const { componentId } = state.selection;
         const pageFile =
           state.project.index.componentToPage.get(componentId) ?? state.currentPage;
@@ -567,12 +596,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
 
     case 'TOGGLE_LINK_COMPONENT': {
-      if (!state.project || !state.linkMode) return state;
+      if (!state.project || !state.linkMode || !state.linkPreviewGroups) return state;
 
       const { componentId, pageFile } = action;
       if (!state.project.index.componentData.has(componentId)) return state;
 
-      let groups = state.project.relations.groups;
+      let groups = cloneGroups(state.linkPreviewGroups);
       let linkTargetGroupIndex = state.linkTargetGroupIndex;
 
       if (linkTargetGroupIndex === null) {
@@ -595,14 +624,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         }
       }
 
-      const project = rebuildProject({
-        ...state.project,
-        relations: withRelationsGroups(state.project.relations, groups),
-      });
-
       return {
         ...state,
-        project,
+        linkPreviewGroups: groups,
         linkTargetGroupIndex,
         linkFocusComponentId: componentId,
         currentPage: pageFile,
@@ -705,10 +729,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const comment = comments.find((c) => c.id === commentId);
       if (!comment) return state;
 
+      if (!canOwnComment(comment, state.commentAuthorId, state.commentUsername)) {
+        return state;
+      }
+
       if (state.selectedCommentId === commentId) {
         return {
           ...state,
           selectedCommentId: null,
+          focusedCommentId: null,
           commentLinkPreviewAnchor: null,
           commentLinkCtrlActive: false,
         };
@@ -717,11 +746,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         selectedCommentId: commentId,
+        focusedCommentId: null,
         commentLinkPreviewAnchor: comment.anchor ?? null,
         commentLinkCtrlActive: false,
         linkMode: false,
         linkTargetGroupIndex: null,
         linkFocusComponentId: null,
+        linkPreviewGroups: null,
+        linkCtrlActive: false,
       };
     }
 
@@ -750,6 +782,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         linkMode: false,
         linkTargetGroupIndex: null,
         linkFocusComponentId: null,
+        linkPreviewGroups: null,
+        linkCtrlActive: false,
       };
     }
 
@@ -798,33 +832,23 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'FOCUS_COMMENT': {
       if (!action.commentId || !state.project) {
-        return { ...state, selectedCommentId: null };
+        return { ...state, focusedCommentId: null };
       }
       const comment = (state.project.relations.comments ?? []).find(
         (c) => c.id === action.commentId,
       );
       if (!comment) {
-        return { ...state, selectedCommentId: action.commentId };
+        return { ...state, focusedCommentId: action.commentId };
       }
 
       const componentId = comment.anchor?.componentId ?? null;
       if (!componentId) {
-        return {
-          ...state,
-          selectedCommentId: action.commentId,
-          commentLinkPreviewAnchor: comment.anchor ?? null,
-          commentLinkCtrlActive: false,
-        };
+        return { ...state, focusedCommentId: action.commentId };
       }
 
       const found = findComponent(state.project, componentId);
       if (!found) {
-        return {
-          ...state,
-          selectedCommentId: action.commentId,
-          commentLinkPreviewAnchor: comment.anchor ?? null,
-          commentLinkCtrlActive: false,
-        };
+        return { ...state, focusedCommentId: action.commentId };
       }
 
       const { pageFile } = found;
@@ -836,9 +860,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       const base = {
         ...state,
-        selectedCommentId: action.commentId,
-        commentLinkPreviewAnchor: comment.anchor ?? null,
-        commentLinkCtrlActive: false,
+        focusedCommentId: action.commentId,
         currentPage: pageFile,
         panels: singlePagePanels,
         scrollToComponent,
@@ -900,8 +922,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         action.body,
       );
       const project = updateProjectComments(state.project, comments);
-      const newId = comments[comments.length - 1]?.id ?? null;
-      return { ...state, project, selectedCommentId: newId };
+      return { ...state, project };
     }
 
     case 'SET_COMMENT_ANCHOR': {

@@ -5,6 +5,19 @@ export function cloneGroups(groups: string[][]): string[][] {
   return groups.map((group) => [...group]);
 }
 
+export function groupsEqual(a: string[][], b: string[][]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].length !== b[i].length) return false;
+    const sortedA = [...a[i]].sort();
+    const sortedB = [...b[i]].sort();
+    for (let j = 0; j < sortedA.length; j++) {
+      if (sortedA[j] !== sortedB[j]) return false;
+    }
+  }
+  return true;
+}
+
 export function normalizeRelations(relations: RelationsFile): RelationsFile {
   const groups = Array.isArray(relations.groups) ? relations.groups : [];
   const pinnedPages = Array.isArray(relations.pinnedPages)

@@ -162,6 +162,26 @@ export function canOwnComment(
   return comment.author.trim().toLowerCase() === username.trim().toLowerCase();
 }
 
+/** Which comment anchor to emphasize on the page (navigation vs own selection). */
+export function resolveCommentAnchorHighlightId(
+  comments: DocComment[],
+  selectedCommentId: string | null,
+  focusedCommentId: string | null,
+  authorId: string,
+  username: string | null,
+): string | null {
+  if (focusedCommentId && comments.some((c) => c.id === focusedCommentId)) {
+    return focusedCommentId;
+  }
+  if (selectedCommentId) {
+    const selected = comments.find((c) => c.id === selectedCommentId);
+    if (selected && canOwnComment(selected, authorId, username)) {
+      return selectedCommentId;
+    }
+  }
+  return null;
+}
+
 /**
  * Merge server and local comment lists for multi-session sync.
  *

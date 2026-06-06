@@ -2088,25 +2088,23 @@ code {
 }
 
 .comment-thread-item-selected {
-  position: relative;
   z-index: 8;
 }
 
+.comment-thread-item-head {
+  position: relative;
+}
+
 .comment-link-hint-float {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  z-index: 9;
-  margin: 0;
+  margin: 6px 0 0;
   padding: 0.4rem 0.55rem;
   border-radius: 6px;
   font-size: 0.72rem;
   line-height: 1.4;
   font-weight: 500;
   box-shadow:
-    0 8px 20px rgba(0, 0, 0, 0.12),
-    0 2px 6px rgba(0, 0, 0, 0.06);
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.05);
   pointer-events: none;
 }
 
@@ -2477,6 +2475,18 @@ code {
   cursor: text;
 }
 
+.component-md-selectable ::selection {
+  background: rgba(255, 153, 51, 0.55);
+  color: inherit;
+}
+
+/* While drag-selecting a new range, hide preview marks but keep them in the DOM. */
+.component-md-selectable.is-dragging mark.md-comment-highlight-preview {
+  background: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .component-block.comment-component-anchor {
   box-shadow: inset 0 0 0 2px rgba(255, 193, 7, 0.65);
 }
@@ -2487,6 +2497,7 @@ code {
   color: inherit;
   padding: 0.05em 0;
   border-radius: 2px;
+  user-select: text;
 }
 
 .component-md pre mark.md-comment-highlight {

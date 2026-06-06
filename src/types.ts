@@ -157,6 +157,10 @@ export interface AppState {
   linkTargetGroupIndex: number | null;
   /** Component whose containing lists are used for link list navigation */
   linkFocusComponentId: string | null;
+  /** Preview groups while holding Ctrl in link mode (not persisted until commit). */
+  linkPreviewGroups: string[][] | null;
+  /** True while Control is held during component link mode. */
+  linkCtrlActive: boolean;
   selectionHistory: SelectionHistoryEntry[];
   selectionHistoryIndex: number;
   scrollToComponent: { componentId: string; nonce: number } | null;
@@ -167,6 +171,8 @@ export interface AppState {
   commentAuthorId: string;
   /** Comment selected in the panel (click to toggle). */
   selectedCommentId: string | null;
+  /** Comment whose anchor is highlighted after clicking ↗ (navigation only). */
+  focusedCommentId: string | null;
   /** Preview anchor while holding Ctrl during comment link mode (not persisted until commit). */
   commentLinkPreviewAnchor: CommentAnchor | null;
   /** True while Control is held during comment link mode. */
@@ -205,6 +211,8 @@ export type AppAction =
     }
   | { type: 'TOGGLE_LINK_MODE' }
   | { type: 'SET_LINK_MODE'; enabled: boolean }
+  | { type: 'SET_LINK_CTRL_ACTIVE'; active: boolean }
+  | { type: 'END_LINK_SESSION' }
   | { type: 'DELETE_ACTIVE_GROUP' }
   | { type: 'TOGGLE_LINK_COMPONENT'; componentId: string; pageFile: string }
   | { type: 'GO_BACK_SELECTION' }

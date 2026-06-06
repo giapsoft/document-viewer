@@ -97,9 +97,9 @@ function CommentTreeItem({
   const [replyBody, setReplyBody] = useState('');
   const [editOpen, setEditOpen] = useState(false);
   const [editBody, setEditBody] = useState(comment.body);
-  const isSelected = selectedCommentId === comment.id;
   const isOwner = canOwnComment(comment, authorId, username);
-  const showLinkHint = isSelected && isOwner;
+  const isSelected = isOwner && selectedCommentId === comment.id;
+  const showLinkHint = isSelected;
   const linkPreviewActive = showLinkHint && commentLinkCtrlActive;
   const selectionStyle: CSSProperties | undefined = isSelected
     ? getCommentCardSelectionStyle(linkPreviewActive, appStyles)
@@ -114,7 +114,7 @@ function CommentTreeItem({
   const authorColors = authorAvatarColors(comment.author);
 
   const handleToggleSelect = () => {
-    if (editOpen) return;
+    if (!isOwner || editOpen) return;
     onSelectComment(comment.id);
   };
 
@@ -126,22 +126,33 @@ function CommentTreeItem({
     <li
       className={`comment-thread-item ${isReply ? 'comment-thread-item-reply' : ''} ${isSelected ? 'comment-thread-item-selected' : ''}`}
     >
-      <article
-        className={`comment-card comment-card-selectable${isSelected ? ' comment-card-selected' : ''}`}
-        style={selectionStyle}
-        onClick={handleToggleSelect}
-        onKeyDown={(event) => {
-          if (isTypingTarget(event.target)) return;
-          if (event.target !== event.currentTarget) return;
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            handleToggleSelect();
-          }
-        }}
-        role="button"
-        tabIndex={0}
-        aria-pressed={isSelected}
-        aria-label={isSelected ? 'Comment selected — press to deselect' : 'Select comment'}
+      <div className="comment-thread-item-head">
+        <article
+          className={`comment-card${isOwner ? ' comment-card-selectable' : ''}${isSelected ? ' comment-card-selected' : ''}`}
+          style={selectionStyle}
+          onClick={isOwner ? handleToggleSelect : undefined}
+        onKeyDown={
+          isOwner
+            ? (event) => {
+                if (isTypingTarget(event.target)) return;
+                if (event.target !== event.currentTarget) return;
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  handleToggleSelect();
+                }
+              }
+            : undefined
+        }
+        role={isOwner ? 'button' : undefined}
+        tabIndex={isOwner ? 0 : undefined}
+        aria-pressed={isOwner ? isSelected : undefined}
+        aria-label={
+          isOwner
+            ? isSelected
+              ? 'Comment selected — press to deselect'
+              : 'Select comment'
+            : undefined
+        }
       >
         <div className="comment-card-row">
           <AuthorAvatar name={comment.author} />
@@ -296,16 +307,17 @@ function CommentTreeItem({
         </div>
       </article>
 
-      {showLinkHint && (
-        <p
-          className={`comment-link-hint-float${linkPreviewActive ? ' comment-link-hint-float-preview' : ' comment-link-hint-float-primary'}`}
-          role="status"
-        >
-          {linkPreviewActive
-            ? 'Hold Ctrl — click a component to preview the link, or select text in markdown. Release Ctrl to save. Click the same component again to clear.'
-            : 'Comment selected — hold Ctrl to link to a component or markdown selection. Release Ctrl to save.'}
-        </p>
-      )}
+        {showLinkHint && (
+          <p
+            className={`comment-link-hint-float${linkPreviewActive ? ' comment-link-hint-float-preview' : ' comment-link-hint-float-primary'}`}
+            role="status"
+          >
+            {linkPreviewActive
+              ? 'Hold Ctrl — click a component to preview the link, or select text in markdown. Release Ctrl to save. Click the same component again to clear.'
+              : 'Comment selected — hold Ctrl to link to a component or markdown selection. Release Ctrl to save.'}
+          </p>
+        )}
+      </div>
 
       {node.replies.length > 0 && (
         <ul className="comment-thread comment-thread-nested">

@@ -70,12 +70,10 @@ export function collectSelectedSourceSegments(
   while (textNode) {
     const bounds = getTextBoundsInRange(range, textNode);
     if (bounds) {
-      const base = findOffsetInSource(source, textNode, 0);
-      if (base != null) {
-        segments.push({
-          start: base + bounds.start,
-          end: base + bounds.end,
-        });
+      const start = findOffsetInSource(source, textNode, bounds.start);
+      const end = findOffsetInSource(source, textNode, bounds.end);
+      if (start != null && end != null && start < end) {
+        segments.push({ start, end });
       }
     }
     textNode = walker.nextNode() as Text | null;
@@ -151,6 +149,40 @@ function fallbackRangeFromExcerpt(
   return null;
 }
 
+function findAnnotatedOffsetRoot(node: Node | null): Element | null {
+  let current: Node | null = node;
+  if (current?.nodeType === Node.TEXT_NODE) {
+    current = current.parentElement;
+  }
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    const element = current as Element;
+    if (element.hasAttribute('data-md-offset-start')) return element;
+    current = element.parentElement;
+  }
+  return null;
+}
+
+/** Character offset of a DOM point within an annotated offset root (handles split text nodes). */
+function textOffsetInAnnotatedRoot(
+  root: Element,
+  targetNode: Node,
+  targetOffset: number,
+): number | null {
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let accumulated = 0;
+  for (
+    let textNode = walker.nextNode() as Text | null;
+    textNode;
+    textNode = walker.nextNode() as Text | null
+  ) {
+    if (textNode === targetNode) {
+      return accumulated + targetOffset;
+    }
+    accumulated += textNode.length;
+  }
+  return null;
+}
+
 function findOffsetInSource(
   _source: string,
   node: Node | null,
@@ -158,26 +190,24 @@ function findOffsetInSource(
 ): number | null {
   if (!node) return null;
 
-  if (node.nodeType === Node.TEXT_NODE) {
-    let element: Element | null = node.parentElement;
-    while (element) {
-      const startAttr = element.getAttribute('data-md-offset-start');
-      if (startAttr != null) {
-        const base = Number.parseInt(startAttr, 10);
-        if (!Number.isNaN(base)) return base + offset;
-      }
-      element = element.parentElement;
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    const element = node as Element;
+    const startAttr = element.getAttribute('data-md-offset-start');
+    if (startAttr != null) {
+      const base = Number.parseInt(startAttr, 10);
+      if (!Number.isNaN(base)) return base + offset;
     }
-    return null;
   }
 
-  const element = node as Element;
-  const startAttr = element.getAttribute('data-md-offset-start');
-  if (startAttr != null) {
-    const base = Number.parseInt(startAttr, 10);
-    if (!Number.isNaN(base)) return base + offset;
-  }
-  return null;
+  const root = findAnnotatedOffsetRoot(node);
+  if (!root) return null;
+
+  const base = Number.parseInt(root.getAttribute('data-md-offset-start') ?? '', 10);
+  if (Number.isNaN(base)) return null;
+
+  const inner = textOffsetInAnnotatedRoot(root, node, offset);
+  if (inner == null) return null;
+  return base + inner;
 }
 
 function escapeHtml(text: string): string {

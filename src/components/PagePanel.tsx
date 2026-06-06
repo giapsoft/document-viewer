@@ -72,16 +72,16 @@ function isPreviewComponentAnchor(
 function getMdHighlightRanges(
   comments: DocComment[],
   componentId: string,
-  selectedCommentId: string | null,
+  highlightCommentId: string | null,
 ): Array<{ start: number; end: number; className?: string; segments?: Array<{ start: number; end: number }> }> {
-  if (selectedCommentId) {
-    const selected = comments.find((comment) => comment.id === selectedCommentId);
+  if (highlightCommentId) {
+    const highlighted = comments.find((comment) => comment.id === highlightCommentId);
     if (
-      selected?.anchor?.kind === 'md-range' &&
-      selected.anchor.componentId === componentId
+      highlighted?.anchor?.kind === 'md-range' &&
+      highlighted.anchor.componentId === componentId
     ) {
       return mdAnchorToHighlightRanges(
-        selected.anchor,
+        highlighted.anchor,
         'md-comment-highlight md-comment-highlight-focused',
       );
     }
@@ -98,10 +98,10 @@ function getMdHighlightRanges(
         NonNullable<DocComment['anchor']>,
         { kind: 'md-range' }
       >;
-      const isSelected = comment.id === selectedCommentId;
+      const isHighlighted = comment.id === highlightCommentId;
       return mdAnchorToHighlightRanges(
         anchor,
-        isSelected
+        isHighlighted
           ? 'md-comment-highlight md-comment-highlight-focused'
           : 'md-comment-highlight',
       );
@@ -111,13 +111,13 @@ function getMdHighlightRanges(
 function hasComponentCommentAnchor(
   comments: DocComment[],
   componentId: string,
-  selectedCommentId: string | null,
+  highlightCommentId: string | null,
 ): boolean {
-  if (selectedCommentId) {
-    const selected = comments.find((comment) => comment.id === selectedCommentId);
+  if (highlightCommentId) {
+    const highlighted = comments.find((comment) => comment.id === highlightCommentId);
     return (
-      selected?.anchor?.kind === 'component' &&
-      selected.anchor.componentId === componentId
+      highlighted?.anchor?.kind === 'component' &&
+      highlighted.anchor.componentId === componentId
     );
   }
 
@@ -447,7 +447,7 @@ interface PagePanelProps {
   isPinned?: boolean;
   commentLinkMode?: boolean;
   commentLinkPreviewAnchor?: CommentAnchor | null;
-  selectedCommentId?: string | null;
+  commentAnchorHighlightId?: string | null;
   onCommentLinkComponent?: (componentId: string, pageFile: string) => void;
   onCommentLinkMdRange?: (
     componentId: string,
@@ -469,7 +469,7 @@ export function PagePanel({
   onClearSelection,
   commentLinkMode = false,
   commentLinkPreviewAnchor = null,
-  selectedCommentId = null,
+  commentAnchorHighlightId = null,
   onCommentLinkComponent,
   onCommentLinkMdRange,
   scrollToComponentId = null,
@@ -589,12 +589,12 @@ export function PagePanel({
     if (handledScrollNonceRef.current === scrollNonce) return;
     if (!page?.components.some((c) => c.id === scrollToComponentId)) return;
 
-    const selectedComment = selectedCommentId
-      ? comments.find((comment) => comment.id === selectedCommentId)
+    const highlightedComment = commentAnchorHighlightId
+      ? comments.find((comment) => comment.id === commentAnchorHighlightId)
       : null;
     const scrollToMdHighlight =
-      selectedComment?.anchor?.kind === 'md-range' &&
-      selectedComment.anchor.componentId === scrollToComponentId;
+      highlightedComment?.anchor?.kind === 'md-range' &&
+      highlightedComment.anchor.componentId === scrollToComponentId;
 
     const markScrollHandled = () => {
       handledScrollNonceRef.current = scrollNonce;
@@ -635,7 +635,7 @@ export function PagePanel({
     expanded,
     pageFile,
     page,
-    selectedCommentId,
+    commentAnchorHighlightId,
     comments,
   ]);
 
@@ -794,7 +794,7 @@ export function PagePanel({
                       : getMdHighlightRanges(
                           comments,
                           component.id,
-                          selectedCommentId,
+                          commentAnchorHighlightId,
                         )
                   }
                   hasComponentCommentAnchor={
@@ -803,7 +803,7 @@ export function PagePanel({
                       : hasComponentCommentAnchor(
                           comments,
                           component.id,
-                          selectedCommentId,
+                          commentAnchorHighlightId,
                         )
                   }
                   onSelect={onSelect}

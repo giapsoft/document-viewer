@@ -68,6 +68,7 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'SET_COMMENT_ANCHOR',
   'CLEAR_COMMENT_ANCHOR',
   'END_COMMENT_LINK_SESSION',
+  'END_LINK_SESSION',
   'UPDATE_COMMENT',
   'DELETE_COMMENT',
 ]);
@@ -121,13 +122,17 @@ export function useAppStore() {
 
     flushSync(() => baseDispatch(action));
 
-    if (appStateRef.current.commentLinkCtrlActive) {
+    if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
       return;
     }
 
     if (!isDirtyAction) return;
 
     if (action.type === 'END_COMMENT_LINK_SESSION' && prevProject === projectRef.current) {
+      return;
+    }
+
+    if (action.type === 'END_LINK_SESSION' && prevProject === projectRef.current) {
       return;
     }
 
@@ -254,6 +259,14 @@ export function useAppStore() {
     },
     [dispatch],
   );
+
+  const setLinkCtrlActive = useCallback((active: boolean) => {
+    dispatch({ type: 'SET_LINK_CTRL_ACTIVE', active });
+  }, [dispatch]);
+
+  const finishLinkSession = useCallback(() => {
+    dispatch({ type: 'END_LINK_SESSION' });
+  }, [dispatch]);
 
   const deleteActiveGroup = useCallback(() => {
     dispatch({ type: 'DELETE_ACTIVE_GROUP' });
@@ -549,10 +562,10 @@ export function useAppStore() {
     if (!project) {
       return { ok: false, error: 'No project is open.' };
     }
-    if (appStateRef.current.commentLinkCtrlActive) {
+    if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
       return {
         ok: false,
-        error: 'Release Ctrl to finish linking the comment before saving.',
+        error: 'Release Ctrl to finish linking before saving.',
       };
     }
 
@@ -596,10 +609,10 @@ export function useAppStore() {
     if (!project) {
       return { ok: false, error: 'No project is open.' };
     }
-    if (appStateRef.current.commentLinkCtrlActive) {
+    if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
       return {
         ok: false,
-        error: 'Release Ctrl to finish linking the comment before saving.',
+        error: 'Release Ctrl to finish linking before saving.',
       };
     }
     if (!isSupabaseConfigured()) {
@@ -760,7 +773,7 @@ export function useAppStore() {
   const runRemoteAutoSave = useCallback(async (): Promise<
     import('../lib/remoteAutoSave').RemoteAutoSaveResult
   > => {
-    if (appStateRef.current.commentLinkCtrlActive) {
+    if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
       return { ok: true, skipped: true };
     }
     const project = projectRef.current;
@@ -818,7 +831,7 @@ export function useAppStore() {
     const pullRemoteChanges = async () => {
       const current = projectRef.current;
       if (!current?.remoteDocId || cancelled) return;
-      if (appStateRef.current.commentLinkCtrlActive) return;
+      if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) return;
       if (dirtyRef.current && isRemoteAutoSaveBusy()) return;
 
       try {
@@ -882,6 +895,8 @@ export function useAppStore() {
     insertComponentBelow,
     deleteComponent,
     setLinkMode,
+    setLinkCtrlActive,
+    finishLinkSession,
     clearAllPins,
     toggleCommentPanel,
     setCommentUsername,
