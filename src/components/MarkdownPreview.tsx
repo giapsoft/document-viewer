@@ -1,13 +1,18 @@
+import { useEffect, useMemo, useRef } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { applyMarkdownHighlights, mdRangeFromSelection } from '../lib/mdSelection';
+import {
+  MD_PREVIEW_SANITIZE_ATTRS,
+  mdRangeFromSelection,
+  renderSelectableMarkdown,
+} from '../lib/mdSelection';
 
 interface MarkdownPreviewProps {
   source: string;
   className?: string;
   highlightRanges?: Array<{ start: number; end: number; className?: string }>;
   selectable?: boolean;
-  onTextSelect?: (range: { start: number; end: number; excerpt: string }) => void;
+  onTextSelect?: (range: import('../lib/mdSelection').MdTextRange) => void;
 }
 
 export function MarkdownPreview({
@@ -17,26 +22,44 @@ export function MarkdownPreview({
   selectable = false,
   onTextSelect,
 }: MarkdownPreviewProps) {
-  const html = DOMPurify.sanitize(
-    applyMarkdownHighlights(source, highlightRanges, (markdown) =>
-      marked.parse(markdown, { async: false }) as string,
-    ),
-    { ADD_ATTR: ['class'] },
-  );
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const html = useMemo(() => {
+    const raw =
+      selectable || highlightRanges.length > 0
+        ? renderSelectableMarkdown(source, highlightRanges)
+        : (marked.parse(source, { async: false }) as string);
+    return DOMPurify.sanitize(raw, { ADD_ATTR: MD_PREVIEW_SANITIZE_ATTRS });
+  }, [source, highlightRanges, selectable]);
+
+  useEffect(() => {
+    if (!selectable || !onTextSelect) return;
+
+    const handleMouseUp = () => {
+      const root = rootRef.current;
+      if (!root) return;
+
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) return;
+      if (!selection.anchorNode || !root.contains(selection.anchorNode)) return;
+      if (!selection.focusNode || !root.contains(selection.focusNode)) return;
+
+      const range = mdRangeFromSelection(source, selection, root);
+      if (!range) return;
+
+      onTextSelect(range);
+      selection.removeAllRanges();
+    };
+
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, [selectable, onTextSelect, source]);
 
   return (
     <div
+      ref={rootRef}
       className={`component-md ${selectable ? 'component-md-selectable' : ''} ${className}`.trim()}
       dangerouslySetInnerHTML={{ __html: html }}
-      onMouseUp={() => {
-        if (!selectable || !onTextSelect) return;
-        const selection = window.getSelection();
-        if (!selection || selection.isCollapsed) return;
-        const range = mdRangeFromSelection(source, selection);
-        if (!range) return;
-        onTextSelect(range);
-        selection.removeAllRanges();
-      }}
     />
   );
 }

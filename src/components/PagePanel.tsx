@@ -26,26 +26,40 @@ import {
   getHighlightedIdsForPage,
 } from '../lib/selectionHighlight';
 import { ScrollbarMarkers } from './ScrollbarMarkers';
+import type { MdTextRange } from '../lib/mdSelection';
+
+function mdAnchorToHighlightRanges(
+  anchor: Extract<NonNullable<DocComment['anchor']>, { kind: 'md-range' }>,
+  className: string,
+): Array<{ start: number; end: number; className?: string; segments?: Array<{ start: number; end: number }> }> {
+  if (anchor.segments?.length) {
+    return [
+      {
+        start: anchor.start,
+        end: anchor.end,
+        segments: anchor.segments,
+        className,
+      },
+    ];
+  }
+  return [{ start: anchor.start, end: anchor.end, className }];
+}
 
 function getMdHighlightRanges(
   comments: DocComment[],
   componentId: string,
   focusedCommentId: string | null,
-): Array<{ start: number; end: number; className?: string }> {
+): Array<{ start: number; end: number; className?: string; segments?: Array<{ start: number; end: number }> }> {
   if (focusedCommentId) {
     const focused = comments.find((comment) => comment.id === focusedCommentId);
     if (
       focused?.anchor?.kind === 'md-range' &&
       focused.anchor.componentId === componentId
     ) {
-      const anchor = focused.anchor;
-      return [
-        {
-          start: anchor.start,
-          end: anchor.end,
-          className: 'md-comment-highlight md-comment-highlight-focused',
-        },
-      ];
+      return mdAnchorToHighlightRanges(
+        focused.anchor,
+        'md-comment-highlight md-comment-highlight-focused',
+      );
     }
   }
 
@@ -55,19 +69,18 @@ function getMdHighlightRanges(
         comment.anchor?.kind === 'md-range' &&
         comment.anchor.componentId === componentId,
     )
-    .map((comment) => {
+    .flatMap((comment) => {
       const anchor = comment.anchor as Extract<
         NonNullable<DocComment['anchor']>,
         { kind: 'md-range' }
       >;
       const isFocused = comment.id === focusedCommentId;
-      return {
-        start: anchor.start,
-        end: anchor.end,
-        className: isFocused
+      return mdAnchorToHighlightRanges(
+        anchor,
+        isFocused
           ? 'md-comment-highlight md-comment-highlight-focused'
           : 'md-comment-highlight',
-      };
+      );
     });
 }
 
@@ -108,7 +121,7 @@ interface ComponentBlockProps {
   onCommentLinkMdRange?: (
     componentId: string,
     pageFile: string,
-    range: { start: number; end: number; excerpt: string },
+    range: MdTextRange,
   ) => void;
   registerRef: (id: string, el: HTMLElement | null) => void;
 }
@@ -397,7 +410,7 @@ interface PagePanelProps {
   onCommentLinkMdRange?: (
     componentId: string,
     pageFile: string,
-    range: { start: number; end: number; excerpt: string },
+    range: MdTextRange,
   ) => void;
 }
 
@@ -516,7 +529,7 @@ export function PagePanel({
       focusedComment?.anchor?.kind === 'md-range' &&
       focusedComment.anchor.componentId === scrollToComponentId;
 
-    const onDone = () => {
+    const markScrollHandled = () => {
       handledScrollNonceRef.current = scrollNonce;
     };
 
@@ -526,7 +539,19 @@ export function PagePanel({
         componentRefs,
         scrollToComponentId,
         panelRef,
-        onDone,
+        (success) => {
+          if (success) {
+            markScrollHandled();
+            return;
+          }
+          scheduleScrollToComponent(
+            scrollRef,
+            componentRefs,
+            scrollToComponentId,
+            panelRef,
+            markScrollHandled,
+          );
+        },
       );
     }
 
@@ -535,7 +560,7 @@ export function PagePanel({
       componentRefs,
       scrollToComponentId,
       panelRef,
-      onDone,
+      markScrollHandled,
     );
   }, [
     scrollToComponentId,

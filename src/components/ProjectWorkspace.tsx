@@ -141,7 +141,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const handleCommentLinkMdRange = (
     componentId: string,
     _pageFile: string,
-    range: { start: number; end: number; excerpt: string },
+    range: import('../lib/mdSelection').MdTextRange,
   ) => {
     if (!state.commentLinkTargetId) return;
     setCommentAnchor(state.commentLinkTargetId, {
@@ -150,6 +150,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
       start: range.start,
       end: range.end,
       excerpt: range.excerpt,
+      segments: range.segments,
     });
   };
 

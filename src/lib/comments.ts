@@ -5,6 +5,19 @@ export interface CommentTreeNode {
   replies: CommentTreeNode[];
 }
 
+function normalizeMdRangeSegments(raw: unknown): Array<{ start: number; end: number }> | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const segments: Array<{ start: number; end: number }> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const start = typeof record.start === 'number' ? record.start : -1;
+    const end = typeof record.end === 'number' ? record.end : -1;
+    if (start >= 0 && end > start) segments.push({ start, end });
+  }
+  return segments.length > 0 ? segments : undefined;
+}
+
 export function normalizeComments(raw: unknown): DocComment[] {
   if (!Array.isArray(raw)) return [];
 
@@ -70,7 +83,15 @@ export function normalizeComments(raw: unknown): DocComment[] {
         const end = typeof a.end === 'number' ? a.end : -1;
         const excerpt = typeof a.excerpt === 'string' ? a.excerpt : '';
         if (start >= 0 && end > start) {
-          anchor = { kind: 'md-range', componentId, start, end, excerpt };
+          const segments = normalizeMdRangeSegments(a.segments);
+          anchor = {
+            kind: 'md-range',
+            componentId,
+            start,
+            end,
+            excerpt,
+            ...(segments?.length ? { segments } : {}),
+          };
         }
       }
     }

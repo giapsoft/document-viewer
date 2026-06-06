@@ -1,8 +1,27 @@
+import { marked, Renderer, type Token, type Tokens } from 'marked';
+
+export interface MdSourceSegment {
+  start: number;
+  end: number;
+}
+
+export interface MdTextRange {
+  start: number;
+  end: number;
+  excerpt: string;
+  segments: MdSourceSegment[];
+}
+
 export interface MdHighlightRange {
   start: number;
   end: number;
   className?: string;
+  segments?: MdSourceSegment[];
 }
+
+type AnnotatedToken = Token & { mdOffset?: number };
+
+const SANITIZE_ATTRS = ['class', 'data-md-offset-start'];
 
 interface SourceRegion {
   contentStart: number;
@@ -10,38 +29,126 @@ interface SourceRegion {
   index: number;
 }
 
+function rangeIntersectsTextNode(range: Range, textNode: Text): boolean {
+  try {
+    return range.intersectsNode(textNode);
+  } catch {
+    const nodeRange = range.cloneRange();
+    nodeRange.selectNodeContents(textNode);
+    return (
+      range.compareBoundaryPoints(Range.END_TO_START, nodeRange) < 0 &&
+      range.compareBoundaryPoints(Range.START_TO_END, nodeRange) > 0
+    );
+  }
+}
+
+function getTextBoundsInRange(range: Range, textNode: Text): { start: number; end: number } | null {
+  const len = textNode.length;
+  try {
+    if (range.comparePoint(textNode, 0) > 0) return null;
+    if (range.comparePoint(textNode, len) < 0) return null;
+  } catch {
+    if (!rangeIntersectsTextNode(range, textNode)) return null;
+  }
+
+  const start = range.startContainer === textNode ? range.startOffset : 0;
+  const end = range.endContainer === textNode ? range.endOffset : len;
+  if (start >= end) return null;
+  return { start, end };
+}
+
+/** Collect source offsets for each visible text node touched by the DOM range. */
+export function collectSelectedSourceSegments(
+  source: string,
+  root: Element,
+  range: Range,
+): MdSourceSegment[] {
+  const segments: MdSourceSegment[] = [];
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let textNode = walker.nextNode() as Text | null;
+
+  while (textNode) {
+    const bounds = getTextBoundsInRange(range, textNode);
+    if (bounds) {
+      const base = findOffsetInSource(source, textNode, 0);
+      if (base != null) {
+        segments.push({
+          start: base + bounds.start,
+          end: base + bounds.end,
+        });
+      }
+    }
+    textNode = walker.nextNode() as Text | null;
+  }
+
+  return segments;
+}
+
 /** Map a DOM text selection to character offsets in the markdown source. */
 export function mdRangeFromSelection(
   source: string,
   selection: Selection,
-): { start: number; end: number; excerpt: string } | null {
+  root: HTMLElement,
+): MdTextRange | null {
   const excerpt = selection.toString();
   if (!excerpt.trim()) return null;
+  if (selection.rangeCount === 0) return null;
 
-  const anchor = findOffsetInSource(source, selection.anchorNode, selection.anchorOffset);
-  const focus = findOffsetInSource(source, selection.focusNode, selection.focusOffset);
-  if (anchor === null || focus === null) {
-    return fallbackRangeFromExcerpt(source, excerpt);
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.commonAncestorContainer)) return null;
+
+  const segments = collectSelectedSourceSegments(source, root, range);
+  if (segments.length === 0) {
+    const fallback = fallbackRangeFromExcerpt(source, excerpt);
+    if (!fallback) return null;
+    return { ...fallback, segments: [{ start: fallback.start, end: fallback.end }] };
   }
 
-  const start = Math.min(anchor, focus);
-  const end = Math.max(anchor, focus);
-  if (start === end) return fallbackRangeFromExcerpt(source, excerpt);
-
+  const start = Math.min(...segments.map((segment) => segment.start));
+  const end = Math.max(...segments.map((segment) => segment.end));
   return {
     start,
     end,
-    excerpt: source.slice(start, end),
+    excerpt,
+    segments,
   };
+}
+
+function findAllIndices(haystack: string, needle: string): number[] {
+  if (!needle) return [];
+  const indices: number[] = [];
+  let from = 0;
+  while (from < haystack.length) {
+    const idx = haystack.indexOf(needle, from);
+    if (idx < 0) break;
+    indices.push(idx);
+    from = idx + Math.max(1, needle.length);
+  }
+  return indices;
 }
 
 function fallbackRangeFromExcerpt(
   source: string,
   excerpt: string,
 ): { start: number; end: number; excerpt: string } | null {
-  const idx = source.indexOf(excerpt);
-  if (idx < 0) return null;
-  return { start: idx, end: idx + excerpt.length, excerpt };
+  const candidates = [
+    excerpt,
+    excerpt.trim(),
+    excerpt.replace(/\u00a0/g, ' '),
+    excerpt.replace(/\s+/g, ' ').trim(),
+  ];
+  const seen = new Set<string>();
+  for (const needle of candidates) {
+    if (!needle || seen.has(needle)) continue;
+    seen.add(needle);
+    const indices = findAllIndices(source, needle);
+    if (indices.length === 1) {
+      const start = indices[0]!;
+      const end = start + needle.length;
+      return { start, end, excerpt: source.slice(start, end) };
+    }
+  }
+  return null;
 }
 
 function findOffsetInSource(
@@ -51,24 +158,292 @@ function findOffsetInSource(
 ): number | null {
   if (!node) return null;
 
-  let element: Element | null =
-    node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element);
-
-  while (element) {
-    const startAttr = element.getAttribute?.('data-md-offset-start');
-    if (startAttr != null) {
-      const base = Number.parseInt(startAttr, 10);
-      if (Number.isNaN(base)) return null;
-      if (node.nodeType === Node.TEXT_NODE) {
-        return base + offset;
+  if (node.nodeType === Node.TEXT_NODE) {
+    let element: Element | null = node.parentElement;
+    while (element) {
+      const startAttr = element.getAttribute('data-md-offset-start');
+      if (startAttr != null) {
+        const base = Number.parseInt(startAttr, 10);
+        if (!Number.isNaN(base)) return base + offset;
       }
-      return base;
+      element = element.parentElement;
     }
-    element = element.parentElement;
+    return null;
   }
 
+  const element = node as Element;
+  const startAttr = element.getAttribute('data-md-offset-start');
+  if (startAttr != null) {
+    const base = Number.parseInt(startAttr, 10);
+    if (!Number.isNaN(base)) return base + offset;
+  }
   return null;
 }
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function wrapWithOffset(text: string, offset: number | undefined): string {
+  const escaped = escapeHtml(text);
+  if (offset == null || !Number.isFinite(offset)) return escaped;
+  return `<span data-md-offset-start="${offset}">${escaped}</span>`;
+}
+
+function annotateTokens(
+  source: string,
+  tokens: Token[],
+  from: number,
+  max?: number,
+): number {
+  let pos = from;
+  for (const token of tokens) {
+    pos = annotateToken(source, token, pos, max);
+  }
+  return pos;
+}
+
+function annotateToken(
+  source: string,
+  token: Token,
+  from: number,
+  max?: number,
+): number {
+  const raw = token.raw;
+  if (!raw) return from;
+
+  const limit = max ?? source.length;
+  let idx = -1;
+  for (let i = from; i <= limit - raw.length; i++) {
+    if (source.startsWith(raw, i)) {
+      idx = i;
+      break;
+    }
+  }
+  if (idx < 0) {
+    idx = source.indexOf(raw, from);
+    if (idx < 0 || idx + raw.length > limit) return from;
+  }
+
+  (token as AnnotatedToken).mdOffset = idx;
+  const end = idx + raw.length;
+
+  if (token.type === 'table') {
+    const table = token as Tokens.Table;
+    let inner = idx;
+    for (const cell of table.header) {
+      if (cell.tokens.length > 0) {
+        inner = annotateTokens(source, cell.tokens, inner, end);
+      }
+    }
+    for (const row of table.rows) {
+      for (const cell of row) {
+        if (cell.tokens.length > 0) {
+          inner = annotateTokens(source, cell.tokens, inner, end);
+        }
+      }
+    }
+    return end;
+  }
+
+  if (token.type === 'list') {
+    const list = token as Tokens.List;
+    let inner = idx;
+    for (const item of list.items) {
+      inner = annotateToken(source, item, inner, end);
+    }
+    return end;
+  }
+
+  if ('tokens' in token && Array.isArray(token.tokens) && token.tokens.length > 0) {
+    annotateTokens(source, token.tokens, idx, end);
+  }
+  return end;
+}
+
+function createOffsetRenderer(): Renderer {
+  const renderer = new Renderer();
+
+  const renderInline = function (this: Renderer, tokens: Token[]) {
+    return this.parser.parseInline(tokens);
+  };
+
+  renderer.text = function (token: Tokens.Text | Tokens.Escape) {
+    const annotated = token as Tokens.Text & { mdOffset?: number };
+    return wrapWithOffset(annotated.text, annotated.mdOffset);
+  };
+
+  renderer.strong = function (token: Tokens.Strong) {
+    return `<strong>${renderInline.call(this, token.tokens)}</strong>`;
+  };
+
+  renderer.em = function (token: Tokens.Em) {
+    return `<em>${renderInline.call(this, token.tokens)}</em>`;
+  };
+
+  renderer.del = function (token: Tokens.Del) {
+    return `<del>${renderInline.call(this, token.tokens)}</del>`;
+  };
+
+  renderer.link = function (token: Tokens.Link) {
+    const href = escapeHtml(token.href);
+    const title = token.title ? ` title="${escapeHtml(token.title)}"` : '';
+    return `<a href="${href}"${title}>${renderInline.call(this, token.tokens)}</a>`;
+  };
+
+  renderer.codespan = function (token: Tokens.Codespan) {
+    const annotated = token as Tokens.Codespan & { mdOffset?: number };
+    const ticks = annotated.raw.match(/^`+/)?.[0].length ?? 1;
+    const textStart =
+      annotated.mdOffset != null ? annotated.mdOffset + ticks : undefined;
+    return `<code>${wrapWithOffset(annotated.text, textStart)}</code>`;
+  };
+
+  renderer.code = function (token: Tokens.Code) {
+    const annotated = token as Tokens.Code & { mdOffset?: number };
+    const newline = annotated.raw.indexOf('\n');
+    const contentStart =
+      annotated.mdOffset != null && newline >= 0
+        ? annotated.mdOffset + newline + 1
+        : annotated.mdOffset;
+    const attr =
+      contentStart != null ? ` data-md-offset-start="${contentStart}"` : '';
+    return `<pre><code${attr}>${escapeHtml(annotated.text)}</code></pre>\n`;
+  };
+
+  return renderer;
+}
+
+/** Render markdown with data-md-offset-start on text nodes for selection mapping. */
+export function parseMarkdownWithOffsets(source: string): string {
+  const tokens = marked.lexer(source);
+  annotateTokens(source, [...tokens], 0);
+  return marked.parser(tokens, { renderer: createOffsetRenderer() }) as string;
+}
+
+function expandHighlightParts(range: MdHighlightRange): MdSourceSegment[] {
+  if (range.segments?.length) return range.segments;
+  return [{ start: range.start, end: range.end }];
+}
+
+function highlightSourceSegmentInRoot(
+  root: Element,
+  source: string,
+  start: number,
+  end: number,
+  className: string,
+): void {
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const wraps: Array<{ node: Text; localStart: number; localEnd: number }> = [];
+  let current = walker.nextNode();
+  while (current) {
+    const textNode = current as Text;
+    const nodeStart = findOffsetInSource(source, textNode, 0);
+    if (nodeStart != null) {
+      const nodeEnd = nodeStart + textNode.length;
+      const overlapStart = Math.max(start, nodeStart);
+      const overlapEnd = Math.min(end, nodeEnd);
+      if (overlapStart < overlapEnd) {
+        wraps.push({
+          node: textNode,
+          localStart: overlapStart - nodeStart,
+          localEnd: overlapEnd - nodeStart,
+        });
+      }
+    }
+    current = walker.nextNode();
+  }
+
+  for (const wrap of wraps.sort((a, b) => b.localStart - a.localStart)) {
+    wrapSingleTextNode(wrap.node, wrap.localStart, wrap.localEnd, className);
+  }
+}
+
+function applySourceRangeHighlightsToOffsetHtml(
+  html: string,
+  source: string,
+  ranges: MdHighlightRange[],
+): string {
+  if (ranges.length === 0) return html;
+
+  const doc = new DOMParser().parseFromString(`<div id="md-root">${html}</div>`, 'text/html');
+  const root = doc.getElementById('md-root');
+  if (!root) return html;
+
+  const fencedBlocks = findFencedCodeBlocks(source);
+  const inlineSpans = findInlineCodeSpans(source, fencedBlocks);
+  const fencedCodes = Array.from(root.querySelectorAll('pre > code'));
+  const inlineCodes = Array.from(root.querySelectorAll('code')).filter(
+    (el) => !el.closest('pre'),
+  );
+
+  const sorted = [...ranges]
+    .filter((r) => r.start >= 0 && r.end > r.start && r.end <= source.length)
+    .sort((a, b) => b.start - a.start);
+
+  for (const range of sorted) {
+    const cls = range.className ?? 'md-comment-highlight';
+    for (const part of expandHighlightParts(range)) {
+      const slice: MdHighlightRange = { ...part, className: cls };
+      const kind = classifyHighlightRange(slice, fencedBlocks, inlineSpans);
+
+      if (kind === 'fenced') {
+        const block = fencedBlocks.find(
+          (b) => part.start >= b.contentStart && part.end <= b.contentEnd,
+        );
+        if (!block) continue;
+        const codeEl = fencedCodes[block.index];
+        if (!codeEl) continue;
+        highlightTextInElement(
+          codeEl,
+          part.start - block.contentStart,
+          part.end - block.contentStart,
+          cls,
+        );
+        continue;
+      }
+
+      if (kind === 'inline') {
+        const span = inlineSpans.find(
+          (s) => part.start >= s.contentStart && part.end <= s.contentEnd,
+        );
+        if (!span) continue;
+        const codeEl = inlineCodes[span.index];
+        if (!codeEl) continue;
+        highlightTextInElement(
+          codeEl,
+          part.start - span.contentStart,
+          part.end - span.contentStart,
+          cls,
+        );
+        continue;
+      }
+
+      // prose and mixed — highlight each mapped text node in the DOM
+      highlightSourceSegmentInRoot(root, source, part.start, part.end, cls);
+    }
+  }
+
+  return root.innerHTML;
+}
+
+/** Markdown HTML for comment-link mode: stable source offsets + optional highlights. */
+export function renderSelectableMarkdown(
+  source: string,
+  ranges: MdHighlightRange[] = [],
+): string {
+  let html = parseMarkdownWithOffsets(source);
+  if (ranges.length > 0) {
+    html = applySourceRangeHighlightsToOffsetHtml(html, source, ranges);
+  }
+  return html;
+}
+
+export { SANITIZE_ATTRS as MD_PREVIEW_SANITIZE_ATTRS };
 
 export function findFencedCodeBlocks(source: string): SourceRegion[] {
   const blocks: SourceRegion[] = [];

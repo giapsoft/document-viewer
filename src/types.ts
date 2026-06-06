@@ -16,6 +16,8 @@ export type CommentAnchor =
       start: number;
       end: number;
       excerpt: string;
+      /** Visible text spans when selection crosses formats or lines (source offsets). */
+      segments?: Array<{ start: number; end: number }>;
     };
 
 export interface DocComment {
