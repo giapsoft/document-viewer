@@ -1,6 +1,5 @@
 import type { AppAction, AppState, PanelState } from '../types';
 import { shrinkFarthestExpanded } from '../lib/index';
-import { syncPanelExpandMemory } from './pageExpandMemory';
 import {
   updateComponentInProject,
   insertComponentRelative,
@@ -315,7 +314,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         }
       }
 
-      syncPanelExpandMemory(panels);
       return { ...state, panels };
     }
 

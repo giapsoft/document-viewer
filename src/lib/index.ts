@@ -1,10 +1,5 @@
 import type { Component, PageData, ProjectIndex, RelationsFile } from '../types';
 import { getGroupIndicesForComponent } from './groupRelations';
-import {
-  prunePageExpandMemory,
-  resolvePanelExpanded,
-  syncPanelExpandMemory,
-} from './pageExpandMemory';
 
 export function getRelatedIdsForGroup(
   componentId: string,
@@ -298,21 +293,14 @@ const MAX_EXPANDED_PANELS = 3;
 
 export function applyExpandLimits(
   panels: { pageFile: string; expanded: boolean }[],
-  orderedPages: string[],
+  _orderedPages: string[],
   currentPage: string,
 ): { pageFile: string; expanded: boolean }[] {
-  const expandSet = new Set<string>();
-  expandSet.add(currentPage);
-
-  for (const page of orderedPages) {
-    if (expandSet.size >= MAX_EXPANDED_PANELS) break;
-    expandSet.add(page);
-  }
-
-  return panels.map((panel) => ({
+  const withCurrent = panels.map((panel) => ({
     ...panel,
-    expanded: expandSet.has(panel.pageFile),
+    expanded: panel.pageFile === currentPage ? true : panel.expanded,
   }));
+  return enforceExpandedLimit(withCurrent, currentPage);
 }
 
 /** Keep desired expand state; main page stays open; shrink extras past the limit. */
@@ -344,7 +332,7 @@ export function enforceExpandedLimit(
 export function movePanelToFront(
   panels: { pageFile: string; expanded: boolean }[],
   pageFile: string,
-  expanded = true,
+  expanded = false,
 ): { pageFile: string; expanded: boolean }[] {
   const existing = panels.find((p) => p.pageFile === pageFile);
   const rest = panels.filter((p) => p.pageFile !== pageFile);
@@ -416,24 +404,15 @@ export function buildPanelsPreservingMainPosition(
     pageOrder.push(otherPages[otherIdx++]);
   }
 
-  prunePageExpandMemory(orderedPages);
-
   const panels = pageOrder.map((pageFile) => {
     const existing = existingMap.get(pageFile);
-    return {
-      pageFile,
-      expanded: resolvePanelExpanded(
-        pageFile,
-        currentPage,
-        existing !== undefined,
-        existing?.expanded,
-      ),
-    };
+    if (existing) {
+      return { pageFile, expanded: existing.expanded };
+    }
+    return { pageFile, expanded: false };
   });
 
-  const result = enforceExpandedLimit(panels, currentPage);
-  syncPanelExpandMemory(result);
-  return result;
+  return enforceExpandedLimit(panels, currentPage);
 }
 
 export function shrinkFarthestExpanded(

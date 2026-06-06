@@ -7,7 +7,6 @@ import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus } from '../lib/saveProject';
 import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave } from '../lib/saveProject';
 import { importImageFromComputer, importImageFromClipboardSource, type ImportImageResult } from '../lib/importImage';
-import { clearPageExpandMemory } from '../lib/pageExpandMemory';
 import { clearPageScrollMemory } from '../lib/pageScrollMemory';
 import {
   createDefaultPageData,
@@ -130,7 +129,6 @@ export function useAppStore() {
     cancelRemoteAutoSave();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
-    clearPageExpandMemory();
     setDirty(false);
     setSaveStatus('idle');
     setSaveError(null);
@@ -146,7 +144,6 @@ export function useAppStore() {
     cancelRemoteAutoSave();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
-    clearPageExpandMemory();
     setDirty(false);
     setSaveStatus('idle');
     setSaveError(null);
@@ -455,7 +452,6 @@ export function useAppStore() {
       try {
         revokeProjectImageUrls(project);
         clearPageScrollMemory();
-        clearPageExpandMemory();
         const reloaded = await loadRemoteDocument(project.remoteDocId);
         setDirty(false);
         setSaveStatus('idle');
@@ -477,7 +473,6 @@ export function useAppStore() {
     try {
       revokeProjectImageUrls(project);
       clearPageScrollMemory();
-      clearPageExpandMemory();
       const reloaded = await loadFromDirectoryHandle(project.folderHandle);
       setDirty(false);
       setSaveStatus('idle');

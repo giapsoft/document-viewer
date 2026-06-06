@@ -1,10 +1,5 @@
 import type { PageData, RelationsFile } from '../types';
 import { enforceExpandedLimit } from './index';
-import {
-  prunePageExpandMemory,
-  resolvePanelExpanded,
-  syncPanelExpandMemory,
-} from './pageExpandMemory';
 
 export function getStoredPageOrder(
   relations: RelationsFile,
@@ -86,24 +81,15 @@ export function buildPanelsInSidebarOrder(
   const sorted = orderPageFilesBySidebar(visiblePageFiles, sidebarOrder);
   const existingMap = new Map(existingPanels.map((p) => [p.pageFile, p]));
 
-  prunePageExpandMemory(sorted);
-
   const panels = sorted.map((pageFile) => {
     const existing = existingMap.get(pageFile);
-    return {
-      pageFile,
-      expanded: resolvePanelExpanded(
-        pageFile,
-        currentPage,
-        existing !== undefined,
-        existing?.expanded,
-      ),
-    };
+    if (existing) {
+      return { pageFile, expanded: existing.expanded };
+    }
+    return { pageFile, expanded: false };
   });
 
-  const result = enforceExpandedLimit(panels, currentPage);
-  syncPanelExpandMemory(result);
-  return result;
+  return enforceExpandedLimit(panels, currentPage);
 }
 
 export function reorderPanelsBySidebar(
