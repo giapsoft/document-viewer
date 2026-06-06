@@ -1,4 +1,4 @@
-import type { Component, LoadedProject } from '../types';
+import type { Component, DocComment, LoadedProject } from '../types';
 import { removeCommentsForComponent } from './comments';
 import { removeMemberIdsFromGroups } from './groupRelations';
 import { buildIndex } from './index';
@@ -10,6 +10,17 @@ export function rebuildProject(project: LoadedProject): LoadedProject {
     ...project,
     index,
     warnings: [...warnings],
+  };
+}
+
+/** Comment edits do not affect the project index — avoid a full rebuild. */
+export function updateProjectComments(
+  project: LoadedProject,
+  comments: DocComment[],
+): LoadedProject {
+  return {
+    ...project,
+    relations: { ...project.relations, comments },
   };
 }
 

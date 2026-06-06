@@ -3,7 +3,13 @@ import type { SaveStatus } from './saveProject';
 const REMOTE_SAVE_DEBOUNCE_MS = 800;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let saveInFlight = false;
 let statusListener: ((status: SaveStatus, message?: string) => void) | null = null;
+
+/** True while a debounced remote save is queued or uploading. */
+export function isRemoteAutoSaveBusy(): boolean {
+  return saveTimer !== null || saveInFlight;
+}
 
 export function setRemoteSaveStatusListener(
   listener: ((status: SaveStatus, message?: string) => void) | null,
@@ -27,6 +33,7 @@ export function scheduleRemoteAutoSave(
 
   saveTimer = setTimeout(() => {
     saveTimer = null;
+    saveInFlight = true;
     notify('saving');
     void save()
       .then((result) => {
@@ -46,6 +53,9 @@ export function scheduleRemoteAutoSave(
       .catch((err) => {
         const message = err instanceof Error ? err.message : 'Could not save document';
         notify('error', message);
+      })
+      .finally(() => {
+        saveInFlight = false;
       });
   }, REMOTE_SAVE_DEBOUNCE_MS);
 }

@@ -35,6 +35,7 @@ import {
   cancelRemoteAutoSave,
   scheduleRemoteAutoSave,
   setRemoteSaveStatusListener,
+  isRemoteAutoSaveBusy,
 } from '../lib/remoteAutoSave';
 import { isRemoteVersionStale } from '../lib/remoteConflict';
 import { defaultRemoteTitle } from '../lib/projectBundle';
@@ -734,8 +735,15 @@ export function useAppStore() {
         remoteSync: saveResult.remoteSync,
         remoteUpdatedAt: saveResult.remoteUpdatedAt,
       });
+      const commentsChanged =
+        nextProject.relations.comments !== project.relations.comments;
+      const syncChanged =
+        nextProject.remoteSync !== project.remoteSync ||
+        nextProject.remoteUpdatedAt !== project.remoteUpdatedAt;
       projectRef.current = nextProject;
-      dispatch({ type: 'PATCH_PROJECT', project: nextProject });
+      if (commentsChanged || syncChanged) {
+        dispatch({ type: 'PATCH_PROJECT', project: nextProject });
+      }
 
       if (saveResult.skippedUpload) {
         return { ok: true, skipped: true };
@@ -763,6 +771,7 @@ export function useAppStore() {
     const pullRemoteChanges = async () => {
       const current = projectRef.current;
       if (!current?.remoteDocId || cancelled) return;
+      if (dirtyRef.current && isRemoteAutoSaveBusy()) return;
 
       try {
         if (dirtyRef.current) {
@@ -770,6 +779,7 @@ export function useAppStore() {
           const commentMerged = await syncRemoteComments(current);
           if (commentMerged && !cancelled) {
             const next = applyRemoteCommentSync(projectRef.current ?? current, commentMerged);
+            if (next === projectRef.current) return;
             projectRef.current = next;
             dispatch({ type: 'PATCH_PROJECT', project: next });
           }

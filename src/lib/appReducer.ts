@@ -6,6 +6,7 @@ import {
   appendImageComponent,
   deleteComponentFromProject,
   rebuildProject,
+  updateProjectComments,
   findComponent,
 } from './projectMutations';
 import {
@@ -51,12 +52,23 @@ import { getOrCreateCommentAuthorId, getStoredCommentUsername } from './commentS
 
 function applyExitLinkMode(state: AppState): AppState {
   if (!state.linkMode) return state;
-  return {
+
+  const focusId = state.linkFocusComponentId;
+  let nextState: AppState = {
     ...state,
     linkMode: false,
     linkTargetGroupIndex: null,
     linkFocusComponentId: null,
   };
+
+  if (!focusId || !state.project) return nextState;
+
+  const pageFile =
+    state.project.index.componentToPage.get(focusId) ?? state.currentPage;
+  if (!pageFile) return nextState;
+
+  const applied = applyComponentSelection(nextState, focusId, pageFile);
+  return applied ? { ...nextState, ...applied } : nextState;
 }
 
 function applyEnterLinkMode(state: AppState): AppState {
@@ -773,10 +785,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         state.commentAuthorId,
         action.body,
       );
-      const project = rebuildProject({
-        ...state.project,
-        relations: { ...state.project.relations, comments },
-      });
+      const project = updateProjectComments(state.project, comments);
       const newId = comments[comments.length - 1]?.id ?? null;
       return {
         ...state,
@@ -795,10 +804,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         state.commentAuthorId,
         action.body,
       );
-      const project = rebuildProject({
-        ...state.project,
-        relations: { ...state.project.relations, comments },
-      });
+      const project = updateProjectComments(state.project, comments);
       const newId = comments[comments.length - 1]?.id ?? null;
       return { ...state, project, focusedCommentId: newId };
     }
@@ -812,10 +818,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         state.commentAuthorId,
         state.commentUsername,
       );
-      const project = rebuildProject({
-        ...state.project,
-        relations: { ...state.project.relations, comments },
-      });
+      const project = updateProjectComments(state.project, comments);
       return { ...state, project };
     }
 
@@ -827,10 +830,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         state.commentAuthorId,
         state.commentUsername,
       );
-      const project = rebuildProject({
-        ...state.project,
-        relations: { ...state.project.relations, comments },
-      });
+      const project = updateProjectComments(state.project, comments);
       return { ...state, project };
     }
 
@@ -843,10 +843,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         state.commentUsername,
         action.body,
       );
-      const project = rebuildProject({
-        ...state.project,
-        relations: { ...state.project.relations, comments },
-      });
+      const project = updateProjectComments(state.project, comments);
       return { ...state, project };
     }
 
@@ -859,14 +856,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         state.commentAuthorId,
         state.commentUsername,
       );
-      const afterIds = new Set(comments.map((comment) => comment.id));
+      const beforeById = new Map(before.map((comment) => [comment.id, comment]));
       const removedIds = new Set(
-        before.filter((comment) => !afterIds.has(comment.id)).map((comment) => comment.id),
+        comments
+          .filter(
+            (comment) =>
+              comment.deletedAt != null &&
+              beforeById.get(comment.id)?.deletedAt == null,
+          )
+          .map((comment) => comment.id),
       );
-      const project = rebuildProject({
-        ...state.project,
-        relations: { ...state.project.relations, comments },
-      });
+      const project = updateProjectComments(state.project, comments);
       return {
         ...state,
         project,

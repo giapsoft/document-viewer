@@ -40,6 +40,22 @@ import { pickNewerRemoteUpdatedAt } from './remoteConflict';
 
 export type { RemoteDocumentMeta };
 
+function remoteSyncEqual(
+  a: LoadedProject['remoteSync'],
+  b: LoadedProject['remoteSync'],
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.format !== b.format || a.bundleHash !== b.bundleHash) return false;
+  const aHashes = a.fileHashes ?? new Map();
+  const bHashes = b.fileHashes ?? new Map();
+  if (aHashes.size !== bHashes.size) return false;
+  for (const [path, hash] of aHashes) {
+    if (bHashes.get(path) !== hash) return false;
+  }
+  return true;
+}
+
 /** Apply a comment-only pull onto the latest in-memory project (avoids stale snapshot races). */
 export function applyRemoteCommentSync(
   latest: LoadedProject,
@@ -48,6 +64,18 @@ export function applyRemoteCommentSync(
   const syncedComments = synced.relations.comments ?? [];
   const latestComments = latest.relations.comments ?? [];
   const commentsChanged = !commentsEqual(latestComments, syncedComments);
+  const remoteUpdatedAt =
+    pickNewerRemoteUpdatedAt(latest.remoteUpdatedAt, synced.remoteUpdatedAt) ??
+    latest.remoteUpdatedAt;
+  const remoteSync = synced.remoteSync ?? latest.remoteSync;
+
+  if (
+    !commentsChanged &&
+    remoteUpdatedAt === latest.remoteUpdatedAt &&
+    remoteSyncEqual(remoteSync, latest.remoteSync)
+  ) {
+    return latest;
+  }
 
   return {
     ...latest,
@@ -55,10 +83,8 @@ export function applyRemoteCommentSync(
       ...latest.relations,
       comments: commentsChanged ? syncedComments : latestComments,
     },
-    remoteSync: synced.remoteSync ?? latest.remoteSync,
-    remoteUpdatedAt:
-      pickNewerRemoteUpdatedAt(latest.remoteUpdatedAt, synced.remoteUpdatedAt) ??
-      latest.remoteUpdatedAt,
+    remoteSync,
+    remoteUpdatedAt,
   };
 }
 
@@ -410,10 +436,10 @@ async function mergeRemoteCommentsIntoProject(
   if (commentsEqual(localComments, mergedComments)) {
     return project;
   }
-  return rebuildProject({
+  return {
     ...project,
     relations: { ...project.relations, comments: mergedComments },
-  });
+  };
 }
 
 export type SaveRemoteRelationsResult = {
@@ -540,13 +566,9 @@ export async function syncRemoteComments(
       // keep previous timestamp
     }
 
-    const merged = rebuildProject({
+    return {
       ...project,
       relations: { ...project.relations, comments: mergedComments },
-    });
-
-    return {
-      ...merged,
       remoteUpdatedAt,
       remoteSync: {
         ...(project.remoteSync ?? { format: 'files' as const }),
