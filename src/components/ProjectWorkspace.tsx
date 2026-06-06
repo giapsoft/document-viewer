@@ -55,8 +55,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     saveToRemote,
     deleteRemoteLink,
     closeProject,
-    suggestNewPageFileName,
-    normalizePageFileName,
+    suggestNewPageName,
     normalizePageName,
   } = store;
 
@@ -191,8 +190,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
           pinnedPages={pinnedPages}
           onTogglePinPage={togglePinPage}
           onAppendClipboardImage={appendClipboardImageToPage}
-          suggestNewPageFileName={suggestNewPageFileName}
-          normalizePageFileName={normalizePageFileName}
+          suggestNewPageName={suggestNewPageName}
           normalizePageName={normalizePageName}
         />
 

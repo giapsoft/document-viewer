@@ -7,26 +7,45 @@ import {
   sortPagesByOrder,
 } from './pageOrder';
 import { rebuildProject } from './projectMutations';
-import { createComponentId, resolvePageId, resolvePageName } from './pageIds';
+import { castPageId, createComponentId, resolvePageId, resolvePageName } from './pageIds';
 import { buildPanelsForPageContext, refreshPanelsWithPins, removePinnedPage } from './pagePins';
 import { getOrphanedPageAssets } from './pageFileOps';
 
-const PAGE_FILE_RE = /^[a-z0-9][a-z0-9._-]*\.p$/i;
-
-export function normalizePageFileName(input: string): string | null {
-  let name = input.trim().replace(/[<>:"|?*\x00-\x1f]/g, '-');
-  if (!name) return null;
-  if (!/\.p$/i.test(name)) {
-    name = `${name}.p`;
+function uniquePageFileName(baseId: string, existingFiles: Iterable<string>): string {
+  const taken = new Set(existingFiles);
+  let pageId = baseId;
+  let n = 2;
+  while (taken.has(`${pageId}.p`)) {
+    pageId = `${baseId}${n}`;
+    n += 1;
   }
-  if (!PAGE_FILE_RE.test(name)) return null;
-  return name;
+  return `${pageId}.p`;
 }
 
-export function suggestNewPageFileName(existingFiles: string[]): string {
+/** Map a free-form page name to disk file + display label. */
+export function resolveNewPageFromName(
+  input: string,
+  existingFiles: string[],
+): { fileName: string; pageName: string } | null {
+  if (!input.trim()) return null;
+
+  const pageName = input;
+  let baseId = castPageId(pageName);
+  if (!baseId) baseId = 'page';
+
+  const fileName = uniquePageFileName(baseId, existingFiles);
+  return { fileName, pageName };
+}
+
+export function suggestNewPageName(existingFiles: string[]): string {
   let n = 1;
-  while (existingFiles.includes(`page-${n}.p`)) n += 1;
-  return `page-${n}.p`;
+  while (n < 10_000) {
+    const pageName = `Page ${n}`;
+    const resolved = resolveNewPageFromName(pageName, existingFiles);
+    if (resolved && !existingFiles.includes(resolved.fileName)) return pageName;
+    n += 1;
+  }
+  return 'New page';
 }
 
 export { normalizePageName } from './pageIds';
@@ -82,10 +101,18 @@ export function renamePageNameInProject(
 export function createPageInProject(
   project: LoadedProject,
   fileName: string,
+  displayPageName?: string,
 ): LoadedProject | null {
   if (project.pages.some((p) => p.fileName === fileName)) return null;
 
-  const page = createDefaultPageData(fileName, project.relations.pageNames);
+  const pageNames = { ...(project.relations.pageNames ?? {}) };
+  const pageId = resolvePageId(fileName);
+  const trimmedDisplay = displayPageName?.trim();
+  if (trimmedDisplay && trimmedDisplay !== pageId) {
+    pageNames[fileName] = displayPageName!;
+  }
+
+  const page = createDefaultPageData(fileName, pageNames);
   const pageOrder = appendPageToOrder(
     getStoredPageOrder(
       project.relations,
@@ -98,7 +125,7 @@ export function createPageInProject(
   return rebuildProject({
     ...project,
     pages,
-    relations: { ...project.relations, pageOrder },
+    relations: { ...project.relations, pageNames, pageOrder },
   });
 }
 
@@ -183,9 +210,13 @@ export function applyRenamePageState(
   return { ...state, project };
 }
 
-export function applyCreatePageState(state: AppState, fileName: string): AppState {
+export function applyCreatePageState(
+  state: AppState,
+  fileName: string,
+  pageName?: string,
+): AppState {
   if (!state.project) return state;
-  const project = createPageInProject(state.project, fileName);
+  const project = createPageInProject(state.project, fileName, pageName);
   if (!project) return state;
 
   const nextState: AppState = {

@@ -596,7 +596,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
 
     case 'CREATE_PAGE':
-      return applyCreatePageState(state, action.fileName);
+      return applyCreatePageState(state, action.fileName, action.pageName);
 
     case 'RENAME_PAGE':
       return applyRenamePageState(state, action.fileName, action.newPageName);

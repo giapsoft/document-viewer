@@ -28,8 +28,7 @@ interface SidebarProps {
   pinnedPages: string[];
   onTogglePinPage: (fileName: string) => void;
   onAppendClipboardImage: (fileName: string) => Promise<{ ok: boolean; error?: string }>;
-  suggestNewPageFileName: () => string;
-  normalizePageFileName: (input: string) => string | null;
+  suggestNewPageName: () => string;
   normalizePageName: (input: string) => string | null;
 }
 
@@ -47,8 +46,7 @@ export function Sidebar({
   pinnedPages,
   onTogglePinPage,
   onAppendClipboardImage,
-  suggestNewPageFileName,
-  normalizePageFileName,
+  suggestNewPageName,
   normalizePageName,
 }: SidebarProps) {
   const [dialog, setDialog] = useState<
@@ -243,22 +241,13 @@ export function Sidebar({
       {dialog?.type === 'create' && (
         <PageFileDialog
           title="New page"
-          label="File name"
-          initialValue={suggestNewPageFileName()}
-          hint="Creates docs/name.p (creates docs/ if needed). pageId = name without .p. Display name defaults to pageId."
+          label="Page name"
+          initialValue={suggestNewPageName()}
+          hint="Any name is fine. pageId is derived automatically (a-z, 0-9)."
           confirmLabel="Create"
           onClose={() => setDialog(null)}
           onConfirm={(raw) => {
-            const fileName = normalizePageFileName(raw);
-            if (!fileName) {
-              setActionError('Invalid name. Use letters, numbers, dots, hyphens (e.g. my-page.p).');
-              return;
-            }
-            if (pages.some((p) => p.fileName === fileName)) {
-              setActionError('A page with that file name already exists.');
-              return;
-            }
-            void runAction(() => onCreatePage(fileName));
+            void runAction(() => onCreatePage(raw));
           }}
         />
       )}

@@ -39,13 +39,12 @@ export function PageFileDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = value.trim();
-    if (!trimmed) {
+    if (!value.trim()) {
       setError('Enter a page name.');
       return;
     }
     setError(null);
-    onConfirm(trimmed);
+    onConfirm(value);
   };
 
   return (
@@ -100,7 +99,7 @@ export function PageFileDialog({
               className="page-file-dialog-input"
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder="my-page.p"
+              placeholder="Page name"
               autoFocus
             />
           </label>

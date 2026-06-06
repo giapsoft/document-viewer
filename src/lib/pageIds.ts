@@ -9,6 +9,11 @@ export function resolvePageId(fileName: string): string {
   return fileName.replace(/\.p$/i, '');
 }
 
+/** Derive a safe page id from arbitrary user input (lowercase a-z0-9 only). */
+export function castPageId(input: string): string {
+  return input.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 /** Display label from relations.pageNames[fileName], default = pageId. */
 export function resolvePageName(
   fileName: string,
@@ -23,10 +28,10 @@ export function fileStemFromPageFile(fileName: string): string {
   return fileName.replace(/\.p$/i, '');
 }
 
+/** Display page name — any text; only rejects blank input. */
 export function normalizePageName(input: string): string | null {
-  const name = input.trim();
-  if (!name) return null;
-  return name;
+  if (!input.trim()) return null;
+  return input;
 }
 
 /** True if id is already a global id (contains `.`). */

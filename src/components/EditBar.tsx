@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import { findComponent } from '../lib/projectMutations';
 import type { ImportImageResult } from '../lib/importImage';
+import { ContentEditorDialog, isContentEditableType } from './ContentEditorDialog';
 import { ImagePickerDialog } from './ImagePickerDialog';
 import { ConfirmDialog } from './PageFileDialog';
 
@@ -130,6 +131,7 @@ function EditBarForm({
 }: EditBarFormProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
   const patch = (changes: Partial<Omit<Component, 'id'>>) => {
     onUpdate(pageFile, component.id, changes);
@@ -138,6 +140,15 @@ function EditBarForm({
   const imgFilename = component.content.trim();
   const imgLabel = imgFilename || 'select image';
   const mdContent = project.mdFiles.get(component.id) ?? '';
+  const contentEditable = isContentEditableType(component.type);
+  const fullscreenValue = component.type === 'md' ? mdContent : component.content;
+  const handleFullscreenChange = (value: string) => {
+    if (component.type === 'md') {
+      onUpdateMdContent(component.id, value);
+      return;
+    }
+    patch({ content: value });
+  };
 
   const listBadge =
     selection.matchingGroupIndices.length > 1 ? (
@@ -157,6 +168,16 @@ function EditBarForm({
           >
             ▶
           </button>
+          {contentEditable && (
+            <button
+              type="button"
+              className="edit-bar-icon-btn"
+              onClick={() => setFullscreenOpen(true)}
+              title="Full screen editor"
+            >
+              ⛶
+            </button>
+          )}
           <button
             type="button"
             className="edit-bar-collapsed-summary"
@@ -192,6 +213,16 @@ function EditBarForm({
               <ComponentIdHeader componentId={component.id} listBadge={listBadge} />
             </span>
             <div className="edit-bar-actions">
+              {contentEditable && (
+                <button
+                  type="button"
+                  className="edit-bar-icon-btn"
+                  onClick={() => setFullscreenOpen(true)}
+                  title="Full screen editor"
+                >
+                  ⛶
+                </button>
+              )}
               <button
                 type="button"
                 className="edit-bar-icon-btn"
@@ -296,6 +327,16 @@ function EditBarForm({
           onClose={() => setPickerOpen(false)}
           onImport={onImportImage}
           onImportFromClipboard={onImportImageFromClipboard}
+        />
+      )}
+
+      {fullscreenOpen && contentEditable && (
+        <ContentEditorDialog
+          componentId={component.id}
+          componentType={component.type}
+          value={fullscreenValue}
+          onChange={handleFullscreenChange}
+          onClose={() => setFullscreenOpen(false)}
         />
       )}
     </footer>

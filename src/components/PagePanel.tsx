@@ -3,6 +3,7 @@ import type { AppStyles, Component, LoadedProject, PageData, SelectionState } fr
 import { resolveComponentForDisplay, isTextType } from '../lib/componentDisplay';
 import { PageLabel } from './PageLabel';
 import { MarkdownPreview } from './MarkdownPreview';
+import { LINK_MODE_HIGHLIGHT } from '../lib/styles';
 import { scheduleScrollToComponent } from '../lib/scrollIntoContainer';
 import { getPageScrollTop, setPageScrollTop } from '../lib/pageScrollMemory';
 import {
@@ -108,7 +109,9 @@ export function ComponentBlock({
       ? styles.selectedComponent
       : highlightKind === 'related'
         ? styles.linkedComponent
-        : null;
+        : highlightKind === 'link'
+          ? LINK_MODE_HIGHLIGHT
+          : null;
   const statusStyle = styles.statuses[resolved.status];
 
   const shellStyle: CSSProperties = {

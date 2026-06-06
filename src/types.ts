@@ -177,7 +177,7 @@ export type AppAction =
       blob: Blob;
     }
   | { type: 'UPDATE_MD_CONTENT'; componentId: string; content: string }
-  | { type: 'CREATE_PAGE'; fileName: string }
+  | { type: 'CREATE_PAGE'; fileName: string; pageName?: string }
   | { type: 'RENAME_PAGE'; fileName: string; newPageName: string }
   | { type: 'DELETE_PAGE'; fileName: string }
   | { type: 'TOGGLE_PIN_PAGE'; pageFile: string }

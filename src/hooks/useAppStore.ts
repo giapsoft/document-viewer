@@ -8,9 +8,9 @@ import { clearPageExpandMemory } from '../lib/pageExpandMemory';
 import { clearPageScrollMemory } from '../lib/pageScrollMemory';
 import {
   createDefaultPageData,
-  normalizePageFileName,
   normalizePageName,
-  suggestNewPageFileName,
+  resolveNewPageFromName,
+  suggestNewPageName,
 } from '../lib/pageMutations';
 import { getOrphanedPageAssets } from '../lib/pageFileOps';
 import {
@@ -231,14 +231,26 @@ export function useAppStore() {
     return result;
   }, [dispatch]);
 
-  const createPage = useCallback(async (fileName: string): Promise<PageActionResult> => {
+  const createPage = useCallback(async (pageNameInput: string): Promise<PageActionResult> => {
     const project = projectRef.current;
     if (!project) {
       return { ok: false, error: 'No project is open.' };
     }
 
-    createDefaultPageData(fileName, project.relations.pageNames);
-    dispatch({ type: 'CREATE_PAGE', fileName });
+    const resolved = resolveNewPageFromName(
+      pageNameInput,
+      project.pages.map((p) => p.fileName),
+    );
+    if (!resolved) {
+      return { ok: false, error: 'Enter a page name.' };
+    }
+
+    createDefaultPageData(resolved.fileName, project.relations.pageNames);
+    dispatch({
+      type: 'CREATE_PAGE',
+      fileName: resolved.fileName,
+      pageName: resolved.pageName,
+    });
     return { ok: true };
   }, [dispatch]);
 
@@ -608,9 +620,8 @@ export function useAppStore() {
     reorderPages,
     togglePinPage,
     deletePage,
-    suggestNewPageFileName: () =>
-      suggestNewPageFileName(projectRef.current?.pages.map((p) => p.fileName) ?? []),
-    normalizePageFileName,
+    suggestNewPageName: () =>
+      suggestNewPageName(projectRef.current?.pages.map((p) => p.fileName) ?? []),
     normalizePageName,
   };
 }

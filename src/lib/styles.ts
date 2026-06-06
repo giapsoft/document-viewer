@@ -30,6 +30,13 @@ export const DEFAULT_STYLES: AppStyles = {
   },
 };
 
+/** Fixed highlight for components selected in link mode. */
+export const LINK_MODE_HIGHLIGHT = {
+  borderColor: '#E8590C',
+  borderWidth: '4px',
+  borderStyle: 'solid',
+} as const;
+
 export function mergeStyles(partial?: Partial<AppStyles> | null): AppStyles {
   if (!partial) return DEFAULT_STYLES;
 
