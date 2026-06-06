@@ -1,5 +1,6 @@
 import type { AppAction, AppState, PanelState } from '../types';
 import { shrinkFarthestExpanded } from '../lib/index';
+import { syncPanelExpandMemory } from './pageExpandMemory';
 import {
   updateComponentInProject,
   insertComponentRelative,
@@ -19,7 +20,6 @@ import {
   appendSelectionHistory,
   applyComponentSelection,
   buildSelectionForComponent,
-  cycleSelectionGroup,
   remapSelectionHistoryId,
   scrollToHistoryEntry,
 } from './selectionNavigation';
@@ -27,8 +27,55 @@ import {
   applyCreatePageState,
   applyDeletePageState,
   applyRenamePageState,
+  reorderPagesInProject,
 } from './pageMutations';
+import { reorderPanelsBySidebar } from './pageOrder';
 import { buildPanelsForPageContext, refreshPanelsWithPins, togglePinnedPage } from './pagePins';
+
+function applyExitLinkMode(state: AppState): AppState {
+  if (!state.linkMode) return state;
+  return {
+    ...state,
+    linkMode: false,
+    linkTargetGroupIndex: null,
+    linkFocusComponentId: null,
+  };
+}
+
+function applyEnterLinkMode(state: AppState): AppState {
+  if (state.linkMode || !state.project) return state;
+
+  let project = state.project;
+  const groups = project.relations.groups;
+  const selectedId = state.selection?.componentId ?? null;
+  let linkTargetGroupIndex: number | null = null;
+  let linkFocusComponentId: string | null = selectedId;
+
+  if (selectedId) {
+    const matching = getGroupIndicesForComponent(groups, selectedId);
+    if (matching.length > 0) {
+      linkTargetGroupIndex = matching[0];
+    } else {
+      const nextGroups = createGroup(groups, [selectedId]);
+      linkTargetGroupIndex = nextGroups.length - 1;
+      project = rebuildProject({
+        ...project,
+        relations: withRelationsGroups(project.relations, nextGroups),
+      });
+    }
+  } else {
+    linkFocusComponentId = null;
+  }
+
+  return {
+    ...state,
+    project,
+    linkMode: true,
+    linkTargetGroupIndex,
+    linkFocusComponentId,
+    selection: null,
+  };
+}
 
 export const initialAppState: AppState = {
   project: null,
@@ -121,29 +168,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         { componentId, pageFile },
       );
 
+      const shouldScrollSecondaryPanels = applied.selection.relatedIds.size > 1;
+
       return {
         ...state,
         ...applied,
         selectionHistory: history,
         selectionHistoryIndex: index,
         scrollToComponent: null,
-      };
-    }
-
-    case 'GO_PREV_GROUP':
-    case 'GO_NEXT_GROUP': {
-      if (state.linkMode || !state.project || !state.selection) return state;
-      const applied = cycleSelectionGroup(
-        state,
-        action.type === 'GO_PREV_GROUP' ? 'prev' : 'next',
-      );
-      if (!applied || !state.currentPage) return state;
-      return {
-        ...state,
-        ...applied,
-        currentPage: state.currentPage,
-        scrollToComponent: null,
-        selectionScrollNonce: state.selectionScrollNonce + 1,
+        selectionScrollNonce: shouldScrollSecondaryPanels
+          ? state.selectionScrollNonce + 1
+          : state.selectionScrollNonce,
       };
     }
 
@@ -237,15 +272,24 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         }
       }
 
+      syncPanelExpandMemory(panels);
       return { ...state, panels };
     }
 
     case 'REORDER_PANELS': {
-      const map = new Map(state.panels.map((p) => [p.pageFile, p]));
-      const panels = action.orderedPageFiles
-        .map((f) => map.get(f))
-        .filter((p): p is PanelState => !!p);
+      if (!state.project) return state;
+      const sidebarOrder = action.orderedPageFiles;
+      const panels = reorderPanelsBySidebar(state.panels, sidebarOrder);
       return { ...state, panels };
+    }
+
+    case 'REORDER_PAGES': {
+      if (!state.project) return state;
+      const project = reorderPagesInProject(state.project, action.orderedPageFiles);
+      if (!project) return state;
+      const sidebarOrder = project.relations.pageOrder ?? action.orderedPageFiles;
+      const panels = reorderPanelsBySidebar(state.panels, sidebarOrder);
+      return { ...state, project, panels };
     }
 
     case 'UPDATE_COMPONENT': {
@@ -266,7 +310,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           { ...state, project: rebuilt },
           newComponentId,
           pageFile,
-          selection.activeGroupIndex,
         );
         selection = remapped?.selection ?? selection;
       }
@@ -396,63 +439,30 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
-    case 'TOGGLE_LINK_MODE': {
-      const linkMode = !state.linkMode;
-      if (!linkMode) {
-        return {
-          ...state,
-          linkMode: false,
-          linkTargetGroupIndex: null,
-          linkFocusComponentId: null,
-        };
-      }
+    case 'TOGGLE_LINK_MODE':
+      return state.linkMode ? applyExitLinkMode(state) : applyEnterLinkMode(state);
 
-      if (!state.project) return state;
-
-      let project = state.project;
-      const groups = project.relations.groups;
-      const selectedId = state.selection?.componentId ?? null;
-      let linkTargetGroupIndex: number | null = null;
-      let linkFocusComponentId: string | null = selectedId;
-
-      if (selectedId) {
-        const matching = getGroupIndicesForComponent(groups, selectedId);
-        if (matching.length > 0) {
-          const active = state.selection?.activeGroupIndex ?? null;
-          linkTargetGroupIndex =
-            active !== null && matching.includes(active) ? active : matching[0];
-        } else {
-          const nextGroups = createGroup(groups, [selectedId]);
-          linkTargetGroupIndex = nextGroups.length - 1;
-          project = rebuildProject({
-            ...project,
-            relations: withRelationsGroups(project.relations, nextGroups),
-          });
-        }
-      } else {
-        linkFocusComponentId = null;
-      }
-
-      return {
-        ...state,
-        project,
-        linkMode: true,
-        linkTargetGroupIndex,
-        linkFocusComponentId,
-        selection: null,
-      };
-    }
+    case 'SET_LINK_MODE':
+      return action.enabled ? applyEnterLinkMode(state) : applyExitLinkMode(state);
 
     case 'DELETE_ACTIVE_GROUP': {
       if (!state.project) return state;
 
-      const groupIndex = state.linkMode
-        ? state.linkTargetGroupIndex
-        : (state.selection?.activeGroupIndex ?? null);
+      let groups = state.project.relations.groups;
 
-      if (groupIndex === null) return state;
-
-      const groups = removeGroupAtIndex(state.project.relations.groups, groupIndex);
+      if (state.linkMode) {
+        if (state.linkTargetGroupIndex === null) return state;
+        groups = removeGroupAtIndex(groups, state.linkTargetGroupIndex);
+      } else if (!state.selection?.matchingGroupIndices.length) {
+        return state;
+      } else {
+        const indicesToRemove = [...state.selection.matchingGroupIndices].sort(
+          (a, b) => b - a,
+        );
+        for (const groupIndex of indicesToRemove) {
+          groups = removeGroupAtIndex(groups, groupIndex);
+        }
+      }
       const project = rebuildProject({
         ...state.project,
         relations: withRelationsGroups(state.project.relations, groups),

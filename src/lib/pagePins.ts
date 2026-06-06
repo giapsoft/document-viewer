@@ -1,5 +1,6 @@
 import type { AppState, PanelState, RelationsFile } from '../types';
 import { buildPanelsForPages } from './index';
+import { getStoredPageOrder, orderPageFilesBySidebar } from './pageOrder';
 import { buildSelectionForComponent } from './selectionNavigation';
 
 export function getPinnedPages(relations: RelationsFile): string[] {
@@ -24,21 +25,20 @@ export function removePinnedPage(
   return (pinnedPages ?? []).filter((f) => f !== fileName);
 }
 
-/** Append pinned pages (except current) that are not already in the list. */
+/** Merge pinned pages, then sort everything by sidebar order. */
 export function mergePinnedPagesIntoOrder(
   orderedPages: string[],
-  currentPage: string,
+  _currentPage: string,
   pinnedPages: string[],
   validPageFiles: Set<string>,
+  sidebarOrder: string[],
 ): string[] {
-  const result = [...orderedPages];
-  const seen = new Set(result);
+  const combined = new Set(orderedPages);
   for (const pin of pinnedPages) {
-    if (!validPageFiles.has(pin) || pin === currentPage || seen.has(pin)) continue;
-    result.push(pin);
-    seen.add(pin);
+    if (!validPageFiles.has(pin)) continue;
+    combined.add(pin);
   }
-  return result;
+  return orderPageFilesBySidebar(combined, sidebarOrder);
 }
 
 export function validPageFileSet(state: AppState): Set<string> {
@@ -53,11 +53,16 @@ export function buildPanelsForPageContext(
 
   const validFiles = validPageFileSet(state);
   const pinned = getPinnedPages(state.project.relations);
+  const sidebarOrder = getStoredPageOrder(
+    state.project.relations,
+    state.project.pages.map((p) => p.fileName),
+  );
   const ordered = mergePinnedPagesIntoOrder(
     [currentPage],
     currentPage,
     pinned,
     validFiles,
+    sidebarOrder,
   );
   return buildPanelsForPages(ordered, currentPage);
 }
@@ -74,7 +79,6 @@ export function refreshPanelsWithPins(state: AppState): PanelState[] | null {
       state,
       state.selection.componentId,
       pageFile,
-      state.selection.activeGroupIndex,
     );
     return applied?.panels ?? null;
   }

@@ -4,6 +4,7 @@ import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus } from '../lib/saveProject';
 import { pickSaveFolder, saveProjectToFolder } from '../lib/saveProject';
 import { importImageFromComputer, importImageFromClipboardSource, type ImportImageResult } from '../lib/importImage';
+import { clearPageExpandMemory } from '../lib/pageExpandMemory';
 import { clearPageScrollMemory } from '../lib/pageScrollMemory';
 import {
   createDefaultPageData,
@@ -38,10 +39,12 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'INSERT_COMPONENT',
   'APPEND_IMAGE_COMPONENT',
   'TOGGLE_LINK_MODE',
+  'SET_LINK_MODE',
   'DELETE_ACTIVE_GROUP',
   'TOGGLE_LINK_COMPONENT',
   'CREATE_PAGE',
   'RENAME_PAGE',
+  'REORDER_PAGES',
   'DELETE_PAGE',
   'TOGGLE_PIN_PAGE',
   'DELETE_COMPONENT',
@@ -79,6 +82,7 @@ export function useAppStore() {
   const setProject = useCallback((project: LoadedProject) => {
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
+    clearPageExpandMemory();
     setDirty(false);
     setSaveStatus('idle');
     setSaveError(null);
@@ -93,6 +97,7 @@ export function useAppStore() {
   const closeProject = useCallback(() => {
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
+    clearPageExpandMemory();
     setDirty(false);
     setSaveStatus('idle');
     setSaveError(null);
@@ -182,6 +187,13 @@ export function useAppStore() {
     dispatch({ type: 'TOGGLE_LINK_MODE' });
   }, [dispatch]);
 
+  const setLinkMode = useCallback(
+    (enabled: boolean) => {
+      dispatch({ type: 'SET_LINK_MODE', enabled });
+    },
+    [dispatch],
+  );
+
   const deleteActiveGroup = useCallback(() => {
     dispatch({ type: 'DELETE_ACTIVE_GROUP' });
   }, [dispatch]);
@@ -199,14 +211,6 @@ export function useAppStore() {
 
   const goNextSelection = useCallback(() => {
     dispatch({ type: 'GO_NEXT_SELECTION' });
-  }, [dispatch]);
-
-  const goPrevGroup = useCallback(() => {
-    dispatch({ type: 'GO_PREV_GROUP' });
-  }, [dispatch]);
-
-  const goNextGroup = useCallback(() => {
-    dispatch({ type: 'GO_NEXT_GROUP' });
   }, [dispatch]);
 
   const importImage = useCallback(async (): Promise<ImportImageResult> => {
@@ -255,6 +259,13 @@ export function useAppStore() {
 
       dispatch({ type: 'RENAME_PAGE', fileName, newPageName });
       return { ok: true };
+    },
+    [dispatch],
+  );
+
+  const reorderPages = useCallback(
+    (orderedPageFiles: string[]) => {
+      dispatch({ type: 'REORDER_PAGES', orderedPageFiles });
     },
     [dispatch],
   );
@@ -341,6 +352,7 @@ export function useAppStore() {
       try {
         revokeProjectImageUrls(project);
         clearPageScrollMemory();
+        clearPageExpandMemory();
         const reloaded = await loadRemoteDocument(project.remoteDocId);
         setDirty(false);
         setSaveStatus('idle');
@@ -362,6 +374,7 @@ export function useAppStore() {
     try {
       revokeProjectImageUrls(project);
       clearPageScrollMemory();
+      clearPageExpandMemory();
       const reloaded = await loadFromDirectoryHandle(project.folderHandle);
       setDirty(false);
       setSaveStatus('idle');
@@ -582,17 +595,17 @@ export function useAppStore() {
     insertComponentBelow,
     deleteComponent,
     toggleLinkMode,
+    setLinkMode,
     deleteActiveGroup,
     toggleLinkComponent,
     goBackSelection,
     goNextSelection,
-    goPrevGroup,
-    goNextGroup,
     importImage,
     importImageFromClipboard: importImageFromClipboardAction,
     appendClipboardImageToPage,
     createPage,
     renamePage,
+    reorderPages,
     togglePinPage,
     deletePage,
     suggestNewPageFileName: () =>

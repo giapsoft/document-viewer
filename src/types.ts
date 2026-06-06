@@ -13,6 +13,8 @@ export interface RelationsFile {
   pageNames?: Record<string, string>;
   /** Page files always shown as secondary panels when not the main page */
   pinnedPages?: string[];
+  /** Sidebar / panel display order (page file names) */
+  pageOrder?: string[];
   groups: string[][];
 }
 
@@ -147,6 +149,7 @@ export type AppAction =
   | { type: 'CLEAR_SELECTION' }
   | { type: 'TOGGLE_PANEL'; pageFile: string }
   | { type: 'REORDER_PANELS'; orderedPageFiles: string[] }
+  | { type: 'REORDER_PAGES'; orderedPageFiles: string[] }
   | {
       type: 'UPDATE_COMPONENT';
       pageFile: string;
@@ -160,10 +163,9 @@ export type AppAction =
       position: 'above' | 'below';
     }
   | { type: 'TOGGLE_LINK_MODE' }
+  | { type: 'SET_LINK_MODE'; enabled: boolean }
   | { type: 'DELETE_ACTIVE_GROUP' }
   | { type: 'TOGGLE_LINK_COMPONENT'; componentId: string; pageFile: string }
-  | { type: 'GO_PREV_GROUP' }
-  | { type: 'GO_NEXT_GROUP' }
   | { type: 'GO_BACK_SELECTION' }
   | { type: 'GO_NEXT_SELECTION' }
   | { type: 'ADD_IMAGE'; filename: string; objectUrl: string; blob: Blob }

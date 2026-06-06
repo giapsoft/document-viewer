@@ -1,5 +1,10 @@
 import type { Component, PageData, ProjectIndex, RelationsFile } from '../types';
 import { getGroupIndicesForComponent } from './groupRelations';
+import {
+  prunePageExpandMemory,
+  resolvePanelExpanded,
+  syncPanelExpandMemory,
+} from './pageExpandMemory';
 
 export function getRelatedIdsForGroup(
   componentId: string,
@@ -9,6 +14,189 @@ export function getRelatedIdsForGroup(
     return new Set([componentId]);
   }
   return new Set(group);
+}
+
+/** Page id prefix from component id, e.g. `user-stories.l2` → `user-stories`. */
+export function getPageIdPrefix(componentId: string): string {
+  const dot = componentId.indexOf('.');
+  return dot >= 0 ? componentId.slice(0, dot) : componentId;
+}
+
+/** Same-page components cannot bridge into new groups (except the selected id itself). */
+export function canBridgeAsLink(componentId: string, selectedId: string): boolean {
+  if (componentId === selectedId) return true;
+  return getPageIdPrefix(componentId) !== getPageIdPrefix(selectedId);
+}
+
+/** Only the selected id is kept from its page; other same-page members are omitted. */
+export function shouldIncludeInLinks(componentId: string, selectedId: string): boolean {
+  if (componentId === selectedId) return true;
+  return getPageIdPrefix(componentId) !== getPageIdPrefix(selectedId);
+}
+
+function pageHasLinkedMembers(page: string, memberOrder: string[]): boolean {
+  return memberOrder.some((id) => getPageIdPrefix(id) === page);
+}
+
+function countGroupMembersOnPageInLinks(
+  group: string[],
+  page: string,
+  links: Set<string>,
+  selectedId: string,
+): number {
+  return group.filter(
+    (member) =>
+      getPageIdPrefix(member) === page &&
+      (links.has(member) || member === selectedId),
+  ).length;
+}
+
+/**
+ * Transitive link closure from `selectedId`.
+ * - Phase 1: merge every group that contains `selectedId`.
+ * - After phase 1: lock the selected page and any page that contributed multiple
+ *   ids in phase 1 (hub children stay stable).
+ * - Phase 2+: merge when a bridge-eligible member intersects `links`. A member
+ *   joins via a cross-page anchor in its group, or as a same-page batch when
+ *   exactly one linked anchor on that page exists in the group.
+ * - Further expansion to a page already in `links` is allowed from phase-1 pages,
+ *   or from pages that originally opened that page (prevents sideways story→story
+ *   hops while keeping task→story→media chains).
+ * - Same-page siblings of the selected id are omitted and cannot bridge.
+ */
+export function getLinkedComponentIds(
+  selectedId: string,
+  groups: string[][],
+  excludes: Iterable<string> = [],
+): { links: Set<string>; memberOrder: string[] } {
+  const excludeSet = new Set(excludes);
+  const selectedPage = getPageIdPrefix(selectedId);
+  const remaining = groups.map((group) => [...group]);
+  const links = new Set<string>();
+  const memberOrder: string[] = [];
+  const lockedPages = new Set<string>();
+  const phase1Pages = new Set<string>();
+  const firstHopPages = new Map<string, Set<string>>();
+
+  const canUseAsBridge = (id: string) =>
+    links.has(id) && canBridgeAsLink(id, selectedId);
+
+  const recordFirstHop = (page: string, anchorPage: string) => {
+    const hops = firstHopPages.get(page) ?? new Set<string>();
+    hops.add(anchorPage);
+    firstHopPages.set(page, hops);
+  };
+
+  const canExpandToPage = (page: string, anchorPage: string) => {
+    if (!pageHasLinkedMembers(page, memberOrder)) return true;
+    if (phase1Pages.has(page)) return false;
+    if (phase1Pages.has(anchorPage)) return true;
+
+    const hops = firstHopPages.get(page);
+    if (!hops) return true;
+    return hops.has(anchorPage);
+  };
+
+  const pickAnchor = (
+    memberId: string,
+    group: string[],
+    anchors: string[],
+    touchedInMerge: Set<string>,
+  ): string | null => {
+    const page = getPageIdPrefix(memberId);
+    const crossPageAnchors = anchors.filter(
+      (anchor) => getPageIdPrefix(anchor) !== page,
+    );
+    if (crossPageAnchors.length > 0) return crossPageAnchors[0];
+
+    if (
+      !pageHasLinkedMembers(page, memberOrder) &&
+      !touchedInMerge.has(page) &&
+      countGroupMembersOnPageInLinks(group, page, links, selectedId) === 1
+    ) {
+      return (
+        anchors.find((anchor) => getPageIdPrefix(anchor) === page) ?? null
+      );
+    }
+
+    return null;
+  };
+
+  const mergeGroup = (group: string[], phase1: boolean) => {
+    const anchors = phase1
+      ? []
+      : group.filter(
+          (id) =>
+            (links.has(id) || id === selectedId) &&
+            canBridgeAsLink(id, selectedId),
+        );
+    if (!phase1 && anchors.length === 0) return;
+
+    const touchedInMerge = new Set<string>();
+
+    for (const id of group) {
+      if (excludeSet.has(id) || links.has(id)) continue;
+      if (!shouldIncludeInLinks(id, selectedId)) continue;
+
+      const page = getPageIdPrefix(id);
+      if (lockedPages.has(page)) continue;
+
+      if (phase1) {
+        links.add(id);
+        memberOrder.push(id);
+        phase1Pages.add(page);
+        continue;
+      }
+
+      const anchor = pickAnchor(id, group, anchors, touchedInMerge);
+      if (!anchor) continue;
+
+      const anchorPage = getPageIdPrefix(anchor);
+      if (!canExpandToPage(page, anchorPage)) continue;
+
+      const wasEmpty =
+        !pageHasLinkedMembers(page, memberOrder) && !touchedInMerge.has(page);
+      links.add(id);
+      memberOrder.push(id);
+      if (wasEmpty) recordFirstHop(page, anchorPage);
+      touchedInMerge.add(page);
+    }
+  };
+
+  const lockPagesAfterPhase1 = () => {
+    lockedPages.add(selectedPage);
+    for (const page of phase1Pages) {
+      const count = memberOrder.filter((id) => getPageIdPrefix(id) === page).length;
+      if (count > 1) lockedPages.add(page);
+    }
+  };
+
+  for (let i = remaining.length - 1; i >= 0; i--) {
+    const current = remaining[i];
+    if (!current.includes(selectedId)) continue;
+
+    mergeGroup(current, true);
+    remaining.splice(i, 1);
+  }
+
+  lockPagesAfterPhase1();
+
+  while (remaining.length > 0) {
+    let found = false;
+
+    for (let i = remaining.length - 1; i >= 0; i--) {
+      const current = remaining[i];
+      if (!current.some((id) => canUseAsBridge(id))) continue;
+
+      mergeGroup(current, false);
+      remaining.splice(i, 1);
+      found = true;
+    }
+
+    if (!found) break;
+  }
+
+  return { links, memberOrder };
 }
 
 export function buildIndex(
@@ -106,6 +294,8 @@ export function orderPagesForSelection(
   return ordered;
 }
 
+const MAX_EXPANDED_PANELS = 3;
+
 export function applyExpandLimits(
   panels: { pageFile: string; expanded: boolean }[],
   orderedPages: string[],
@@ -115,7 +305,7 @@ export function applyExpandLimits(
   expandSet.add(currentPage);
 
   for (const page of orderedPages) {
-    if (expandSet.size >= 3) break;
+    if (expandSet.size >= MAX_EXPANDED_PANELS) break;
     expandSet.add(page);
   }
 
@@ -123,6 +313,32 @@ export function applyExpandLimits(
     ...panel,
     expanded: expandSet.has(panel.pageFile),
   }));
+}
+
+/** Keep desired expand state; main page stays open; shrink extras past the limit. */
+export function enforceExpandedLimit(
+  panels: { pageFile: string; expanded: boolean }[],
+  currentPage: string,
+): { pageFile: string; expanded: boolean }[] {
+  let result = panels.map((panel) => ({
+    ...panel,
+    expanded: panel.pageFile === currentPage ? true : panel.expanded,
+  }));
+
+  let expandedCount = result.filter((panel) => panel.expanded).length;
+  while (expandedCount > MAX_EXPANDED_PANELS) {
+    const toShrink = [...result]
+      .reverse()
+      .find((panel) => panel.expanded && panel.pageFile !== currentPage);
+    if (!toShrink) break;
+
+    result = result.map((panel) =>
+      panel.pageFile === toShrink.pageFile ? { ...panel, expanded: false } : panel,
+    );
+    expandedCount -= 1;
+  }
+
+  return result;
 }
 
 export function movePanelToFront(
@@ -159,6 +375,65 @@ export function buildPanelsForPages(
     expanded: false,
   }));
   return applyExpandLimits(panels, orderedPages, currentPage);
+}
+
+/** Keep the main page at its current panel index when possible; fill other slots from selection order. */
+export function buildPanelsPreservingMainPosition(
+  existingPanels: { pageFile: string; expanded: boolean }[],
+  orderedPages: string[],
+  currentPage: string,
+): { pageFile: string; expanded: boolean }[] {
+  const otherPages = orderedPages.filter((p) => p !== currentPage);
+  const existingMap = new Map(existingPanels.map((p) => [p.pageFile, p]));
+
+  const mainIndex = existingPanels.findIndex((p) => p.pageFile === currentPage);
+  const resolvedMainIndex =
+    mainIndex >= 0
+      ? mainIndex
+      : orderedPages.length > 3
+        ? Math.min(2, Math.max(0, orderedPages.length - 1))
+        : Math.max(0, orderedPages.length - 1);
+
+  const slotCount = Math.max(
+    existingPanels.length,
+    orderedPages.length > 3 ? 3 : orderedPages.length,
+    resolvedMainIndex + 1,
+  );
+
+  const slots: (string | null)[] = Array.from({ length: slotCount }, () => null);
+  slots[resolvedMainIndex] = currentPage;
+
+  let otherIdx = 0;
+  for (let i = 0; i < slotCount; i++) {
+    if (i === resolvedMainIndex) continue;
+    if (otherIdx < otherPages.length) {
+      slots[i] = otherPages[otherIdx++];
+    }
+  }
+
+  const pageOrder = slots.filter((page): page is string => page !== null);
+  while (otherIdx < otherPages.length) {
+    pageOrder.push(otherPages[otherIdx++]);
+  }
+
+  prunePageExpandMemory(orderedPages);
+
+  const panels = pageOrder.map((pageFile) => {
+    const existing = existingMap.get(pageFile);
+    return {
+      pageFile,
+      expanded: resolvePanelExpanded(
+        pageFile,
+        currentPage,
+        existing !== undefined,
+        existing?.expanded,
+      ),
+    };
+  });
+
+  const result = enforceExpandedLimit(panels, currentPage);
+  syncPanelExpandMemory(result);
+  return result;
 }
 
 export function shrinkFarthestExpanded(

@@ -1,10 +1,10 @@
 import type { AppState, PanelState, SelectionState, SelectionHistoryEntry } from '../types';
 import {
-  getRelatedIdsForGroup,
+  getLinkedComponentIds,
   orderPagesForSelection,
-  buildPanelsForPages,
   getGroupIndicesForComponent,
 } from './index';
+import { buildPanelsInSidebarOrder, getStoredPageOrder } from './pageOrder';
 import {
   getPinnedPages,
   mergePinnedPagesIntoOrder,
@@ -47,7 +47,6 @@ export function buildSelectionForComponent(
   state: AppState,
   componentId: string,
   pageFile: string,
-  activeGroupIndex: number | null = null,
 ): {
   panels: PanelState[];
   currentPage: string;
@@ -57,26 +56,18 @@ export function buildSelectionForComponent(
 
   const { index } = state.project;
   const matchingGroupIndices = getGroupIndicesForComponent(index.groups, componentId);
-
-  let resolvedGroupIndex = activeGroupIndex;
-  if (matchingGroupIndices.length === 0) {
-    resolvedGroupIndex = null;
-  } else if (
-    resolvedGroupIndex === null ||
-    !matchingGroupIndices.includes(resolvedGroupIndex)
-  ) {
-    resolvedGroupIndex = matchingGroupIndices[0];
-  }
-
-  const activeGroup = resolvedGroupIndex === null ? [] : (index.groups[resolvedGroupIndex] ?? []);
-  const relatedIds =
-    matchingGroupIndices.length === 0
-      ? new Set([componentId])
-      : getRelatedIdsForGroup(componentId, activeGroup);
+  const { links: relatedIds, memberOrder: groupMemberOrder } = getLinkedComponentIds(
+    componentId,
+    index.groups,
+  );
 
   const hasLinks = relatedIds.size > 1;
   const validFiles = validPageFileSet(state);
   const pinnedPages = getPinnedPages(state.project.relations);
+  const sidebarOrder = getStoredPageOrder(
+    state.project.relations,
+    state.project.pages.map((p) => p.fileName),
+  );
 
   if (!hasLinks) {
     const orderedPages = mergePinnedPagesIntoOrder(
@@ -84,35 +75,35 @@ export function buildSelectionForComponent(
       pageFile,
       pinnedPages,
       validFiles,
+      sidebarOrder,
     );
     return {
-      panels: buildPanelsForPages(orderedPages, pageFile),
+      panels: buildPanelsInSidebarOrder(state.panels, orderedPages, sidebarOrder, pageFile),
       currentPage: pageFile,
       selection: {
         componentId,
         relatedIds,
-        activeGroupIndex: resolvedGroupIndex,
+        activeGroupIndex: null,
         matchingGroupIndices,
       },
     };
   }
-
-  const groupMemberOrder = activeGroup;
 
   const orderedPages = mergePinnedPagesIntoOrder(
     orderPagesForSelection(pageFile, relatedIds, index, groupMemberOrder),
     pageFile,
     pinnedPages,
     validFiles,
+    sidebarOrder,
   );
 
   return {
-    panels: buildPanelsForPages(orderedPages, pageFile),
+    panels: buildPanelsInSidebarOrder(state.panels, orderedPages, sidebarOrder, pageFile),
     currentPage: pageFile,
     selection: {
       componentId,
       relatedIds,
-      activeGroupIndex: resolvedGroupIndex,
+      activeGroupIndex: null,
       matchingGroupIndices,
     },
   };
@@ -128,39 +119,6 @@ export function applyComponentSelection(
   selection: SelectionState;
 } | null {
   return buildSelectionForComponent(state, componentId, pageFile);
-}
-
-export function cycleSelectionGroup(
-  state: AppState,
-  direction: 'prev' | 'next',
-): {
-  panels: PanelState[];
-  currentPage: string;
-  selection: SelectionState;
-} | null {
-  if (!state.project || !state.selection) return null;
-
-  const { componentId, matchingGroupIndices, activeGroupIndex } = state.selection;
-  if (matchingGroupIndices.length <= 1 || activeGroupIndex === null) return null;
-
-  const currentPos = matchingGroupIndices.indexOf(activeGroupIndex);
-  if (currentPos < 0) return null;
-
-  const nextPos =
-    direction === 'prev'
-      ? (currentPos - 1 + matchingGroupIndices.length) % matchingGroupIndices.length
-      : (currentPos + 1) % matchingGroupIndices.length;
-
-  const pageFile =
-    state.project.index.componentToPage.get(componentId) ?? state.currentPage;
-  if (!pageFile) return null;
-
-  return buildSelectionForComponent(
-    state,
-    componentId,
-    pageFile,
-    matchingGroupIndices[nextPos],
-  );
 }
 
 export function remapSelectionHistoryId(

@@ -1,4 +1,11 @@
 import type { AppState, LoadedProject, PageData, RelationsFile } from '../types';
+import { removeMemberIdsFromGroups } from './groupRelations';
+import {
+  appendPageToOrder,
+  getStoredPageOrder,
+  removePageFromOrder,
+  sortPagesByOrder,
+} from './pageOrder';
 import { rebuildProject } from './projectMutations';
 import { createComponentId, resolvePageId, resolvePageName } from './pageIds';
 import { buildPanelsForPageContext, refreshPanelsWithPins, removePinnedPage } from './pagePins';
@@ -45,12 +52,6 @@ function collectComponentIdsOnPage(page: PageData): Set<string> {
   return new Set(page.components.map((c) => c.id));
 }
 
-function removeIdsFromGroups(groups: string[][], ids: Set<string>): string[][] {
-  return groups
-    .map((group) => group.filter((id) => !ids.has(id)))
-    .filter((group) => group.length > 0);
-}
-
 export function renamePageNameInProject(
   project: LoadedProject,
   fileName: string,
@@ -85,9 +86,20 @@ export function createPageInProject(
   if (project.pages.some((p) => p.fileName === fileName)) return null;
 
   const page = createDefaultPageData(fileName, project.relations.pageNames);
-  const pages = [...project.pages, page].sort((a, b) => a.fileName.localeCompare(b.fileName));
+  const pageOrder = appendPageToOrder(
+    getStoredPageOrder(
+      project.relations,
+      project.pages.map((p) => p.fileName),
+    ),
+    fileName,
+  );
+  const pages = sortPagesByOrder([...project.pages, page], pageOrder);
 
-  return rebuildProject({ ...project, pages });
+  return rebuildProject({
+    ...project,
+    pages,
+    relations: { ...project.relations, pageOrder },
+  });
 }
 
 export function deletePageFromProject(
@@ -119,15 +131,44 @@ export function deletePageFromProject(
   }
 
   const pages = remainingPages;
-  const groups = removeIdsFromGroups(project.relations.groups, removedIds);
+  const groups = removeMemberIdsFromGroups(project.relations.groups, removedIds);
   const pinnedPages = removePinnedPage(project.relations.pinnedPages, fileName);
+  const pageOrder = removePageFromOrder(
+    getStoredPageOrder(
+      project.relations,
+      remainingPages.map((p) => p.fileName),
+    ),
+    fileName,
+  );
+
+  return rebuildProject({
+    ...project,
+    pages: sortPagesByOrder(pages, pageOrder),
+    relations: { ...project.relations, pageNames, groups, pinnedPages, pageOrder },
+    mdFiles,
+    imageUrls,
+  });
+}
+
+export function reorderPagesInProject(
+  project: LoadedProject,
+  orderedPageFiles: string[],
+): LoadedProject | null {
+  const valid = new Set(project.pages.map((p) => p.fileName));
+  if (
+    orderedPageFiles.length !== valid.size ||
+    !orderedPageFiles.every((fileName) => valid.has(fileName))
+  ) {
+    return null;
+  }
+
+  const pageOrder = [...orderedPageFiles];
+  const pages = sortPagesByOrder(project.pages, pageOrder);
 
   return rebuildProject({
     ...project,
     pages,
-    relations: { ...project.relations, pageNames, groups, pinnedPages },
-    mdFiles,
-    imageUrls,
+    relations: { ...project.relations, pageOrder },
   });
 }
 

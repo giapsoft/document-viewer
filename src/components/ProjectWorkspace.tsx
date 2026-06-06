@@ -7,6 +7,7 @@ import { SaveDestinationDialog, type SaveDestination } from './SaveDestinationDi
 import { SaveDocDialog } from './SaveDocDialog';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
+import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { useState } from 'react';
 
@@ -35,16 +36,16 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     insertComponentBelow,
     deleteComponent,
     toggleLinkMode,
+    setLinkMode,
     deleteActiveGroup,
     toggleLinkComponent,
     goBackSelection,
     goNextSelection,
-    goPrevGroup,
-    goNextGroup,
     importImage,
     importImageFromClipboard,
     createPage,
     renamePage,
+    reorderPages,
     deletePage,
     togglePinPage,
     appendClipboardImageToPage,
@@ -74,6 +75,12 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     onNext: goNextSelection,
   });
 
+  useCtrlLinkModeHold({
+    enabled: true,
+    linkMode: state.linkMode,
+    setLinkMode,
+  });
+
   const sidebarPages = project.pages.map((p) => ({
     fileName: p.fileName,
     pageId: p.pageId,
@@ -85,13 +92,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const handleComponentClick = state.linkMode ? toggleLinkComponent : selectComponent;
 
   const matchingGroupIndices = state.selection?.matchingGroupIndices ?? [];
-  const activeGroupIndex = state.selection?.activeGroupIndex ?? null;
-  const matchingGroupPosition =
-    activeGroupIndex === null ? -1 : matchingGroupIndices.indexOf(activeGroupIndex);
-  const showGroupNav = !state.linkMode && matchingGroupIndices.length > 1;
-  const groupNavLabel = showGroupNav
-    ? `Group ${(matchingGroupPosition >= 0 ? matchingGroupPosition : 0) + 1}/${matchingGroupIndices.length}`
-    : null;
 
   const groups = project.relations.groups;
   const linkEditingListIndex = state.linkTargetGroupIndex;
@@ -102,7 +102,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   const canUnlinkGroup = state.linkMode
     ? linkEditingListIndex !== null
-    : activeGroupIndex !== null;
+    : matchingGroupIndices.length > 0;
 
   const [toolbarLoading, setToolbarLoading] = useState(false);
   const [toolbarError, setToolbarError] = useState(null as string | null);
@@ -186,6 +186,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
           onToggle={toggleSidebar}
           onCreatePage={createPage}
           onRenamePage={renamePage}
+          onReorderPages={reorderPages}
           onDeletePage={deletePage}
           pinnedPages={pinnedPages}
           onTogglePinPage={togglePinPage}
@@ -221,11 +222,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               canGoNext={canGoNext}
               onSelectionBack={goBackSelection}
               onSelectionNext={goNextSelection}
-              canGoPrevGroup={showGroupNav}
-              canGoNextGroup={showGroupNav}
-              groupNavLabel={groupNavLabel}
-              onGroupPrev={goPrevGroup}
-              onGroupNext={goNextGroup}
               linkEditingListIndex={linkEditingListIndex}
               linkTargetMemberCount={linkGroupMembers.size}
             />

@@ -9,11 +9,6 @@ interface LinkModeToggleProps {
   canGoNext?: boolean;
   onSelectionBack?: () => void;
   onSelectionNext?: () => void;
-  canGoPrevGroup?: boolean;
-  canGoNextGroup?: boolean;
-  groupNavLabel?: string | null;
-  onGroupPrev?: () => void;
-  onGroupNext?: () => void;
   /** Locked list index in link mode, or null when creating a new list */
   linkEditingListIndex?: number | null;
   linkTargetMemberCount?: number;
@@ -30,11 +25,6 @@ export function LinkModeToggle({
   canGoNext = false,
   onSelectionBack,
   onSelectionNext,
-  canGoPrevGroup = false,
-  canGoNextGroup: _canGoNextGroup = false,
-  groupNavLabel = null,
-  onGroupPrev,
-  onGroupNext,
   linkEditingListIndex = null,
   linkTargetMemberCount = 0,
 }: LinkModeToggleProps) {
@@ -73,27 +63,6 @@ export function LinkModeToggle({
           </button>
         </div>
       )}
-      {!enabled && canGoPrevGroup && onGroupPrev && onGroupNext && (
-        <div className="selection-nav-group">
-          <button
-            type="button"
-            className="selection-nav-btn"
-            onClick={onGroupPrev}
-            title="Previous linked group"
-          >
-            ← Group
-          </button>
-          <span className="group-nav-label">{groupNavLabel ?? 'Group'}</span>
-          <button
-            type="button"
-            className="selection-nav-btn"
-            onClick={onGroupNext}
-            title="Next linked group"
-          >
-            Group →
-          </button>
-        </div>
-      )}
       <button
         type="button"
         className={`link-mode-toggle ${enabled ? 'active' : ''}`}
@@ -103,7 +72,9 @@ export function LinkModeToggle({
         <span className="link-mode-toggle-track">
           <span className="link-mode-toggle-thumb" />
         </span>
-        <span className="link-mode-toggle-label">Link mode</span>
+        <span className="link-mode-toggle-label" title="Hold Ctrl for temporary link mode">
+          Link mode
+        </span>
         <span className={`link-mode-status ${enabled ? 'on' : 'off'}`}>
           {enabled ? 'ON' : 'OFF'}
         </span>
@@ -116,8 +87,10 @@ export function LinkModeToggle({
           disabled={!canUnlink}
           title={
             canUnlink
-              ? 'Delete the currently selected relation group'
-              : 'Select a linked group to unlink'
+              ? enabled
+                ? 'Delete the currently selected relation group'
+                : 'Remove all relation groups for this component'
+              : 'Select a linked component to unlink'
           }
         >
           Unlink

@@ -7,6 +7,7 @@ import type {
 import { buildIndex } from './index';
 import { normalizePageComponents, resolvePageId, resolvePageName } from './pageIds';
 import { EMPTY_RELATIONS, normalizeRelations } from './groupRelations';
+import { getStoredPageOrder } from './pageOrder';
 import { getDocsDirectoryIfPresent } from './docsFolder';
 import { mergeStyles } from './styles';
 import { isValidStatus, isValidType } from './componentDisplay';
@@ -82,7 +83,11 @@ export function assembleProject(input: RawProjectInput): AssembledProject {
     }
   }
 
-  pages.sort((a, b) => a.fileName.localeCompare(b.fileName));
+  const pageOrder = getStoredPageOrder(
+    relations,
+    pages.map((p) => p.fileName),
+  );
+  pages.sort((a, b) => pageOrder.indexOf(a.fileName) - pageOrder.indexOf(b.fileName));
 
   const imageUrls = new Map<string, string>();
   const imageBlobs = new Map<string, Blob>();

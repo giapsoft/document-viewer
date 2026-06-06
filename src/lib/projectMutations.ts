@@ -1,4 +1,5 @@
 import type { Component, LoadedProject } from '../types';
+import { removeMemberIdsFromGroups } from './groupRelations';
 import { buildIndex } from './index';
 import { createComponentId } from './pageIds';
 
@@ -117,12 +118,6 @@ export function appendImageComponent(
   };
 }
 
-function removeIdFromGroups(groups: string[][], componentId: string): string[][] {
-  return groups
-    .map((group) => group.filter((id) => id !== componentId))
-    .filter((group) => group.length > 0);
-}
-
 export function deleteComponentFromProject(
   project: LoadedProject,
   pageFile: string,
@@ -142,7 +137,7 @@ export function deleteComponentFromProject(
     };
   });
 
-  const groups = removeIdFromGroups(project.relations.groups, componentId);
+  const groups = removeMemberIdsFromGroups(project.relations.groups, [componentId]);
 
   const mdFiles = new Map(project.mdFiles);
   if (doomed?.type === 'md') {

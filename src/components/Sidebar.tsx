@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, type DragEvent } from 'react';
 import { PageFileDialog } from './PageFileDialog';
 import { PageLabel } from './PageLabel';
 import { VersionBadge } from './VersionBadge';
+import { reorderPageFileList } from '../lib/pageOrder';
 
 export interface SidebarPageEntry {
   fileName: string;
@@ -22,6 +23,7 @@ interface SidebarProps {
     fileName: string,
     newPageName: string,
   ) => Promise<{ ok: boolean; error?: string }>;
+  onReorderPages: (orderedPageFiles: string[]) => void;
   onDeletePage: (fileName: string) => Promise<{ ok: boolean; error?: string }>;
   pinnedPages: string[];
   onTogglePinPage: (fileName: string) => void;
@@ -40,6 +42,7 @@ export function Sidebar({
   onToggle,
   onCreatePage,
   onRenamePage,
+  onReorderPages,
   onDeletePage,
   pinnedPages,
   onTogglePinPage,
@@ -55,6 +58,8 @@ export function Sidebar({
   >(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [appendingImageFor, setAppendingImageFor] = useState<string | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
 
   if (!expanded) {
     return null;
@@ -71,6 +76,37 @@ export function Sidebar({
     return true;
   };
 
+  const finishDrag = () => {
+    setDragIndex(null);
+    setDropIndex(null);
+  };
+
+  const handleDragStart = (event: DragEvent<HTMLButtonElement>, index: number) => {
+    if (!canManagePages) return;
+    setDragIndex(index);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', pages[index].fileName);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLLIElement>, index: number) => {
+    if (!canManagePages || dragIndex === null) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDropIndex(index);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLLIElement>, toIndex: number) => {
+    event.preventDefault();
+    if (!canManagePages || dragIndex === null || dragIndex === toIndex) {
+      finishDrag();
+      return;
+    }
+
+    const order = pages.map((page) => page.fileName);
+    onReorderPages(reorderPageFileList(order, dragIndex, toIndex));
+    finishDrag();
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -84,6 +120,10 @@ export function Sidebar({
         <p className="sidebar-hint">Open a local project folder to add, rename, or delete pages.</p>
       )}
 
+      {canManagePages && (
+        <p className="sidebar-hint">Drag the handle to reorder pages.</p>
+      )}
+
       {actionError && (
         <p className="sidebar-action-error" role="alert">
           {actionError}
@@ -91,14 +131,35 @@ export function Sidebar({
       )}
 
       <ul className="page-list">
-        {pages.map((page) => {
+        {pages.map((page, index) => {
           const isActive = currentPage === page.fileName;
           const isPinned = pinnedPages.includes(page.fileName);
+          const isDragging = dragIndex === index;
+          const isDropTarget = dropIndex === index && dragIndex !== null && dragIndex !== index;
+
           return (
             <li
               key={page.fileName}
-              className={`page-list-row ${isActive ? 'page-list-row-active' : ''}`}
+              className={`page-list-row ${isActive ? 'page-list-row-active' : ''} ${isDragging ? 'page-list-row-dragging' : ''} ${isDropTarget ? 'page-list-row-drop-target' : ''}`}
+              onDragOver={(event) => handleDragOver(event, index)}
+              onDrop={(event) => handleDrop(event, index)}
+              onDragLeave={() => {
+                if (dropIndex === index) setDropIndex(null);
+              }}
             >
+              {canManagePages && (
+                <button
+                  type="button"
+                  className="page-list-drag-handle"
+                  draggable
+                  title="Drag to reorder"
+                  aria-label={`Reorder ${page.pageName}`}
+                  onDragStart={(event) => handleDragStart(event, index)}
+                  onDragEnd={finishDrag}
+                >
+                  ⋮⋮
+                </button>
+              )}
               <button
                 type="button"
                 className={`page-list-item ${isActive ? 'active' : ''}`}
