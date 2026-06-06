@@ -67,6 +67,7 @@ function CommentTreeItem({
   onFocusComment,
   onUpdateComment,
   onDeleteComment,
+  hasUsername,
   isReply = false,
 }: {
   node: CommentTreeNode;
@@ -80,6 +81,7 @@ function CommentTreeItem({
   onFocusComment: (commentId: string) => void;
   onUpdateComment: (commentId: string, body: string) => void;
   onDeleteComment: (commentId: string) => void;
+  hasUsername: boolean;
   isReply?: boolean;
 }) {
   const { comment } = node;
@@ -90,6 +92,7 @@ function CommentTreeItem({
   const isLinkTarget = linkTargetId === comment.id;
   const isFocused = focusedCommentId === comment.id;
   const isOwner = canOwnComment(comment, authorId, username);
+  const canLink = isOwner;
 
   const anchorLabel = comment.anchor
     ? formatCommentAnchorLabel(
@@ -100,7 +103,7 @@ function CommentTreeItem({
   const authorColors = authorAvatarColors(comment.author);
 
   const handleSelectForLink = () => {
-    if (editOpen) return;
+    if (!canLink || editOpen) return;
     onSelectLinkTarget(isLinkTarget ? null : comment.id);
   };
 
@@ -113,21 +116,27 @@ function CommentTreeItem({
       className={`comment-thread-item ${isReply ? 'comment-thread-item-reply' : ''} ${isLinkTarget ? 'comment-thread-item-linking' : ''} ${isFocused ? 'comment-thread-item-focused' : ''}`}
     >
       <article
-        className={`comment-card comment-card-selectable ${isLinkTarget ? 'comment-card-selected' : ''}`}
-        onClick={handleSelectForLink}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            handleSelectForLink();
-          }
-        }}
-        role="button"
-        tabIndex={0}
-        aria-pressed={isLinkTarget}
+        className={`comment-card${canLink ? ' comment-card-selectable' : ''}${isLinkTarget ? ' comment-card-selected' : ''}`}
+        onClick={canLink ? handleSelectForLink : undefined}
+        onKeyDown={
+          canLink
+            ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  handleSelectForLink();
+                }
+              }
+            : undefined
+        }
+        role={canLink ? 'button' : undefined}
+        tabIndex={canLink ? 0 : undefined}
+        aria-pressed={canLink ? isLinkTarget : undefined}
         aria-label={
-          isLinkTarget
-            ? 'Comment selected for linking — press to cancel'
-            : 'Select comment for linking'
+          canLink
+            ? isLinkTarget
+              ? 'Comment selected for linking — press to cancel'
+              : 'Select comment for linking'
+            : undefined
         }
       >
         <div className="comment-card-row">
@@ -204,20 +213,24 @@ function CommentTreeItem({
             <footer className="comment-card-actions" onClick={stopCardClick}>
               {!editOpen && (
                 <>
-                  <button
-                    type="button"
-                    className={`comment-text-btn ${isLinkTarget ? 'comment-text-btn-active' : ''}`}
-                    onClick={() => onSelectLinkTarget(isLinkTarget ? null : comment.id)}
-                  >
-                    {isLinkTarget ? 'Cancel' : 'Link'}
-                  </button>
-                  <button
-                    type="button"
-                    className="comment-text-btn"
-                    onClick={() => setReplyOpen((open) => !open)}
-                  >
-                    {replyOpen ? 'Cancel' : 'Reply'}
-                  </button>
+                  {canLink && (
+                    <button
+                      type="button"
+                      className={`comment-text-btn ${isLinkTarget ? 'comment-text-btn-active' : ''}`}
+                      onClick={() => onSelectLinkTarget(isLinkTarget ? null : comment.id)}
+                    >
+                      {isLinkTarget ? 'Cancel' : 'Link'}
+                    </button>
+                  )}
+                  {hasUsername && (
+                    <button
+                      type="button"
+                      className="comment-text-btn"
+                      onClick={() => setReplyOpen((open) => !open)}
+                    >
+                      {replyOpen ? 'Cancel' : 'Reply'}
+                    </button>
+                  )}
                   {isOwner && (
                     <>
                       <button
@@ -251,7 +264,7 @@ function CommentTreeItem({
               )}
             </footer>
 
-            {replyOpen && (
+            {replyOpen && hasUsername && (
               <form
                 className="comment-inline-form"
                 onClick={stopCardClick}
@@ -301,6 +314,7 @@ function CommentTreeItem({
               onFocusComment={onFocusComment}
               onUpdateComment={onUpdateComment}
               onDeleteComment={onDeleteComment}
+              hasUsername={hasUsername}
             />
           ))}
         </ul>
@@ -380,118 +394,121 @@ export function CommentPanel({
       {expanded && (
         <div className="page-panel-body comment-panel-body">
           {!username ? (
-            <UsernamePrompt onConfirm={handleSetUsername} />
+            <UsernamePrompt
+              title="Sign in to comment"
+              hint="You can read all comments below without a name. Enter a display name to post, reply, or link your own comments."
+              onConfirm={handleSetUsername}
+            />
           ) : (
-            <>
-              <div className="comment-panel-top">
-                <div className="comment-user-row">
-                  <AuthorAvatar name={username} small />
-                  {editingUsername ? (
-                    <div className="comment-user-edit">
-                      <input
-                        type="text"
-                        className="comment-user-input"
-                        value={usernameDraft}
-                        onChange={(event) => setUsernameDraft(event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="comment-text-btn"
-                        onClick={() => handleSetUsername(usernameDraft)}
-                        disabled={!usernameDraft.trim()}
-                      >
-                        Save
-                      </button>
-                      <button
-                        type="button"
-                        className="comment-text-btn"
-                        onClick={() => setEditingUsername(false)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <span
-                        className="comment-user-name"
-                        style={{ color: authorAvatarColors(username).color }}
-                      >
-                        {username}
-                      </span>
-                      <button
-                        type="button"
-                        className="comment-text-btn"
-                        onClick={() => {
-                          setUsernameDraft(username);
-                          setEditingUsername(true);
-                        }}
-                      >
-                        Edit
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                {linkTargetId && (
-                  <p className="comment-link-banner comment-link-banner-active">
-                    Click a component to link, or select text in markdown. Click the same component again to unlink.
-                  </p>
-                )}
-
-                <form
-                  className="comment-compose-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    if (!composeBody.trim()) return;
-                    onAddRoot(composeBody);
-                    setComposeBody('');
-                  }}
-                >
-                  <textarea
-                    className="comment-compose-input"
-                    rows={2}
-                    value={composeBody}
-                    placeholder="Write a comment…"
-                    onChange={(event) => setComposeBody(event.target.value)}
-                  />
-                  <div className="comment-compose-actions">
+            <div className="comment-panel-top">
+              <div className="comment-user-row">
+                <AuthorAvatar name={username} small />
+                {editingUsername ? (
+                  <div className="comment-user-edit">
+                    <input
+                      type="text"
+                      className="comment-user-input"
+                      value={usernameDraft}
+                      onChange={(event) => setUsernameDraft(event.target.value)}
+                    />
                     <button
-                      type="submit"
-                      className="comment-compose-submit"
-                      disabled={!composeBody.trim()}
+                      type="button"
+                      className="comment-text-btn"
+                      onClick={() => handleSetUsername(usernameDraft)}
+                      disabled={!usernameDraft.trim()}
                     >
-                      Add comment
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      className="comment-text-btn"
+                      onClick={() => setEditingUsername(false)}
+                    >
+                      Cancel
                     </button>
                   </div>
-                </form>
-              </div>
-
-              <div className="comment-thread-scroll">
-                {tree.length === 0 ? (
-                  <p className="comment-empty">No comments yet.</p>
                 ) : (
-                  <ul className="comment-thread">
-                    {tree.map((node) => (
-                      <CommentTreeItem
-                        key={node.comment.id}
-                        node={node}
-                        linkTargetId={linkTargetId}
-                        focusedCommentId={focusedCommentId}
-                        componentLabels={componentLabels}
-                        authorId={authorId}
-                        username={username}
-                        onSelectLinkTarget={onSelectLinkTarget}
-                        onReply={onAddReply}
-                        onFocusComment={onFocusComment}
-                        onUpdateComment={onUpdateComment}
-                        onDeleteComment={onDeleteComment}
-                      />
-                    ))}
-                  </ul>
+                  <>
+                    <span
+                      className="comment-user-name"
+                      style={{ color: authorAvatarColors(username).color }}
+                    >
+                      {username}
+                    </span>
+                    <button
+                      type="button"
+                      className="comment-text-btn"
+                      onClick={() => {
+                        setUsernameDraft(username);
+                        setEditingUsername(true);
+                      }}
+                    >
+                      Edit
+                    </button>
+                  </>
                 )}
               </div>
-            </>
+
+              {linkTargetId && (
+                <p className="comment-link-banner comment-link-banner-active">
+                  Click a component to link, or select text in markdown. Click the same component again to unlink.
+                </p>
+              )}
+
+              <form
+                className="comment-compose-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!composeBody.trim()) return;
+                  onAddRoot(composeBody);
+                  setComposeBody('');
+                }}
+              >
+                <textarea
+                  className="comment-compose-input"
+                  rows={2}
+                  value={composeBody}
+                  placeholder="Write a comment…"
+                  onChange={(event) => setComposeBody(event.target.value)}
+                />
+                <div className="comment-compose-actions">
+                  <button
+                    type="submit"
+                    className="comment-compose-submit"
+                    disabled={!composeBody.trim()}
+                  >
+                    Add comment
+                  </button>
+                </div>
+              </form>
+            </div>
           )}
+
+          <div className="comment-thread-scroll">
+            {tree.length === 0 ? (
+              <p className="comment-empty">No comments yet.</p>
+            ) : (
+              <ul className="comment-thread">
+                {tree.map((node) => (
+                  <CommentTreeItem
+                    key={node.comment.id}
+                    node={node}
+                    linkTargetId={linkTargetId}
+                    focusedCommentId={focusedCommentId}
+                    componentLabels={componentLabels}
+                    authorId={authorId}
+                    username={username}
+                    onSelectLinkTarget={onSelectLinkTarget}
+                    onReply={onAddReply}
+                    onFocusComment={onFocusComment}
+                    onUpdateComment={onUpdateComment}
+                    onDeleteComment={onDeleteComment}
+                    hasUsername={Boolean(username)}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -159,9 +159,12 @@ export function setCommentAnchor(
   comments: DocComment[],
   commentId: string,
   anchor: CommentAnchor,
+  authorId: string | null,
+  username: string | null,
 ): DocComment[] {
   return comments.map((comment) => {
     if (comment.id !== commentId) return comment;
+    if (!canOwnComment(comment, authorId, username)) return comment;
     return { ...comment, anchor };
   });
 }
@@ -169,9 +172,12 @@ export function setCommentAnchor(
 export function clearCommentAnchor(
   comments: DocComment[],
   commentId: string,
+  authorId: string | null,
+  username: string | null,
 ): DocComment[] {
   return comments.map((comment) => {
     if (comment.id !== commentId) return comment;
+    if (!canOwnComment(comment, authorId, username)) return comment;
     const { anchor: _removed, ...rest } = comment;
     return rest;
   });

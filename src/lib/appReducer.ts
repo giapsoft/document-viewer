@@ -42,6 +42,7 @@ import {
 import {
   addReplyComment,
   addRootComment,
+  canOwnComment,
   clearCommentAnchor,
   deleteCommentSubtree,
   setCommentAnchor,
@@ -682,11 +683,23 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, commentUsername: username };
     }
 
-    case 'SELECT_COMMENT_LINK_TARGET':
-      return {
-        ...state,
-        commentLinkTargetId: action.commentId,
-      };
+    case 'SELECT_COMMENT_LINK_TARGET': {
+      const commentId = action.commentId;
+      if (commentId === null) {
+        return { ...state, commentLinkTargetId: null };
+      }
+      if (!state.project) return state;
+      const linkTarget = (state.project.relations.comments ?? []).find(
+        (comment) => comment.id === commentId,
+      );
+      if (
+        !linkTarget ||
+        !canOwnComment(linkTarget, state.commentAuthorId, state.commentUsername)
+      ) {
+        return state;
+      }
+      return { ...state, commentLinkTargetId: commentId };
+    }
 
     case 'FOCUS_COMMENT': {
       if (!action.commentId || !state.project) {
@@ -795,6 +808,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         state.project.relations.comments ?? [],
         action.commentId,
         action.anchor,
+        state.commentAuthorId,
+        state.commentUsername,
       );
       const project = rebuildProject({
         ...state.project,
@@ -808,6 +823,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const comments = clearCommentAnchor(
         state.project.relations.comments ?? [],
         action.commentId,
+        state.commentAuthorId,
+        state.commentUsername,
       );
       const project = rebuildProject({
         ...state.project,
