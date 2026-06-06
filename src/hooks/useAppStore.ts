@@ -26,7 +26,13 @@ import {
   fetchRemoteDocumentUpdatedAt,
   loadRemoteDocument,
   saveRemoteDocument,
+  syncRemoteRelations,
 } from '../lib/remoteProject';
+import {
+  cancelRemoteAutoSave,
+  scheduleRemoteAutoSave,
+  setRemoteSaveStatusListener,
+} from '../lib/remoteAutoSave';
 import { isRemoteVersionStale } from '../lib/remoteConflict';
 import { defaultRemoteTitle } from '../lib/projectBundle';
 import { setDocIdInUrl } from '../lib/docUrl';
@@ -69,6 +75,15 @@ export function useAppStore() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   projectRef.current = state.project;
+
+  useEffect(() => {
+    setRemoteSaveStatusListener((status, message) => {
+      setSaveStatus(status);
+      if (message) setSaveError(message);
+      else if (status !== 'error') setSaveError(null);
+    });
+    return () => setRemoteSaveStatusListener(null);
+  }, []);
 
   useEffect(() => {
     if (!dirty) return;
@@ -661,6 +676,93 @@ export function useAppStore() {
     },
     [setProject],
   );
+
+  const runRemoteAutoSave = useCallback(async (): Promise<
+    import('../lib/remoteAutoSave').RemoteAutoSaveResult
+  > => {
+    const project = projectRef.current;
+    if (!project?.remoteDocId || !isSupabaseConfigured()) {
+      return { ok: true, skipped: true };
+    }
+
+    try {
+      const serverUpdatedAt = await fetchRemoteDocumentUpdatedAt(project.remoteDocId);
+      if (isRemoteVersionStale(project.remoteUpdatedAt, serverUpdatedAt)) {
+        return { ok: false, conflict: true };
+      }
+
+      const saveResult = await saveRemoteDocument(
+        project.remoteDocId,
+        project,
+        project.remoteTitle ?? undefined,
+      );
+
+      if (saveResult.skippedUpload) {
+        return { ok: true, skipped: true };
+      }
+
+      const nextProject: LoadedProject = {
+        ...project,
+        remoteSync: saveResult.remoteSync,
+        remoteUpdatedAt: saveResult.remoteUpdatedAt,
+      };
+      projectRef.current = nextProject;
+      dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
+      setDirty(false);
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not save document',
+      };
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    const project = state.project;
+    if (!dirty || !project?.remoteDocId || !isSupabaseConfigured()) {
+      cancelRemoteAutoSave();
+      return;
+    }
+
+    scheduleRemoteAutoSave(() => runRemoteAutoSave());
+    return () => cancelRemoteAutoSave();
+  }, [dirty, state.project, runRemoteAutoSave]);
+
+  useEffect(() => {
+    const project = state.project;
+    if (dirty || !project?.remoteDocId || !isSupabaseConfigured()) return;
+
+    let cancelled = false;
+
+    const pullRelations = async () => {
+      const current = projectRef.current;
+      if (!current?.remoteDocId || cancelled) return;
+
+      try {
+        const serverUpdatedAt = await fetchRemoteDocumentUpdatedAt(current.remoteDocId);
+        if (!isRemoteVersionStale(current.remoteUpdatedAt, serverUpdatedAt)) return;
+
+        const merged = await syncRemoteRelations(current);
+        if (!merged || cancelled) return;
+
+        projectRef.current = merged;
+        dispatch({ type: 'RELOAD_PROJECT', project: merged });
+      } catch {
+        // ignore background sync errors
+      }
+    };
+
+    void pullRelations();
+    const timer = window.setInterval(() => {
+      void pullRelations();
+    }, 45_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [dirty, state.project?.remoteDocId, dispatch]);
 
   return {
     state,

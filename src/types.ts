@@ -99,7 +99,7 @@ export type ProjectSource = 'local' | 'remote';
 
 /** Tracks last saved remote payload to skip unchanged uploads. */
 export interface RemoteSyncState {
-  format: 'bundle' | 'legacy';
+  format: 'files' | 'bundle' | 'legacy';
   bundleHash?: string | null;
   fileHashes?: Map<string, string>;
 }
