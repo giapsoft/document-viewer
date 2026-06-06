@@ -39,8 +39,15 @@ import {
   shouldAutoScrollPanels,
   togglePinnedPage,
 } from './pagePins';
-import { addReplyComment, addRootComment, clearCommentAnchor, setCommentAnchor } from './comments';
-import { getStoredCommentUsername } from './commentSession';
+import {
+  addReplyComment,
+  addRootComment,
+  clearCommentAnchor,
+  deleteCommentSubtree,
+  setCommentAnchor,
+  updateCommentBody,
+} from './comments';
+import { getOrCreateCommentAuthorId, getStoredCommentUsername } from './commentSession';
 
 function applyExitLinkMode(state: AppState): AppState {
   if (!state.linkMode) return state;
@@ -102,6 +109,7 @@ export const initialAppState: AppState = {
   selectionScrollNonce: 0,
   commentPanelExpanded: true,
   commentUsername: null,
+  commentAuthorId: getOrCreateCommentAuthorId(),
   commentLinkTargetId: null,
   focusedCommentId: null,
 };
@@ -114,6 +122,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         project: action.project,
         sidebarExpanded: true,
         commentUsername: getStoredCommentUsername(),
+        commentAuthorId: getOrCreateCommentAuthorId(),
       };
       if (hasPinnedPages(action.project.relations)) {
         return { ...nextState, panels: buildPanelsForPinList(nextState) };
@@ -747,6 +756,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const comments = addRootComment(
         state.project.relations.comments ?? [],
         state.commentUsername,
+        state.commentAuthorId,
         action.body,
       );
       const project = rebuildProject({
@@ -768,6 +778,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         state.project.relations.comments ?? [],
         action.parentId,
         state.commentUsername,
+        state.commentAuthorId,
         action.body,
       );
       const project = rebuildProject({
@@ -803,6 +814,53 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         relations: { ...state.project.relations, comments },
       });
       return { ...state, project };
+    }
+
+    case 'UPDATE_COMMENT': {
+      if (!state.project) return state;
+      const comments = updateCommentBody(
+        state.project.relations.comments ?? [],
+        action.commentId,
+        state.commentAuthorId,
+        state.commentUsername,
+        action.body,
+      );
+      const project = rebuildProject({
+        ...state.project,
+        relations: { ...state.project.relations, comments },
+      });
+      return { ...state, project };
+    }
+
+    case 'DELETE_COMMENT': {
+      if (!state.project) return state;
+      const before = state.project.relations.comments ?? [];
+      const comments = deleteCommentSubtree(
+        before,
+        action.commentId,
+        state.commentAuthorId,
+        state.commentUsername,
+      );
+      const afterIds = new Set(comments.map((comment) => comment.id));
+      const removedIds = new Set(
+        before.filter((comment) => !afterIds.has(comment.id)).map((comment) => comment.id),
+      );
+      const project = rebuildProject({
+        ...state.project,
+        relations: { ...state.project.relations, comments },
+      });
+      return {
+        ...state,
+        project,
+        commentLinkTargetId:
+          state.commentLinkTargetId && removedIds.has(state.commentLinkTargetId)
+            ? null
+            : state.commentLinkTargetId,
+        focusedCommentId:
+          state.focusedCommentId && removedIds.has(state.focusedCommentId)
+            ? null
+            : state.focusedCommentId,
+      };
     }
 
     default:

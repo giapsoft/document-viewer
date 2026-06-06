@@ -33,8 +33,7 @@ function getMdHighlightRanges(
   if (focusedCommentId) {
     const focused = comments.find((comment) => comment.id === focusedCommentId);
     if (
-      focused?.parentId === null &&
-      focused.anchor?.kind === 'md-range' &&
+      focused?.anchor?.kind === 'md-range' &&
       focused.anchor.componentId === componentId
     ) {
       const anchor = focused.anchor;
@@ -51,7 +50,6 @@ function getMdHighlightRanges(
   return comments
     .filter(
       (comment) =>
-        comment.parentId === null &&
         comment.anchor?.kind === 'md-range' &&
         comment.anchor.componentId === componentId,
     )
@@ -79,15 +77,13 @@ function hasComponentCommentAnchor(
   if (focusedCommentId) {
     const focused = comments.find((comment) => comment.id === focusedCommentId);
     return (
-      focused?.parentId === null &&
-      focused.anchor?.kind === 'component' &&
+      focused?.anchor?.kind === 'component' &&
       focused.anchor.componentId === componentId
     );
   }
 
   return comments.some(
     (comment) =>
-      comment.parentId === null &&
       comment.anchor?.kind === 'component' &&
       comment.anchor.componentId === componentId,
   );

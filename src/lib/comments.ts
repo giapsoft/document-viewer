@@ -28,6 +28,11 @@ export function normalizeComments(raw: unknown): DocComment[] {
 
     if (!id || !author) continue;
 
+    const authorId =
+      typeof record.authorId === 'string' && record.authorId.trim()
+        ? record.authorId.trim()
+        : undefined;
+
     let anchor: CommentAnchor | undefined;
     const rawAnchor = record.anchor;
     if (rawAnchor && typeof rawAnchor === 'object') {
@@ -51,6 +56,7 @@ export function normalizeComments(raw: unknown): DocComment[] {
       id,
       parentId,
       author,
+      ...(authorId ? { authorId } : {}),
       body,
       createdAt,
       ...(anchor ? { anchor } : {}),
@@ -70,6 +76,18 @@ export function createCommentId(): string {
 
 export function isRootComment(comment: DocComment): boolean {
   return comment.parentId === null;
+}
+
+export function canOwnComment(
+  comment: DocComment,
+  authorId: string | null,
+  username: string | null,
+): boolean {
+  if (authorId && comment.authorId) {
+    return comment.authorId === authorId;
+  }
+  if (!username) return false;
+  return comment.author.trim().toLowerCase() === username.trim().toLowerCase();
 }
 
 export function buildCommentTree(comments: DocComment[]): CommentTreeNode[] {
@@ -96,6 +114,7 @@ export function buildCommentTree(comments: DocComment[]): CommentTreeNode[] {
 export function addRootComment(
   comments: DocComment[],
   author: string,
+  authorId: string,
   body: string,
 ): DocComment[] {
   const trimmed = body.trim();
@@ -106,6 +125,7 @@ export function addRootComment(
       id: createCommentId(),
       parentId: null,
       author: author.trim(),
+      authorId,
       body: trimmed,
       createdAt: Date.now(),
     },
@@ -116,6 +136,7 @@ export function addReplyComment(
   comments: DocComment[],
   parentId: string,
   author: string,
+  authorId: string,
   body: string,
 ): DocComment[] {
   const trimmed = body.trim();
@@ -127,6 +148,7 @@ export function addReplyComment(
       id: createCommentId(),
       parentId,
       author: author.trim(),
+      authorId,
       body: trimmed,
       createdAt: Date.now(),
     },
@@ -139,7 +161,7 @@ export function setCommentAnchor(
   anchor: CommentAnchor,
 ): DocComment[] {
   return comments.map((comment) => {
-    if (comment.id !== commentId || comment.parentId !== null) return comment;
+    if (comment.id !== commentId) return comment;
     return { ...comment, anchor };
   });
 }
@@ -149,10 +171,48 @@ export function clearCommentAnchor(
   commentId: string,
 ): DocComment[] {
   return comments.map((comment) => {
-    if (comment.id !== commentId || comment.parentId !== null) return comment;
+    if (comment.id !== commentId) return comment;
     const { anchor: _removed, ...rest } = comment;
     return rest;
   });
+}
+
+export function updateCommentBody(
+  comments: DocComment[],
+  commentId: string,
+  authorId: string | null,
+  username: string | null,
+  body: string,
+): DocComment[] {
+  const trimmed = body.trim();
+  if (!trimmed) return comments;
+
+  return comments.map((comment) => {
+    if (comment.id !== commentId) return comment;
+    if (!canOwnComment(comment, authorId, username)) return comment;
+    return { ...comment, body: trimmed };
+  });
+}
+
+export function deleteCommentSubtree(
+  comments: DocComment[],
+  commentId: string,
+  authorId: string | null,
+  username: string | null,
+): DocComment[] {
+  const target = comments.find((comment) => comment.id === commentId);
+  if (!target || !canOwnComment(target, authorId, username)) return comments;
+
+  const doomed = new Set<string>();
+  const markDoomed = (id: string) => {
+    doomed.add(id);
+    for (const comment of comments) {
+      if (comment.parentId === id) markDoomed(comment.id);
+    }
+  };
+  markDoomed(commentId);
+
+  return comments.filter((comment) => !doomed.has(comment.id));
 }
 
 export function removeCommentsForComponent(

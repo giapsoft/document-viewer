@@ -2319,6 +2319,21 @@ code {
   color: #e8590c;
 }
 
+.comment-text-btn-danger {
+  color: #c92a2a;
+}
+
+.comment-text-btn-danger:hover {
+  color: #a61e4d;
+  background: #fff5f5;
+}
+
+.comment-inline-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .comment-inline-form {
   display: flex;
   flex-direction: column;

@@ -46,6 +46,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     setCommentAnchor,
     clearCommentAnchor,
     focusComment,
+    updateComment,
+    deleteComment,
     deleteActiveGroup,
     toggleLinkComponent,
     goBackSelection,
@@ -344,6 +346,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               expanded={state.commentPanelExpanded}
               project={project}
               username={state.commentUsername}
+              authorId={state.commentAuthorId}
               linkTargetId={state.commentLinkTargetId}
               focusedCommentId={state.focusedCommentId}
               onToggle={toggleCommentPanel}
@@ -352,6 +355,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               onAddRoot={addRootComment}
               onAddReply={addReplyComment}
               onFocusComment={focusComment}
+              onUpdateComment={updateComment}
+              onDeleteComment={deleteComment}
             />
           </div>
 

@@ -2,8 +2,8 @@ import { useState } from 'react';
 import type { CommentAnchor, DocComment, LoadedProject } from '../types';
 import {
   buildCommentTree,
+  canOwnComment,
   formatCommentAnchorLabel,
-  isRootComment,
   type CommentTreeNode,
 } from '../lib/comments';
 import { UsernamePrompt } from './UsernamePrompt';
@@ -14,6 +14,7 @@ interface CommentPanelProps {
   expanded: boolean;
   project: LoadedProject;
   username: string | null;
+  authorId: string;
   linkTargetId: string | null;
   focusedCommentId: string | null;
   onToggle: () => void;
@@ -22,6 +23,8 @@ interface CommentPanelProps {
   onAddRoot: (body: string) => void;
   onAddReply: (parentId: string, body: string) => void;
   onFocusComment: (commentId: string) => void;
+  onUpdateComment: (commentId: string, body: string) => void;
+  onDeleteComment: (commentId: string) => void;
 }
 
 function AuthorAvatar({ name, small = false }: { name: string; small?: boolean }) {
@@ -57,26 +60,36 @@ function CommentTreeItem({
   linkTargetId,
   focusedCommentId,
   componentLabels,
+  authorId,
+  username,
   onSelectLinkTarget,
   onReply,
   onFocusComment,
+  onUpdateComment,
+  onDeleteComment,
   isReply = false,
 }: {
   node: CommentTreeNode;
   linkTargetId: string | null;
   focusedCommentId: string | null;
   componentLabels: Map<string, string>;
+  authorId: string;
+  username: string | null;
   onSelectLinkTarget: (commentId: string | null) => void;
   onReply: (parentId: string, body: string) => void;
   onFocusComment: (commentId: string) => void;
+  onUpdateComment: (commentId: string, body: string) => void;
+  onDeleteComment: (commentId: string) => void;
   isReply?: boolean;
 }) {
   const { comment } = node;
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyBody, setReplyBody] = useState('');
-  const isRoot = isRootComment(comment);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editBody, setEditBody] = useState(comment.body);
   const isLinkTarget = linkTargetId === comment.id;
   const isFocused = focusedCommentId === comment.id;
+  const isOwner = canOwnComment(comment, authorId, username);
 
   const anchorLabel = comment.anchor
     ? formatCommentAnchorLabel(
@@ -87,7 +100,7 @@ function CommentTreeItem({
   const authorColors = authorAvatarColors(comment.author);
 
   const handleSelectForLink = () => {
-    if (!isRoot) return;
+    if (editOpen) return;
     onSelectLinkTarget(isLinkTarget ? null : comment.id);
   };
 
@@ -100,27 +113,21 @@ function CommentTreeItem({
       className={`comment-thread-item ${isReply ? 'comment-thread-item-reply' : ''} ${isLinkTarget ? 'comment-thread-item-linking' : ''} ${isFocused ? 'comment-thread-item-focused' : ''}`}
     >
       <article
-        className={`comment-card ${isRoot ? 'comment-card-selectable' : ''} ${isLinkTarget ? 'comment-card-selected' : ''}`}
-        onClick={isRoot ? handleSelectForLink : undefined}
-        onKeyDown={
-          isRoot
-            ? (event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  handleSelectForLink();
-                }
-              }
-            : undefined
-        }
-        role={isRoot ? 'button' : undefined}
-        tabIndex={isRoot ? 0 : undefined}
-        aria-pressed={isRoot ? isLinkTarget : undefined}
+        className={`comment-card comment-card-selectable ${isLinkTarget ? 'comment-card-selected' : ''}`}
+        onClick={handleSelectForLink}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            handleSelectForLink();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-pressed={isLinkTarget}
         aria-label={
-          isRoot
-            ? isLinkTarget
-              ? 'Comment selected for linking — press to cancel'
-              : 'Select comment for linking'
-            : undefined
+          isLinkTarget
+            ? 'Comment selected for linking — press to cancel'
+            : 'Select comment for linking'
         }
       >
         <div className="comment-card-row">
@@ -138,9 +145,49 @@ function CommentTreeItem({
               </time>
             </header>
 
-            <p className="comment-body">{comment.body}</p>
+            {!editOpen && <p className="comment-body">{comment.body}</p>}
 
-            {isRoot && anchorLabel && (
+            {editOpen && (
+              <form
+                className="comment-inline-form"
+                onClick={stopCardClick}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!editBody.trim()) return;
+                  onUpdateComment(comment.id, editBody);
+                  setEditOpen(false);
+                }}
+              >
+                <textarea
+                  className="comment-compose-input comment-compose-input-compact"
+                  rows={3}
+                  value={editBody}
+                  autoFocus
+                  onChange={(event) => setEditBody(event.target.value)}
+                />
+                <div className="comment-inline-form-actions">
+                  <button
+                    type="submit"
+                    className="comment-compose-submit comment-compose-submit-compact"
+                    disabled={!editBody.trim()}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="comment-text-btn"
+                    onClick={() => {
+                      setEditBody(comment.body);
+                      setEditOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {!editOpen && anchorLabel && (
               <button
                 type="button"
                 className="comment-anchor-pill"
@@ -154,35 +201,54 @@ function CommentTreeItem({
               </button>
             )}
 
-            {isRoot && !comment.anchor && !isLinkTarget && (
-              <p className="comment-anchor-hint">
-                Click to select, then click a component or select markdown text to link.
-              </p>
-            )}
-
-            {isRoot && isLinkTarget && (
-              <p className="comment-linking-hint">
-                Click a component to link, or select text in markdown. Click the linked component again to unlink.
-              </p>
-            )}
-
             <footer className="comment-card-actions" onClick={stopCardClick}>
-              {isRoot && (
-                <button
-                  type="button"
-                  className={`comment-text-btn ${isLinkTarget ? 'comment-text-btn-active' : ''}`}
-                  onClick={() => onSelectLinkTarget(isLinkTarget ? null : comment.id)}
-                >
-                  {isLinkTarget ? 'Cancel' : 'Link'}
-                </button>
+              {!editOpen && (
+                <>
+                  <button
+                    type="button"
+                    className={`comment-text-btn ${isLinkTarget ? 'comment-text-btn-active' : ''}`}
+                    onClick={() => onSelectLinkTarget(isLinkTarget ? null : comment.id)}
+                  >
+                    {isLinkTarget ? 'Cancel' : 'Link'}
+                  </button>
+                  <button
+                    type="button"
+                    className="comment-text-btn"
+                    onClick={() => setReplyOpen((open) => !open)}
+                  >
+                    {replyOpen ? 'Cancel' : 'Reply'}
+                  </button>
+                  {isOwner && (
+                    <>
+                      <button
+                        type="button"
+                        className="comment-text-btn"
+                        onClick={() => {
+                          setEditBody(comment.body);
+                          setEditOpen(true);
+                          setReplyOpen(false);
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="comment-text-btn comment-text-btn-danger"
+                        onClick={() => {
+                          const hasReplies = node.replies.length > 0;
+                          const message = hasReplies
+                            ? 'Delete this comment and all replies?'
+                            : 'Delete this comment?';
+                          if (!window.confirm(message)) return;
+                          onDeleteComment(comment.id);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </>
               )}
-              <button
-                type="button"
-                className="comment-text-btn"
-                onClick={() => setReplyOpen((open) => !open)}
-              >
-                {replyOpen ? 'Cancel' : 'Reply'}
-              </button>
             </footer>
 
             {replyOpen && (
@@ -228,9 +294,13 @@ function CommentTreeItem({
               linkTargetId={linkTargetId}
               focusedCommentId={focusedCommentId}
               componentLabels={componentLabels}
+              authorId={authorId}
+              username={username}
               onSelectLinkTarget={onSelectLinkTarget}
               onReply={onReply}
               onFocusComment={onFocusComment}
+              onUpdateComment={onUpdateComment}
+              onDeleteComment={onDeleteComment}
             />
           ))}
         </ul>
@@ -243,6 +313,7 @@ export function CommentPanel({
   expanded,
   project,
   username,
+  authorId,
   linkTargetId,
   focusedCommentId,
   onToggle,
@@ -251,6 +322,8 @@ export function CommentPanel({
   onAddRoot,
   onAddReply,
   onFocusComment,
+  onUpdateComment,
+  onDeleteComment,
 }: CommentPanelProps) {
   const [composeBody, setComposeBody] = useState('');
   const [editingUsername, setEditingUsername] = useState(false);
@@ -405,9 +478,13 @@ export function CommentPanel({
                         linkTargetId={linkTargetId}
                         focusedCommentId={focusedCommentId}
                         componentLabels={componentLabels}
+                        authorId={authorId}
+                        username={username}
                         onSelectLinkTarget={onSelectLinkTarget}
                         onReply={onAddReply}
                         onFocusComment={onFocusComment}
+                        onUpdateComment={onUpdateComment}
+                        onDeleteComment={onDeleteComment}
                       />
                     ))}
                   </ul>
@@ -426,7 +503,7 @@ export function getCommentAnchorForComponent(
   componentId: string,
 ): CommentAnchor[] {
   return comments
-    .filter((c) => c.parentId === null && c.anchor?.componentId === componentId)
+    .filter((c) => c.anchor?.componentId === componentId)
     .map((c) => c.anchor!)
     .filter(Boolean);
 }

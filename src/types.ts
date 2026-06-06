@@ -22,9 +22,11 @@ export interface DocComment {
   id: string;
   parentId: string | null;
   author: string;
+  /** Browser-local id of the author — used to allow edit/delete on this device */
+  authorId?: string;
   body: string;
   createdAt: number;
-  /** Root comments only — link to a component or md passage */
+  /** Optional link to a component or md passage */
   anchor?: CommentAnchor;
 }
 
@@ -154,7 +156,8 @@ export interface AppState {
   selectionScrollNonce: number;
   commentPanelExpanded: boolean;
   commentUsername: string | null;
-  /** Root comment selected for anchor linking */
+  commentAuthorId: string;
+  /** Comment selected for anchor linking */
   commentLinkTargetId: string | null;
   focusedCommentId: string | null;
 }
@@ -220,6 +223,8 @@ export type AppAction =
       anchor: CommentAnchor;
     }
   | { type: 'CLEAR_COMMENT_ANCHOR'; commentId: string }
+  | { type: 'UPDATE_COMMENT'; commentId: string; body: string }
+  | { type: 'DELETE_COMMENT'; commentId: string }
   | { type: 'FOCUS_COMMENT'; commentId: string | null };
 
 declare global {

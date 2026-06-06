@@ -55,6 +55,8 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'ADD_REPLY_COMMENT',
   'SET_COMMENT_ANCHOR',
   'CLEAR_COMMENT_ANCHOR',
+  'UPDATE_COMMENT',
+  'DELETE_COMMENT',
 ]);
 
 export function useAppStore() {
@@ -325,6 +327,14 @@ export function useAppStore() {
 
   const focusComment = useCallback((commentId: string | null) => {
     dispatch({ type: 'FOCUS_COMMENT', commentId });
+  }, [dispatch]);
+
+  const updateComment = useCallback((commentId: string, body: string) => {
+    dispatch({ type: 'UPDATE_COMMENT', commentId, body });
+  }, [dispatch]);
+
+  const deleteComment = useCallback((commentId: string) => {
+    dispatch({ type: 'DELETE_COMMENT', commentId });
   }, [dispatch]);
 
   const deletePage = useCallback(async (fileName: string): Promise<PageActionResult> => {
@@ -656,6 +666,8 @@ export function useAppStore() {
     setCommentAnchor,
     clearCommentAnchor: clearCommentAnchorAction,
     focusComment,
+    updateComment,
+    deleteComment,
     deleteActiveGroup,
     toggleLinkComponent,
     goBackSelection,
