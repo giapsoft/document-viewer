@@ -27,7 +27,20 @@ export type { RemoteDocumentMeta };
 export type SaveRemoteResult = {
   remoteSync: RemoteSyncState;
   skippedUpload: boolean;
+  remoteUpdatedAt: string | null;
 };
+
+export async function fetchRemoteDocumentUpdatedAt(docId: string): Promise<string | null> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('documents')
+    .select('updated_at')
+    .eq('id', docId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data?.updated_at ?? null;
+}
 
 export async function listRemoteDocuments(): Promise<RemoteDocumentMeta[]> {
   const supabase = getSupabaseClient();
@@ -99,7 +112,7 @@ async function uploadStorageFile(path: string, body: Blob | string): Promise<voi
 }
 
 async function loadRemoteDocumentFromBundle(
-  meta: { id: string; title: string },
+  meta: { id: string; title: string; updated_at?: string | null },
   bundle: Blob,
 ): Promise<LoadedProject> {
   const input = await unpackProjectBundle(bundle);
@@ -110,12 +123,13 @@ async function loadRemoteDocumentFromBundle(
     remoteTitle: meta.title,
     folderHandle: null,
     remoteSync,
+    remoteUpdatedAt: meta.updated_at ?? null,
   });
 }
 
 async function loadRemoteDocumentLegacy(
   docId: string,
-  meta: { id: string; title: string },
+  meta: { id: string; title: string; updated_at?: string | null },
   paths: string[],
 ): Promise<LoadedProject> {
   const fileBlobs = new Map<string, Blob>();
@@ -178,6 +192,7 @@ async function loadRemoteDocumentLegacy(
       remoteTitle: meta.title,
       folderHandle: null,
       remoteSync: { format: 'legacy', fileHashes, bundleHash: null },
+      remoteUpdatedAt: meta.updated_at ?? null,
     },
   );
 }
@@ -238,19 +253,22 @@ export async function saveRemoteDocument(
     if (error) throw new Error(error.message);
   }
 
+  const remoteUpdatedAt = await fetchRemoteDocumentUpdatedAt(docId);
+
   return {
     skippedUpload,
     remoteSync: {
       format: 'bundle',
       bundleHash,
     },
+    remoteUpdatedAt,
   };
 }
 
 export async function createRemoteDocument(
   project: LoadedProject,
   title: string,
-): Promise<{ docId: string; remoteSync: RemoteSyncState }> {
+): Promise<{ docId: string; remoteSync: RemoteSyncState; remoteUpdatedAt: string | null }> {
   const supabase = getSupabaseClient();
   const nextTitle = normalizeDocumentTitle(title);
   if (!nextTitle) throw new Error('Document title is required');
@@ -266,7 +284,11 @@ export async function createRemoteDocument(
   }
 
   const saveResult = await saveRemoteDocument(data.id, project, nextTitle);
-  return { docId: data.id, remoteSync: saveResult.remoteSync };
+  return {
+    docId: data.id,
+    remoteSync: saveResult.remoteSync,
+    remoteUpdatedAt: saveResult.remoteUpdatedAt,
+  };
 }
 
 export async function deleteRemoteDocument(docId: string): Promise<void> {

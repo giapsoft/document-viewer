@@ -773,6 +773,43 @@ code {
   max-width: 16rem;
 }
 
+.remote-stale-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0.5rem 0.35rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 6px;
+  background: #fff4e6;
+  border: 1px solid #ffd8a8;
+  color: #d9480f;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.remote-stale-banner-btn {
+  flex-shrink: 0;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid #ffa94d;
+  border-radius: 5px;
+  background: #fff;
+  color: #d9480f;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.remote-stale-banner-btn:hover:not(:disabled) {
+  background: #ffe8cc;
+}
+
+.remote-stale-banner-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .link-list-nav {
   background: #e7f1ff;
   border: 1px solid #86b7fe;

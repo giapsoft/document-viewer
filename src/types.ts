@@ -122,6 +122,8 @@ export interface LoadedProject {
   folderHandle?: FileSystemDirectoryHandle | null;
   /** Populated after remote load/save for incremental sync. */
   remoteSync?: RemoteSyncState | null;
+  /** Server `documents.updated_at` when this copy was loaded or last saved. */
+  remoteUpdatedAt?: string | null;
 }
 
 export interface PanelState {

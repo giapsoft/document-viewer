@@ -135,6 +135,7 @@ export function assembleLoadedProject(
     remoteTitle?: string | null;
     folderHandle?: FileSystemDirectoryHandle | null;
     remoteSync?: RemoteSyncState | null;
+    remoteUpdatedAt?: string | null;
   },
 ): LoadedProject {
   const project = assembleProject(input);
@@ -145,6 +146,7 @@ export function assembleLoadedProject(
     remoteTitle: meta.remoteTitle ?? null,
     folderHandle: meta.folderHandle ?? null,
     remoteSync: meta.remoteSync ?? null,
+    remoteUpdatedAt: meta.remoteUpdatedAt ?? null,
   };
 }
 

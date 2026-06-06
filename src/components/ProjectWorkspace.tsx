@@ -5,12 +5,14 @@ import { WorkspaceTopBar } from './WorkspaceTopBar';
 import { ProjectToolbar } from './ProjectToolbar';
 import { SaveDestinationDialog, type SaveDestination } from './SaveDestinationDialog';
 import { SaveDocDialog } from './SaveDocDialog';
+import { RemoteConflictDialog } from './RemoteConflictDialog';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
 import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
+import { useRemoteStalePoll } from '../hooks/useRemoteStalePoll';
 import { CommentPanel } from './CommentPanel';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 type AppStore = ReturnType<typeof useAppStore>;
 
@@ -64,6 +66,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     selectProjectFolder,
     saveToLocal,
     saveToRemote,
+    checkRemoteDocumentStale,
     deleteRemoteLink,
     closeProject,
     suggestNewPageName,
@@ -177,6 +180,27 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const [toolbarError, setToolbarError] = useState(null as string | null);
   const [saveDestinationOpen, setSaveDestinationOpen] = useState(false);
   const [remoteTitleOpen, setRemoteTitleOpen] = useState(false);
+  const [remoteConflictOpen, setRemoteConflictOpen] = useState(false);
+  const [pendingRemoteTitle, setPendingRemoteTitle] = useState<string | undefined>();
+
+  const remoteStaleOnServer = useRemoteStalePoll(
+    Boolean(project.remoteDocId && project.remoteUpdatedAt),
+    checkRemoteDocumentStale,
+  );
+
+  const runRemoteSave = useCallback(
+    async (title?: string, force = false) => {
+      const result = await saveToRemote(title, { force });
+      if (result.ok) return { ok: true as const };
+      if (result.conflict) {
+        setPendingRemoteTitle(title);
+        setRemoteConflictOpen(true);
+        return { ok: true as const };
+      }
+      return { ok: false as const, error: result.error };
+    },
+    [saveToRemote],
+  );
 
   const canSaveLocal = Boolean(window.showDirectoryPicker);
   const canSaveRemote = remoteStorageReady && isSupabaseConfigured();
@@ -216,10 +240,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     }
 
     if (project.remoteDocId) {
-      void runToolbarAction(async () => {
-        const result = await saveToRemote();
-        return result.ok ? { ok: true } : { ok: false, error: result.error };
-      });
+      void runToolbarAction(async () => runRemoteSave());
       return;
     }
 
@@ -275,6 +296,20 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               {project.warnings.map((w, i) => (
                 <span key={i}>{w}</span>
               ))}
+            </div>
+          )}
+
+          {remoteStaleOnServer && project.remoteDocId && (
+            <div className="remote-stale-banner" role="status">
+              <span>A newer version of this document is on the server.</span>
+              <button
+                type="button"
+                className="remote-stale-banner-btn"
+                onClick={() => void runToolbarAction(reloadProject)}
+                disabled={toolbarLoading}
+              >
+                Reload
+              </button>
             </div>
           )}
 
@@ -392,10 +427,21 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
           onClose={() => setRemoteTitleOpen(false)}
           onConfirm={(title) => {
             setRemoteTitleOpen(false);
-            void runToolbarAction(async () => {
-              const result = await saveToRemote(title);
-              return result.ok ? { ok: true } : { ok: false, error: result.error };
-            });
+            void runToolbarAction(async () => runRemoteSave(title));
+          }}
+        />
+      )}
+
+      {remoteConflictOpen && (
+        <RemoteConflictDialog
+          onClose={() => setRemoteConflictOpen(false)}
+          onReload={() => {
+            setRemoteConflictOpen(false);
+            void runToolbarAction(reloadProject);
+          }}
+          onOverwrite={() => {
+            setRemoteConflictOpen(false);
+            void runToolbarAction(async () => runRemoteSave(pendingRemoteTitle, true));
           }}
         />
       )}

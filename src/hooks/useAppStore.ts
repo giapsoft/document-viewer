@@ -23,16 +23,18 @@ import { isSupabaseConfigured } from '../lib/supabaseClient';
 import {
   createRemoteDocument,
   deleteRemoteDocument,
+  fetchRemoteDocumentUpdatedAt,
   loadRemoteDocument,
   saveRemoteDocument,
 } from '../lib/remoteProject';
+import { isRemoteVersionStale } from '../lib/remoteConflict';
 import { defaultRemoteTitle } from '../lib/projectBundle';
 import { setDocIdInUrl } from '../lib/docUrl';
 
 export type PageActionResult = { ok: true } | { ok: false; error: string };
 export type SaveResult =
   | { ok: true; docId?: string }
-  | { ok: false; error: string; cancelled?: boolean };
+  | { ok: false; error: string; cancelled?: boolean; conflict?: boolean };
 
 const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'UPDATE_COMPONENT',
@@ -515,7 +517,8 @@ export function useAppStore() {
     }
   }, [dispatch]);
 
-  const saveToRemote = useCallback(async (title?: string): Promise<SaveResult> => {
+  const saveToRemote = useCallback(
+    async (title?: string, options?: { force?: boolean }): Promise<SaveResult> => {
     const project = projectRef.current;
     if (!project) {
       return { ok: false, error: 'No project is open.' };
@@ -531,6 +534,18 @@ export function useAppStore() {
     setSaveError(null);
 
     try {
+      if (project.remoteDocId && !options?.force) {
+        const serverUpdatedAt = await fetchRemoteDocumentUpdatedAt(project.remoteDocId);
+        if (isRemoteVersionStale(project.remoteUpdatedAt, serverUpdatedAt)) {
+          setSaveStatus('idle');
+          return {
+            ok: false,
+            conflict: true,
+            error: 'A newer version of this document exists on the server.',
+          };
+        }
+      }
+
       if (project.remoteDocId) {
         const saveResult = await saveRemoteDocument(
           project.remoteDocId,
@@ -541,6 +556,7 @@ export function useAppStore() {
           ...project,
           remoteTitle: title?.trim() || project.remoteTitle || defaultRemoteTitle(project),
           remoteSync: saveResult.remoteSync,
+          remoteUpdatedAt: saveResult.remoteUpdatedAt,
         };
         projectRef.current = nextProject;
         dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
@@ -564,6 +580,7 @@ export function useAppStore() {
         remoteDocId: created.docId,
         remoteTitle: nextTitle,
         remoteSync: created.remoteSync,
+        remoteUpdatedAt: created.remoteUpdatedAt,
         folderHandle: project.folderHandle ?? null,
       };
       projectRef.current = savedProject;
@@ -579,7 +596,9 @@ export function useAppStore() {
       setSaveError(message);
       return { ok: false, error: message };
     }
-  }, [dispatch]);
+  },
+    [dispatch],
+  );
 
   const saveProject = saveToRemote;
 
@@ -612,6 +631,18 @@ export function useAppStore() {
     }
   }, [dispatch]);
 
+  const checkRemoteDocumentStale = useCallback(async (): Promise<boolean> => {
+    const project = projectRef.current;
+    if (!project?.remoteDocId || !project.remoteUpdatedAt) return false;
+    if (!isSupabaseConfigured()) return false;
+    try {
+      const serverUpdatedAt = await fetchRemoteDocumentUpdatedAt(project.remoteDocId);
+      return isRemoteVersionStale(project.remoteUpdatedAt, serverUpdatedAt);
+    } catch {
+      return false;
+    }
+  }, []);
+
   const loadRemoteDoc = useCallback(
     async (docId: string): Promise<PageActionResult> => {
       if (!isSupabaseConfigured()) {
@@ -641,6 +672,7 @@ export function useAppStore() {
     loadRemoteDoc,
     saveToLocal,
     saveToRemote,
+    checkRemoteDocumentStale,
     deleteRemoteLink,
     saveProject,
     reloadProject,
