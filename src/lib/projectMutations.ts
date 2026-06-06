@@ -1,4 +1,5 @@
 import type { Component, LoadedProject } from '../types';
+import { removeCommentsForComponent } from './comments';
 import { removeMemberIdsFromGroups } from './groupRelations';
 import { buildIndex } from './index';
 import { createComponentId } from './pageIds';
@@ -138,6 +139,10 @@ export function deleteComponentFromProject(
   });
 
   const groups = removeMemberIdsFromGroups(project.relations.groups, [componentId]);
+  const comments = removeCommentsForComponent(
+    project.relations.comments ?? [],
+    componentId,
+  );
 
   const mdFiles = new Map(project.mdFiles);
   if (doomed?.type === 'md') {
@@ -147,7 +152,7 @@ export function deleteComponentFromProject(
   return rebuildProject({
     ...project,
     pages,
-    relations: { ...project.relations, groups },
+    relations: { ...project.relations, groups, comments },
     mdFiles,
   });
 }

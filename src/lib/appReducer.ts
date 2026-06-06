@@ -38,6 +38,8 @@ import {
   shouldAutoScrollPanels,
   togglePinnedPage,
 } from './pagePins';
+import { addReplyComment, addRootComment, clearCommentAnchor, setCommentAnchor } from './comments';
+import { getStoredCommentUsername } from './commentSession';
 
 function applyExitLinkMode(state: AppState): AppState {
   if (!state.linkMode) return state;
@@ -97,6 +99,10 @@ export const initialAppState: AppState = {
   selectionHistoryIndex: -1,
   scrollToComponent: null,
   selectionScrollNonce: 0,
+  commentPanelExpanded: true,
+  commentUsername: null,
+  commentLinkTargetId: null,
+  focusedCommentId: null,
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -106,6 +112,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...initialAppState,
         project: action.project,
         sidebarExpanded: true,
+        commentUsername: getStoredCommentUsername(),
       };
       if (hasPinnedPages(action.project.relations)) {
         return { ...nextState, panels: buildPanelsForPinList(nextState) };
@@ -654,6 +661,104 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ? buildPanelsForPageContext(nextState, state.currentPage)
         : [];
       return { ...nextState, panels };
+    }
+
+    case 'TOGGLE_COMMENT_PANEL':
+      return { ...state, commentPanelExpanded: !state.commentPanelExpanded };
+
+    case 'SET_COMMENT_USERNAME': {
+      const username = action.username.trim();
+      if (!username) return state;
+      return { ...state, commentUsername: username };
+    }
+
+    case 'SELECT_COMMENT_LINK_TARGET':
+      return {
+        ...state,
+        commentLinkTargetId: action.commentId,
+      };
+
+    case 'FOCUS_COMMENT': {
+      if (!action.commentId || !state.project) {
+        return { ...state, focusedCommentId: null };
+      }
+      const comment = (state.project.relations.comments ?? []).find(
+        (c) => c.id === action.commentId,
+      );
+      const componentId = comment?.anchor?.componentId ?? null;
+      return {
+        ...state,
+        focusedCommentId: action.commentId,
+        scrollToComponent: componentId
+          ? {
+              componentId,
+              nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+            }
+          : state.scrollToComponent,
+      };
+    }
+
+    case 'ADD_ROOT_COMMENT': {
+      if (!state.project || !state.commentUsername) return state;
+      const comments = addRootComment(
+        state.project.relations.comments ?? [],
+        state.commentUsername,
+        action.body,
+      );
+      const project = rebuildProject({
+        ...state.project,
+        relations: { ...state.project.relations, comments },
+      });
+      const newId = comments[comments.length - 1]?.id ?? null;
+      return {
+        ...state,
+        project,
+        commentLinkTargetId: newId,
+        focusedCommentId: newId,
+      };
+    }
+
+    case 'ADD_REPLY_COMMENT': {
+      if (!state.project || !state.commentUsername) return state;
+      const comments = addReplyComment(
+        state.project.relations.comments ?? [],
+        action.parentId,
+        state.commentUsername,
+        action.body,
+      );
+      const project = rebuildProject({
+        ...state.project,
+        relations: { ...state.project.relations, comments },
+      });
+      const newId = comments[comments.length - 1]?.id ?? null;
+      return { ...state, project, focusedCommentId: newId };
+    }
+
+    case 'SET_COMMENT_ANCHOR': {
+      if (!state.project) return state;
+      const comments = setCommentAnchor(
+        state.project.relations.comments ?? [],
+        action.commentId,
+        action.anchor,
+      );
+      const project = rebuildProject({
+        ...state.project,
+        relations: { ...state.project.relations, comments },
+      });
+      return { ...state, project };
+    }
+
+    case 'CLEAR_COMMENT_ANCHOR': {
+      if (!state.project) return state;
+      const comments = clearCommentAnchor(
+        state.project.relations.comments ?? [],
+        action.commentId,
+      );
+      const project = rebuildProject({
+        ...state.project,
+        relations: { ...state.project.relations, comments },
+      });
+      return { ...state, project };
     }
 
     default:

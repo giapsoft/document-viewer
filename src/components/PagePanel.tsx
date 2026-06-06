@@ -1,5 +1,18 @@
-import { useRef, useEffect, useLayoutEffect, type CSSProperties, type ReactNode } from 'react';
-import type { AppStyles, Component, LoadedProject, PageData, SelectionState } from '../types';
+import {
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import type {
+  AppStyles,
+  Component,
+  DocComment,
+  LoadedProject,
+  PageData,
+  SelectionState,
+} from '../types';
 import { resolveComponentForDisplay, isTextType } from '../lib/componentDisplay';
 import { PageLabel } from './PageLabel';
 import { MarkdownPreview } from './MarkdownPreview';
@@ -12,6 +25,43 @@ import {
 } from '../lib/selectionHighlight';
 import { ScrollbarMarkers } from './ScrollbarMarkers';
 
+function getMdHighlightRanges(
+  comments: DocComment[],
+  componentId: string,
+  focusedCommentId: string | null,
+): Array<{ start: number; end: number; className?: string }> {
+  return comments
+    .filter(
+      (comment) =>
+        comment.parentId === null &&
+        comment.anchor?.kind === 'md-range' &&
+        comment.anchor.componentId === componentId,
+    )
+    .map((comment) => {
+      const anchor = comment.anchor as Extract<
+        NonNullable<DocComment['anchor']>,
+        { kind: 'md-range' }
+      >;
+      const isFocused = comment.id === focusedCommentId;
+      return {
+        start: anchor.start,
+        end: anchor.end,
+        className: isFocused
+          ? 'md-comment-highlight md-comment-highlight-focused'
+          : 'md-comment-highlight',
+      };
+    });
+}
+
+function hasComponentCommentAnchor(comments: DocComment[], componentId: string): boolean {
+  return comments.some(
+    (comment) =>
+      comment.parentId === null &&
+      comment.anchor?.kind === 'component' &&
+      comment.anchor.componentId === componentId,
+  );
+}
+
 interface ComponentBlockProps {
   component: Component;
   project: LoadedProject;
@@ -21,7 +71,16 @@ interface ComponentBlockProps {
   highlightedIds: Set<string> | null;
   linkMode?: boolean;
   linkGroupMembers?: Set<string>;
+  commentLinkMode?: boolean;
+  mdHighlightRanges?: Array<{ start: number; end: number; className?: string }>;
+  hasComponentCommentAnchor?: boolean;
   onSelect: (componentId: string, pageFile: string) => void;
+  onCommentLinkComponent?: (componentId: string, pageFile: string) => void;
+  onCommentLinkMdRange?: (
+    componentId: string,
+    pageFile: string,
+    range: { start: number; end: number; excerpt: string },
+  ) => void;
   registerRef: (id: string, el: HTMLElement | null) => void;
 }
 
@@ -32,6 +91,8 @@ interface ComponentShellProps {
   className: string;
   style: CSSProperties;
   onSelect: (componentId: string, pageFile: string) => void;
+  onCommentLinkComponent?: (componentId: string, pageFile: string) => void;
+  commentLinkMode?: boolean;
   pageFile: string;
   registerRef: (id: string, el: HTMLElement | null) => void;
   children: ReactNode;
@@ -44,6 +105,8 @@ function ComponentShell({
   className,
   style,
   onSelect,
+  onCommentLinkComponent,
+  commentLinkMode = false,
   pageFile,
   registerRef,
   children,
@@ -55,6 +118,10 @@ function ComponentShell({
       style={style}
       onClick={(e) => {
         e.stopPropagation();
+        if (commentLinkMode && onCommentLinkComponent) {
+          onCommentLinkComponent(component.id, pageFile);
+          return;
+        }
         onSelect(component.id, pageFile);
       }}
       role="button"
@@ -62,7 +129,11 @@ function ComponentShell({
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onSelect(component.id, pageFile);
+          if (commentLinkMode && onCommentLinkComponent) {
+            onCommentLinkComponent(component.id, pageFile);
+          } else {
+            onSelect(component.id, pageFile);
+          }
         }
       }}
     >
@@ -80,10 +151,16 @@ export function ComponentBlock({
   highlightedIds,
   linkMode = false,
   linkGroupMembers,
+  commentLinkMode = false,
+  mdHighlightRanges = [],
+  hasComponentCommentAnchor = false,
   onSelect,
+  onCommentLinkComponent,
+  onCommentLinkMdRange,
   registerRef,
 }: ComponentBlockProps) {
   const resolved = resolveComponentForDisplay(component, project.mdFiles);
+  const mdSelectionHandledRef = useRef(false);
 
   const isLinkSelected = linkMode && (linkGroupMembers?.has(component.id) ?? false);
   const isPrimarySelected =
@@ -130,14 +207,31 @@ export function ComponentBlock({
     highlightKind,
     isDimmed,
     onSelect,
+    onCommentLinkComponent:
+      resolved.type === 'md' && commentLinkMode
+        ? (componentId: string, file: string) => {
+            if (mdSelectionHandledRef.current) {
+              mdSelectionHandledRef.current = false;
+              return;
+            }
+            onCommentLinkComponent?.(componentId, file);
+          }
+        : onCommentLinkComponent,
+    commentLinkMode,
     pageFile,
     registerRef,
   };
 
+  const shellClassExtra = hasComponentCommentAnchor ? ' comment-component-anchor' : '';
+
   if (resolved.type === 'img') {
     const src = project.imageUrls.get(resolved.content);
     return (
-      <ComponentShell {...shellProps} className="component-img-wrap" style={shellStyle}>
+      <ComponentShell
+        {...shellProps}
+        className={`component-img-wrap${shellClassExtra}`}
+        style={shellStyle}
+      >
         {src ? (
           <img src={src} alt={resolved.content} className="component-img" />
         ) : (
@@ -149,9 +243,21 @@ export function ComponentBlock({
 
   if (resolved.type === 'md') {
     return (
-      <ComponentShell {...shellProps} className="component-md-wrap" style={shellStyle}>
+      <ComponentShell
+        {...shellProps}
+        className={`component-md-wrap${shellClassExtra}`}
+        style={shellStyle}
+      >
         {resolved.content.trim() ? (
-          <MarkdownPreview source={resolved.content} />
+          <MarkdownPreview
+            source={resolved.content}
+            highlightRanges={mdHighlightRanges}
+            selectable={commentLinkMode}
+            onTextSelect={(range) => {
+              mdSelectionHandledRef.current = true;
+              onCommentLinkMdRange?.(component.id, pageFile, range);
+            }}
+          />
         ) : (
           <span className="component-md-empty">Empty markdown</span>
         )}
@@ -166,7 +272,7 @@ export function ComponentBlock({
   return (
     <ComponentShell
       {...shellProps}
-      className={`component-text component-${resolved.type}`}
+      className={`component-text component-${resolved.type}${shellClassExtra}`}
       style={{
         ...shellStyle,
         fontSize: typeStyle?.fontSize,
@@ -255,6 +361,14 @@ interface PagePanelProps {
   selectionScrollNonce?: number;
   autoScrollSecondary?: boolean;
   isPinned?: boolean;
+  commentLinkMode?: boolean;
+  focusedCommentId?: string | null;
+  onCommentLinkComponent?: (componentId: string, pageFile: string) => void;
+  onCommentLinkMdRange?: (
+    componentId: string,
+    pageFile: string,
+    range: { start: number; end: number; excerpt: string },
+  ) => void;
 }
 
 export function PagePanel({
@@ -268,6 +382,10 @@ export function PagePanel({
   onToggle,
   onSelect,
   onClearSelection,
+  commentLinkMode = false,
+  focusedCommentId = null,
+  onCommentLinkComponent,
+  onCommentLinkMdRange,
   scrollToComponentId = null,
   scrollNonce = 0,
   selectionScrollNonce = 0,
@@ -291,6 +409,8 @@ export function PagePanel({
     !linkMode && selection && page
       ? getHighlightedIdsForPage(page, selection, isCurrent)
       : new Set<string>();
+
+  const comments = project.relations.comments ?? [];
 
   useEffect(() => {
     if (!expanded) {
@@ -493,7 +613,19 @@ export function PagePanel({
                   highlightedIds={highlightedOnPage}
                   linkMode={linkMode}
                   linkGroupMembers={linkGroupMembers}
+                  commentLinkMode={commentLinkMode}
+                  mdHighlightRanges={getMdHighlightRanges(
+                    comments,
+                    component.id,
+                    focusedCommentId,
+                  )}
+                  hasComponentCommentAnchor={hasComponentCommentAnchor(
+                    comments,
+                    component.id,
+                  )}
                   onSelect={onSelect}
+                  onCommentLinkComponent={onCommentLinkComponent}
+                  onCommentLinkMdRange={onCommentLinkMdRange}
                   registerRef={registerRef}
                 />
               ))}

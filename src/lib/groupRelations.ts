@@ -1,4 +1,5 @@
 import type { RelationsFile } from '../types';
+import { normalizeComments } from './comments';
 
 export function cloneGroups(groups: string[][]): string[][] {
   return groups.map((group) => [...group]);
@@ -12,11 +13,13 @@ export function normalizeRelations(relations: RelationsFile): RelationsFile {
   const pageOrder = Array.isArray(relations.pageOrder)
     ? [...new Set(relations.pageOrder.filter((f) => typeof f === 'string' && f.trim()))]
     : [];
+  const comments = normalizeComments(relations.comments);
   return {
     pageNames: relations.pageNames ? { ...relations.pageNames } : {},
     pinnedPages,
     pageOrder,
     groups: cloneGroups(groups),
+    comments,
   };
 }
 

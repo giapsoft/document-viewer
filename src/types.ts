@@ -8,6 +8,26 @@ export interface Component {
   content: string;
 }
 
+export type CommentAnchor =
+  | { kind: 'component'; componentId: string }
+  | {
+      kind: 'md-range';
+      componentId: string;
+      start: number;
+      end: number;
+      excerpt: string;
+    };
+
+export interface DocComment {
+  id: string;
+  parentId: string | null;
+  author: string;
+  body: string;
+  createdAt: number;
+  /** Root comments only — link to a component or md passage */
+  anchor?: CommentAnchor;
+}
+
 export interface RelationsFile {
   /** Optional display names: page file (e.g. intro.p) → pageName shown in UI */
   pageNames?: Record<string, string>;
@@ -16,6 +36,7 @@ export interface RelationsFile {
   /** Sidebar / panel display order (page file names) */
   pageOrder?: string[];
   groups: string[][];
+  comments?: DocComment[];
 }
 
 export interface TypeStyle {
@@ -131,6 +152,11 @@ export interface AppState {
   scrollToComponent: { componentId: string; nonce: number } | null;
   /** Bumped when selection/group changes — each panel scrolls to first related component */
   selectionScrollNonce: number;
+  commentPanelExpanded: boolean;
+  commentUsername: string | null;
+  /** Root comment selected for anchor linking */
+  commentLinkTargetId: string | null;
+  focusedCommentId: string | null;
 }
 
 export interface SelectionHistoryEntry {
@@ -182,7 +208,19 @@ export type AppAction =
   | { type: 'DELETE_PAGE'; fileName: string }
   | { type: 'TOGGLE_PIN_PAGE'; pageFile: string }
   | { type: 'CLEAR_ALL_PINS' }
-  | { type: 'DELETE_COMPONENT'; pageFile: string; componentId: string };
+  | { type: 'DELETE_COMPONENT'; pageFile: string; componentId: string }
+  | { type: 'TOGGLE_COMMENT_PANEL' }
+  | { type: 'SET_COMMENT_USERNAME'; username: string }
+  | { type: 'SELECT_COMMENT_LINK_TARGET'; commentId: string | null }
+  | { type: 'ADD_ROOT_COMMENT'; body: string }
+  | { type: 'ADD_REPLY_COMMENT'; parentId: string; body: string }
+  | {
+      type: 'SET_COMMENT_ANCHOR';
+      commentId: string;
+      anchor: CommentAnchor;
+    }
+  | { type: 'CLEAR_COMMENT_ANCHOR'; commentId: string }
+  | { type: 'FOCUS_COMMENT'; commentId: string | null };
 
 declare global {
   interface Window {

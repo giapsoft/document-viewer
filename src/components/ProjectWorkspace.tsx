@@ -8,6 +8,7 @@ import { SaveDocDialog } from './SaveDocDialog';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
 import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
+import { CommentPanel } from './CommentPanel';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { useState } from 'react';
 
@@ -37,6 +38,14 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     deleteComponent,
     setLinkMode,
     clearAllPins,
+    toggleCommentPanel,
+    setCommentUsername,
+    selectCommentLinkTarget,
+    addRootComment,
+    addReplyComment,
+    setCommentAnchor,
+    clearCommentAnchor,
+    focusComment,
     deleteActiveGroup,
     toggleLinkComponent,
     goBackSelection,
@@ -75,10 +84,68 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   });
 
   useCtrlLinkModeHold({
-    enabled: true,
+    enabled: !state.commentLinkTargetId,
     linkMode: state.linkMode,
     setLinkMode,
   });
+
+  const commentLinkMode = Boolean(state.commentLinkTargetId);
+  const comments = project.relations.comments ?? [];
+
+  const findComponentType = (componentId: string) => {
+    for (const page of project.pages) {
+      const component = page.components.find((c) => c.id === componentId);
+      if (component) return component.type;
+    }
+    return null;
+  };
+
+  const handleCommentLinkComponent = (componentId: string, _pageFile: string) => {
+    const targetId = state.commentLinkTargetId;
+    if (!targetId) return;
+
+    const comment = comments.find((c) => c.id === targetId);
+    if (!comment) return;
+
+    if (comment.anchor?.componentId === componentId) {
+      clearCommentAnchor(targetId);
+      return;
+    }
+
+    if (findComponentType(componentId) === 'md') return;
+
+    setCommentAnchor(targetId, {
+      kind: 'component',
+      componentId,
+    });
+  };
+
+  const handleComponentClick = (componentId: string, pageFile: string) => {
+    if (commentLinkMode) {
+      handleCommentLinkComponent(componentId, pageFile);
+      return;
+    }
+    if (state.linkMode) {
+      toggleLinkComponent(componentId, pageFile);
+      return;
+    }
+    selectComponent(componentId, pageFile);
+  };
+
+  const handleCommentLinkMdRange = (
+    componentId: string,
+    _pageFile: string,
+    range: { start: number; end: number; excerpt: string },
+  ) => {
+    if (!state.commentLinkTargetId) return;
+    setCommentAnchor(state.commentLinkTargetId, {
+      kind: 'md-range',
+      componentId,
+      start: range.start,
+      end: range.end,
+      excerpt: range.excerpt,
+    });
+  };
 
   const sidebarPages = project.pages.map((p) => ({
     fileName: p.fileName,
@@ -90,7 +157,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const pinnedPages = project.relations.pinnedPages ?? [];
   const pinModeActive = pinnedPages.length > 0;
   const autoScrollSecondary = !pinModeActive;
-  const handleComponentClick = state.linkMode ? toggleLinkComponent : selectComponent;
 
   const matchingGroupIndices = state.selection?.matchingGroupIndices ?? [];
 
@@ -268,8 +334,25 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 selectionScrollNonce={state.selectionScrollNonce}
                 autoScrollSecondary={autoScrollSecondary}
                 isPinned={pinnedPages.includes(panel.pageFile)}
+                commentLinkMode={commentLinkMode}
+                focusedCommentId={state.focusedCommentId}
+                onCommentLinkComponent={handleCommentLinkComponent}
+                onCommentLinkMdRange={handleCommentLinkMdRange}
               />
             ))}
+            <CommentPanel
+              expanded={state.commentPanelExpanded}
+              project={project}
+              username={state.commentUsername}
+              linkTargetId={state.commentLinkTargetId}
+              focusedCommentId={state.focusedCommentId}
+              onToggle={toggleCommentPanel}
+              onSetUsername={setCommentUsername}
+              onSelectLinkTarget={selectCommentLinkTarget}
+              onAddRoot={addRootComment}
+              onAddReply={addReplyComment}
+              onFocusComment={focusComment}
+            />
           </div>
 
           <EditBar

@@ -1,5 +1,6 @@
 import { useReducer, useCallback, useRef, useEffect, useState } from 'react';
-import type { AppAction, Component, LoadedProject } from '../types';
+import type { AppAction, CommentAnchor, Component, LoadedProject } from '../types';
+import { setStoredCommentUsername } from '../lib/commentSession';
 import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus } from '../lib/saveProject';
 import { pickSaveFolder, saveProjectToFolder } from '../lib/saveProject';
@@ -50,6 +51,10 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'CLEAR_ALL_PINS',
   'DELETE_COMPONENT',
   'ADD_IMAGE',
+  'ADD_ROOT_COMMENT',
+  'ADD_REPLY_COMMENT',
+  'SET_COMMENT_ANCHOR',
+  'CLEAR_COMMENT_ANCHOR',
 ]);
 
 export function useAppStore() {
@@ -287,6 +292,39 @@ export function useAppStore() {
   const clearAllPins = useCallback(() => {
     if (!projectRef.current) return;
     dispatch({ type: 'CLEAR_ALL_PINS' });
+  }, [dispatch]);
+
+  const toggleCommentPanel = useCallback(() => {
+    dispatch({ type: 'TOGGLE_COMMENT_PANEL' });
+  }, [dispatch]);
+
+  const setCommentUsername = useCallback((username: string) => {
+    setStoredCommentUsername(username);
+    dispatch({ type: 'SET_COMMENT_USERNAME', username });
+  }, [dispatch]);
+
+  const selectCommentLinkTarget = useCallback((commentId: string | null) => {
+    dispatch({ type: 'SELECT_COMMENT_LINK_TARGET', commentId });
+  }, [dispatch]);
+
+  const addRootComment = useCallback((body: string) => {
+    dispatch({ type: 'ADD_ROOT_COMMENT', body });
+  }, [dispatch]);
+
+  const addReplyComment = useCallback((parentId: string, body: string) => {
+    dispatch({ type: 'ADD_REPLY_COMMENT', parentId, body });
+  }, [dispatch]);
+
+  const setCommentAnchor = useCallback((commentId: string, anchor: CommentAnchor) => {
+    dispatch({ type: 'SET_COMMENT_ANCHOR', commentId, anchor });
+  }, [dispatch]);
+
+  const clearCommentAnchorAction = useCallback((commentId: string) => {
+    dispatch({ type: 'CLEAR_COMMENT_ANCHOR', commentId });
+  }, [dispatch]);
+
+  const focusComment = useCallback((commentId: string | null) => {
+    dispatch({ type: 'FOCUS_COMMENT', commentId });
   }, [dispatch]);
 
   const deletePage = useCallback(async (fileName: string): Promise<PageActionResult> => {
@@ -610,6 +648,14 @@ export function useAppStore() {
     deleteComponent,
     setLinkMode,
     clearAllPins,
+    toggleCommentPanel,
+    setCommentUsername,
+    selectCommentLinkTarget,
+    addRootComment,
+    addReplyComment,
+    setCommentAnchor,
+    clearCommentAnchor: clearCommentAnchorAction,
+    focusComment,
     deleteActiveGroup,
     toggleLinkComponent,
     goBackSelection,
