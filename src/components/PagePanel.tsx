@@ -88,6 +88,26 @@ function getMdHighlightRanges(
   highlightCommentId: string | null,
   outstandingCommentId: string | null,
 ): MdHighlightRange[] {
+  const mdComments = comments.filter(
+    (comment) =>
+      comment.anchor?.kind === 'md-range' &&
+      comment.anchor.componentId === componentId,
+  );
+
+  if (mdComments.length === 1) {
+    const comment = mdComments[0]!;
+    const anchor = comment.anchor as Extract<
+      NonNullable<DocComment['anchor']>,
+      { kind: 'md-range' }
+    >;
+    return mdAnchorToHighlightRanges(
+      anchor,
+      mdHighlightClassName(comment.id, highlightCommentId, outstandingCommentId),
+      mdSource,
+      comment.id,
+    );
+  }
+
   if (highlightCommentId) {
     const highlighted = comments.find((comment) => comment.id === highlightCommentId);
     if (
@@ -103,24 +123,18 @@ function getMdHighlightRanges(
     }
   }
 
-  return comments
-    .filter(
-      (comment) =>
-        comment.anchor?.kind === 'md-range' &&
-        comment.anchor.componentId === componentId,
-    )
-    .flatMap((comment) => {
-      const anchor = comment.anchor as Extract<
-        NonNullable<DocComment['anchor']>,
-        { kind: 'md-range' }
-      >;
-      return mdAnchorToHighlightRanges(
-        anchor,
-        mdHighlightClassName(comment.id, highlightCommentId, outstandingCommentId),
-        mdSource,
-        comment.id,
-      );
-    });
+  return mdComments.flatMap((comment) => {
+    const anchor = comment.anchor as Extract<
+      NonNullable<DocComment['anchor']>,
+      { kind: 'md-range' }
+    >;
+    return mdAnchorToHighlightRanges(
+      anchor,
+      mdHighlightClassName(comment.id, highlightCommentId, outstandingCommentId),
+      mdSource,
+      comment.id,
+    );
+  });
 }
 
 function isPreviewComponentAnchor(

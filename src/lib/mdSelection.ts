@@ -60,6 +60,11 @@ function normalizeExcerptCompare(value: string): string {
   return value.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/** Strip markdown inline syntax (backticks, bold/italic markers) for loose comparison. */
+function stripMdInlineSyntax(value: string): string {
+  return value.replace(/`+/g, '').replace(/\*+/g, '').replace(/_+/g, '');
+}
+
 /** True when a source slice plausibly belongs to the user-facing selection excerpt. */
 export function segmentTextMatchesExcerpt(
   source: string,
@@ -71,13 +76,19 @@ export function segmentTextMatchesExcerpt(
   const text = normalizeExcerptCompare(source.slice(start, end));
   if (!text) return false;
   const normExcerpt = normalizeExcerptCompare(excerpt);
-  if (normExcerpt.includes(text) || text.includes(normExcerpt)) return true;
-  const minLen = Math.min(text.length, normExcerpt.length, 6);
-  if (minLen >= 2) {
-    const head = text.slice(0, minLen);
-    const tail = text.slice(-minLen);
-    if (normExcerpt.includes(head) || normExcerpt.includes(tail)) return true;
+  if (text === normExcerpt) return true;
+  // Only allow "text contains excerpt" when the segment is tightly sized —
+  // a segment much wider than the excerpt is a sign the stored offset is wrong.
+  if (text.includes(normExcerpt) && text.length <= normExcerpt.length * 1.5 + 8) return true;
+  if (normExcerpt.includes(text) && text.length >= Math.min(normExcerpt.length * 0.4, 10)) {
+    return true;
   }
+  // Loose compare: strip inline markdown syntax (backticks, bold/italic) from the
+  // source slice — the excerpt stored in DB is the plain-text version from the DOM.
+  const stripped = normalizeExcerptCompare(stripMdInlineSyntax(text));
+  if (stripped === normExcerpt) return true;
+  if (stripped.includes(normExcerpt) && stripped.length <= normExcerpt.length * 1.5 + 8) return true;
+  if (normExcerpt.includes(stripped) && stripped.length >= Math.min(normExcerpt.length * 0.4, 10)) return true;
   return false;
 }
 
@@ -103,18 +114,84 @@ export function mergeAdjacentMdSegments(
   return merged;
 }
 
+function excerptSearchNeedles(excerpt: string): string[] {
+  const candidates = [
+    excerpt,
+    excerpt.trim(),
+    excerpt.replace(/\u00a0/g, ' '),
+    excerpt.replace(/\s+/g, ' ').trim(),
+  ];
+  const seen = new Set<string>();
+  const needles: string[] = [];
+  for (const needle of candidates) {
+    if (!needle || seen.has(needle)) continue;
+    seen.add(needle);
+    needles.push(needle);
+  }
+  return needles;
+}
+
+function anchorHintPosition(anchor: {
+  start: number;
+  end: number;
+  segments?: MdSourceSegment[];
+}): number {
+  if (anchor.segments?.length) {
+    let sum = 0;
+    for (const segment of anchor.segments) {
+      sum += (segment.start + segment.end) / 2;
+    }
+    return sum / anchor.segments.length;
+  }
+  return (anchor.start + anchor.end) / 2;
+}
+
+/** Find excerpt in source; when multiple matches, pick the one nearest hint. */
+function locateExcerptInSource(
+  source: string,
+  excerpt: string,
+  hint = 0,
+): MdSourceSegment | null {
+  let best: MdSourceSegment | null = null;
+  let bestDistance = Infinity;
+
+  for (const needle of excerptSearchNeedles(excerpt)) {
+    for (const start of findAllIndices(source, needle)) {
+      const distance = Math.abs(start - hint);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = { start, end: start + needle.length };
+      }
+    }
+  }
+
+  return best;
+}
+
+function envelopeMatchesExcerpt(
+  source: string,
+  start: number,
+  end: number,
+  excerpt: string,
+): boolean {
+  const slice = normalizeExcerptCompare(source.slice(start, end));
+  const ex = normalizeExcerptCompare(excerpt);
+  if (!slice || !ex) return false;
+  if (slice === ex) return true;
+  if (slice.length > ex.length * 1.5 + 8) return false;
+  return slice.includes(ex) || ex.includes(slice);
+}
+
 /** Resolve highlight spans from a stored anchor; never paint the start/end envelope blindly. */
 export function resolveMdHighlightSegments(
   source: string,
   anchor: { start: number; end: number; excerpt: string; segments?: MdSourceSegment[] },
 ): MdSourceSegment[] {
-  const located = fallbackRangeFromExcerpt(source, anchor.excerpt);
-  if (located) {
-    return [{ start: located.start, end: located.end }];
-  }
+  // Use the envelope midpoint as the primary hint — more reliable than the
+  // centroid of stored segments which may point to a wrong region.
+  const envelopeHint = (anchor.start + anchor.end) / 2;
 
   let segments: MdSourceSegment[] = [];
-
   if (anchor.segments?.length) {
     segments = anchor.segments.filter(
       (segment) =>
@@ -126,19 +203,42 @@ export function resolveMdHighlightSegments(
     segments = mergeAdjacentMdSegments(segments);
   }
 
-  if (segments.length === 0) {
+  if (segments.length > 0) {
+    const joined = normalizeExcerptCompare(
+      segments.map((segment) => source.slice(segment.start, segment.end)).join(''),
+    );
+    const normExcerpt = normalizeExcerptCompare(anchor.excerpt);
+    // Accept stored segments only when the joined text closely matches the excerpt.
+    // Also try stripping inline markdown syntax (backticks etc.) from the joined text,
+    // because the excerpt stored in DB is the plain-text version from the rendered DOM.
+    const joinedStripped = normalizeExcerptCompare(stripMdInlineSyntax(joined));
+    const tightEnough =
+      joined.length <= normExcerpt.length * 1.5 + 8 ||
+      joinedStripped.length <= normExcerpt.length * 1.5 + 8;
     if (
-      anchor.start >= 0 &&
-      anchor.end > anchor.start &&
-      anchor.end <= source.length &&
-      segmentTextMatchesExcerpt(source, anchor.start, anchor.end, anchor.excerpt)
+      tightEnough &&
+      (joined.includes(normExcerpt) ||
+        normExcerpt.includes(joined) ||
+        joinedStripped.includes(normExcerpt) ||
+        normExcerpt.includes(joinedStripped))
     ) {
-      return [{ start: anchor.start, end: anchor.end }];
+      return segments;
     }
-    return [];
   }
 
-  return segments;
+  const located = locateExcerptInSource(source, anchor.excerpt, envelopeHint);
+  if (located) return [located];
+
+  if (
+    anchor.start >= 0 &&
+    anchor.end > anchor.start &&
+    anchor.end <= source.length &&
+    envelopeMatchesExcerpt(source, anchor.start, anchor.end, anchor.excerpt)
+  ) {
+    return [{ start: anchor.start, end: anchor.end }];
+  }
+
+  return [];
 }
 
 /** Collect source offsets for each visible text node touched by the DOM range. */
@@ -179,10 +279,21 @@ export function mdRangeFromSelection(
   const range = selection.getRangeAt(0);
   if (!root.contains(range.commonAncestorContainer)) return null;
 
-  const segments = mergeAdjacentMdSegments(
-    collectSelectedSourceSegments(source, root, range),
-  ).filter((segment) => segmentTextMatchesExcerpt(source, segment.start, segment.end, excerpt));
+  const rawSegments = collectSelectedSourceSegments(source, root, range);
+  const segments = mergeAdjacentMdSegments(rawSegments).filter((segment) =>
+    segmentTextMatchesExcerpt(source, segment.start, segment.end, excerpt),
+  );
   if (segments.length === 0) {
+    const hint = anchorHintPosition({ start: 0, end: source.length, segments: rawSegments });
+    const located = locateExcerptInSource(source, excerpt, hint);
+    if (located) {
+      return {
+        start: located.start,
+        end: located.end,
+        excerpt: source.slice(located.start, located.end),
+        segments: [located],
+      };
+    }
     const fallback = fallbackRangeFromExcerpt(source, excerpt);
     if (!fallback) return null;
     return { ...fallback, segments: [{ start: fallback.start, end: fallback.end }] };
@@ -496,7 +607,44 @@ function applySourceRangeHighlightsToOffsetHtml(
 
   const fencedBlocks = findFencedCodeBlocks(source);
   const inlineSpans = findInlineCodeSpans(source, fencedBlocks);
-  const fencedCodes = Array.from(root.querySelectorAll('pre > code'));
+  // Map each fenced block to its DOM <pre><code> element by matching textContent.
+  // We cannot rely on array index (marked may render extra <pre><code> blocks from
+  // indented fences inside list items) or on data-md-offset-start (annotateToken
+  // fails to locate indented fence raw in source, so the attribute may be wrong).
+  const domFencedCodes = Array.from(root.querySelectorAll('pre > code'));
+  // Each entry stores the DOM element and the common indent stripped by marked.
+  const fencedCodeByBlock = new Map<number, { el: Element; strippedIndent: number }>();
+  for (const block of fencedBlocks) {
+    const blockText = source.slice(block.contentStart, block.contentEnd);
+    const directMatch = domFencedCodes.find((el) => {
+      const t = el.textContent ?? '';
+      return t === blockText || t === blockText + '\n' || t.trimEnd() === blockText.trimEnd();
+    });
+    if (directMatch) {
+      fencedCodeByBlock.set(block.contentStart, { el: directMatch, strippedIndent: 0 });
+    } else {
+      // marked strips leading indentation from indented fenced blocks —
+      // retry by de-indenting the block text (remove common indent prefix).
+      const lines = blockText.split('\n');
+      const nonEmpty = lines.filter((l) => l.trim().length > 0);
+      if (nonEmpty.length > 0) {
+        const commonIndent = nonEmpty.reduce((min, l) => {
+          const ind = l.match(/^ */)?.[0].length ?? 0;
+          return Math.min(min, ind);
+        }, Infinity);
+        if (commonIndent > 0) {
+          const deindented = lines.map((l) => l.slice(commonIndent)).join('\n');
+          const indentMatch = domFencedCodes.find((el) => {
+            const t = el.textContent ?? '';
+            return t === deindented || t === deindented + '\n' || t.trimEnd() === deindented.trimEnd();
+          });
+          if (indentMatch) {
+            fencedCodeByBlock.set(block.contentStart, { el: indentMatch, strippedIndent: commonIndent });
+          }
+        }
+      }
+    }
+  }
   const inlineCodes = Array.from(root.querySelectorAll('code')).filter(
     (el) => !el.closest('pre'),
   );
@@ -517,15 +665,40 @@ function applySourceRangeHighlightsToOffsetHtml(
           (b) => part.start >= b.contentStart && part.end <= b.contentEnd,
         );
         if (!block) continue;
-        const codeEl = fencedCodes[block.index];
-        if (!codeEl) continue;
-        highlightTextInElement(
-          codeEl,
-          part.start - block.contentStart,
-          part.end - block.contentStart,
-          cls,
-          commentId,
-        );
+        const entry = fencedCodeByBlock.get(block.contentStart);
+        if (!entry) continue;
+        const relStart = part.start - block.contentStart;
+        const relEnd = part.end - block.contentStart;
+        let adjStart = relStart;
+        let adjEnd = relEnd;
+        if (entry.strippedIndent > 0) {
+          // Build a char-by-char mapping from original block offset to de-indented offset.
+          // marked strips `strippedIndent` leading spaces from every line, so a naive
+          // "subtract strippedIndent * newlineCount" formula is wrong when the excerpt
+          // itself does not start at column 0. Walk each character instead.
+          const blockText = source.slice(block.contentStart, block.contentEnd);
+          const lines = blockText.split('\n');
+          const mapping = new Int32Array(blockText.length + 1);
+          let origPos = 0;
+          let deindPos = 0;
+          for (let li = 0; li < lines.length; li++) {
+            const line = lines[li];
+            for (let ci = 0; ci < line.length; ci++) {
+              mapping[origPos] = deindPos;
+              origPos++;
+              if (ci >= entry.strippedIndent) deindPos++;
+            }
+            if (li < lines.length - 1) {
+              mapping[origPos] = deindPos;
+              origPos++;
+              deindPos++;
+            }
+          }
+          mapping[origPos] = deindPos;
+          adjStart = mapping[relStart] ?? relStart;
+          adjEnd = mapping[relEnd] ?? relEnd;
+        }
+        highlightTextInElement(entry.el, adjStart, adjEnd, cls, commentId);
         continue;
       }
 
@@ -579,10 +752,12 @@ export function findFencedCodeBlocks(source: string): SourceRegion[] {
     const lineEndPos = lineEnd === -1 ? len : lineEnd;
     const line = source.slice(lineStart, lineEndPos);
 
-    const openMatch = line.match(/^(`{3,}|~{3,})(?:\s+\S*)?\s*$/);
+    // Allow up to 3 spaces of indentation (CommonMark spec for fenced code blocks)
+    const openMatch = line.match(/^( {0,3})(`{3,}|~{3,})(?:\s*[\w-]+)?\s*$/);
     if (openMatch) {
-      const fenceChar = openMatch[1][0];
-      const minLen = openMatch[1].length;
+      const indent = openMatch[1];
+      const fenceChar = openMatch[2][0];
+      const minLen = openMatch[2].length;
       const contentStart = lineEndPos === len ? len : lineEndPos + 1;
       let j = contentStart;
       let closed = false;
@@ -592,8 +767,10 @@ export function findFencedCodeBlocks(source: string): SourceRegion[] {
         const closeLineEnd = source.indexOf('\n', j);
         const closeLineEndPos = closeLineEnd === -1 ? len : closeLineEnd;
         const closeLine = source.slice(closeLineStart, closeLineEndPos);
-        const closePattern = new RegExp(`^\\${fenceChar}{${minLen},}\\s*$`);
-        if (closePattern.test(closeLine)) {
+        // Close fence may have the same indent prefix stripped (CommonMark allows it)
+        const stripped = closeLine.startsWith(indent) ? closeLine.slice(indent.length) : closeLine;
+        const closePattern = new RegExp(`^[${fenceChar}]{${minLen},}\\s*$`);
+        if (closePattern.test(stripped)) {
           blocks.push({ contentStart, contentEnd: closeLineStart, index: index++ });
           closed = true;
           i = closeLineEndPos === len ? len : closeLineEndPos + 1;
