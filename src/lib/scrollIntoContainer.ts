@@ -310,6 +310,174 @@ function watchLayoutAndRescroll(
   };
 }
 
+export function scrollMdHighlightInContainer(
+  container: HTMLElement | null,
+  componentRefs: Map<string, HTMLElement>,
+  componentId: string,
+): boolean {
+  if (!container) return false;
+
+  const componentEl = componentRefs.get(componentId);
+  const mark =
+    componentEl?.querySelector<HTMLElement>('.md-comment-highlight-focused') ??
+    container.querySelector<HTMLElement>('.md-comment-highlight-focused');
+  if (!mark) return false;
+
+  scrollElementIntoContainer(container, mark);
+  return true;
+}
+
+function runMdHighlightScrollWithRetry(
+  scrollRef: { current: HTMLDivElement | null },
+  componentRefs: { current: Map<string, HTMLElement> },
+  componentId: string,
+  onDone: (success: boolean) => void,
+): () => void {
+  let cancelled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let attempt = 0;
+
+  const tryScroll = () => {
+    if (cancelled) return;
+
+    if (
+      scrollMdHighlightInContainer(
+        scrollRef.current,
+        componentRefs.current,
+        componentId,
+      )
+    ) {
+      if (!cancelled) onDone(true);
+      return;
+    }
+
+    attempt += 1;
+    if (attempt >= SCROLL_RETRY_DELAYS_MS.length) {
+      if (!cancelled) onDone(false);
+      return;
+    }
+
+    const delay = SCROLL_RETRY_DELAYS_MS[attempt];
+    if (delay === 0) {
+      requestAnimationFrame(tryScroll);
+    } else {
+      timer = setTimeout(tryScroll, delay);
+    }
+  };
+
+  tryScroll();
+
+  return () => {
+    cancelled = true;
+    if (timer !== undefined) clearTimeout(timer);
+  };
+}
+
+function watchLayoutAndRescrollMdHighlight(
+  scrollRef: { current: HTMLDivElement | null },
+  componentRefs: { current: Map<string, HTMLElement> },
+  componentId: string,
+  panelRef?: { current: HTMLElement | null },
+): () => void {
+  const cleanups: (() => void)[] = [];
+
+  const rescroll = () => {
+    scrollMdHighlightInContainer(
+      scrollRef.current,
+      componentRefs.current,
+      componentId,
+    );
+  };
+
+  const scheduleRescroll = debounce(rescroll, LAYOUT_SETTLE_MS);
+
+  cleanups.push(
+    observeLayoutChanges(
+      getLayoutObserveTargets(scrollRef, componentRefs, componentId, panelRef),
+      scheduleRescroll,
+    ),
+  );
+  cleanups.push(waitForImagesInContainer(scrollRef, scheduleRescroll));
+
+  const stopTimer = setTimeout(() => {
+    for (const cleanup of cleanups) cleanup();
+    cleanups.length = 0;
+  }, LAYOUT_FOLLOW_UP_MS);
+
+  return () => {
+    clearTimeout(stopTimer);
+    for (const cleanup of cleanups) cleanup();
+    cleanups.length = 0;
+  };
+}
+
+/** Scroll panel to a focused markdown comment highlight inside a component. */
+export function scheduleScrollToMdCommentHighlight(
+  scrollRef: { current: HTMLDivElement | null },
+  componentRefs: { current: Map<string, HTMLElement> },
+  componentId: string,
+  panelRef?: { current: HTMLElement | null },
+  onDone?: (success: boolean) => void,
+): () => void {
+  let cancelled = false;
+  const cleanups: (() => void)[] = [];
+
+  const cancelAll = () => {
+    if (cancelled) return;
+    cancelled = true;
+    for (const cleanup of cleanups) cleanup();
+  };
+
+  let scrollStarted = false;
+  const runScroll = () => {
+    if (cancelled || scrollStarted) return;
+    scrollStarted = true;
+
+    const cleanupRetry = runMdHighlightScrollWithRetry(
+      scrollRef,
+      componentRefs,
+      componentId,
+      (success) => {
+        if (cancelled) return;
+        if (success) {
+          cleanups.push(
+            watchLayoutAndRescrollMdHighlight(
+              scrollRef,
+              componentRefs,
+              componentId,
+              panelRef,
+            ),
+          );
+        }
+        onDone?.(success);
+      },
+    );
+    cleanups.push(cleanupRetry);
+  };
+
+  const cleanupTargetWait = waitForScrollTargets(
+    scrollRef,
+    componentRefs,
+    componentId,
+    () => {
+      if (cancelled) return;
+
+      const cleanupLayoutWait = waitForLayoutSettled(
+        () => getLayoutObserveTargets(scrollRef, componentRefs, componentId, panelRef),
+        () => {
+          if (cancelled) return;
+          const cleanupImageWait = waitForImagesInContainer(scrollRef, runScroll);
+          cleanups.push(cleanupImageWait);
+        },
+      );
+      cleanups.push(cleanupLayoutWait);
+    },
+  );
+  cleanups.push(cleanupTargetWait);
+
+  return cancelAll;
+}
+
 export function scheduleScrollToComponent(
   scrollRef: { current: HTMLDivElement | null },
   componentRefs: { current: Map<string, HTMLElement> },

@@ -7,6 +7,7 @@ import {
   appendImageComponent,
   deleteComponentFromProject,
   rebuildProject,
+  findComponent,
 } from './projectMutations';
 import {
   addComponentToGroup,
@@ -685,16 +686,59 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const comment = (state.project.relations.comments ?? []).find(
         (c) => c.id === action.commentId,
       );
-      const componentId = comment?.anchor?.componentId ?? null;
-      return {
+      if (!comment) {
+        return { ...state, focusedCommentId: action.commentId };
+      }
+
+      const componentId = comment.anchor?.componentId ?? null;
+      if (!componentId) {
+        return { ...state, focusedCommentId: action.commentId };
+      }
+
+      const found = findComponent(state.project, componentId);
+      if (!found) {
+        return { ...state, focusedCommentId: action.commentId };
+      }
+
+      const { pageFile } = found;
+      const scrollToComponent = {
+        componentId,
+        nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+      };
+      const singlePagePanels: PanelState[] = [{ pageFile, expanded: true }];
+
+      const base = {
         ...state,
         focusedCommentId: action.commentId,
-        scrollToComponent: componentId
-          ? {
-              componentId,
-              nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
-            }
-          : state.scrollToComponent,
+        currentPage: pageFile,
+        panels: singlePagePanels,
+        scrollToComponent,
+      };
+
+      if (state.linkMode) {
+        return base;
+      }
+
+      const matchingGroupIndices = getGroupIndicesForComponent(
+        state.project.relations.groups,
+        componentId,
+      );
+      const { history, index } = appendSelectionHistory(
+        state.selectionHistory,
+        state.selectionHistoryIndex,
+        { componentId, pageFile },
+      );
+
+      return {
+        ...base,
+        selection: {
+          componentId,
+          relatedIds: new Set([componentId]),
+          activeGroupIndex: null,
+          matchingGroupIndices,
+        },
+        selectionHistory: history,
+        selectionHistoryIndex: index,
       };
     }
 

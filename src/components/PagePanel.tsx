@@ -17,7 +17,7 @@ import { resolveComponentForDisplay, isTextType } from '../lib/componentDisplay'
 import { PageLabel } from './PageLabel';
 import { MarkdownPreview } from './MarkdownPreview';
 import { LINK_MODE_HIGHLIGHT } from '../lib/styles';
-import { scheduleScrollToComponent } from '../lib/scrollIntoContainer';
+import { scheduleScrollToComponent, scheduleScrollToMdCommentHighlight } from '../lib/scrollIntoContainer';
 import { getPageScrollTop, setPageScrollTop } from '../lib/pageScrollMemory';
 import {
   getFirstHighlightedComponentId,
@@ -30,6 +30,24 @@ function getMdHighlightRanges(
   componentId: string,
   focusedCommentId: string | null,
 ): Array<{ start: number; end: number; className?: string }> {
+  if (focusedCommentId) {
+    const focused = comments.find((comment) => comment.id === focusedCommentId);
+    if (
+      focused?.parentId === null &&
+      focused.anchor?.kind === 'md-range' &&
+      focused.anchor.componentId === componentId
+    ) {
+      const anchor = focused.anchor;
+      return [
+        {
+          start: anchor.start,
+          end: anchor.end,
+          className: 'md-comment-highlight md-comment-highlight-focused',
+        },
+      ];
+    }
+  }
+
   return comments
     .filter(
       (comment) =>
@@ -53,7 +71,20 @@ function getMdHighlightRanges(
     });
 }
 
-function hasComponentCommentAnchor(comments: DocComment[], componentId: string): boolean {
+function hasComponentCommentAnchor(
+  comments: DocComment[],
+  componentId: string,
+  focusedCommentId: string | null,
+): boolean {
+  if (focusedCommentId) {
+    const focused = comments.find((comment) => comment.id === focusedCommentId);
+    return (
+      focused?.parentId === null &&
+      focused.anchor?.kind === 'component' &&
+      focused.anchor.componentId === componentId
+    );
+  }
+
   return comments.some(
     (comment) =>
       comment.parentId === null &&
@@ -321,7 +352,6 @@ function shouldSkipScrollRestore(
   linkGroupMembers?: Set<string>,
 ): boolean {
   if (
-    autoScrollSecondary &&
     scrollToComponentId &&
     scrollNonce > 0 &&
     page?.components.some((c) => c.id === scrollToComponentId)
@@ -475,21 +505,47 @@ export function PagePanel({
   ]);
 
   useEffect(() => {
-    if (!autoScrollSecondary) return;
     if (!scrollToComponentId || scrollNonce === 0 || !expanded) return;
     if (handledScrollNonceRef.current === scrollNonce) return;
     if (!page?.components.some((c) => c.id === scrollToComponentId)) return;
+
+    const focusedComment = focusedCommentId
+      ? comments.find((comment) => comment.id === focusedCommentId)
+      : null;
+    const scrollToMdHighlight =
+      focusedComment?.anchor?.kind === 'md-range' &&
+      focusedComment.anchor.componentId === scrollToComponentId;
+
+    const onDone = () => {
+      handledScrollNonceRef.current = scrollNonce;
+    };
+
+    if (scrollToMdHighlight) {
+      return scheduleScrollToMdCommentHighlight(
+        scrollRef,
+        componentRefs,
+        scrollToComponentId,
+        panelRef,
+        onDone,
+      );
+    }
 
     return scheduleScrollToComponent(
       scrollRef,
       componentRefs,
       scrollToComponentId,
       panelRef,
-      () => {
-        handledScrollNonceRef.current = scrollNonce;
-      },
+      onDone,
     );
-  }, [autoScrollSecondary, scrollToComponentId, scrollNonce, expanded, pageFile]);
+  }, [
+    scrollToComponentId,
+    scrollNonce,
+    expanded,
+    pageFile,
+    page,
+    focusedCommentId,
+    comments,
+  ]);
 
   useEffect(() => {
     if (!expanded) {
@@ -622,6 +678,7 @@ export function PagePanel({
                   hasComponentCommentAnchor={hasComponentCommentAnchor(
                     comments,
                     component.id,
+                    focusedCommentId,
                   )}
                   onSelect={onSelect}
                   onCommentLinkComponent={onCommentLinkComponent}
