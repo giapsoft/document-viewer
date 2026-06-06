@@ -64,11 +64,11 @@ export function ProjectToolbar({
         type="button"
         className="project-folder-btn project-folder-btn-primary"
         onClick={onSave}
-        disabled={!canSave || !dirty || loading || saveStatus === 'saving'}
+        disabled={!canSave || loading || saveStatus === 'saving'}
         title={
-          !dirty
-            ? 'No unsaved changes'
-            : 'Save document (local folder or remote storage)'
+          dirty
+            ? 'Save document (local folder or remote storage)'
+            : 'Save document to local folder'
         }
       >
         Save

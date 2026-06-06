@@ -131,14 +131,12 @@ export function isRootComment(comment: DocComment): boolean {
   return comment.parentId === null;
 }
 
+/** Ownership is by display name only (session username), not browser-local authorId. */
 export function canOwnComment(
   comment: DocComment,
-  authorId: string | null,
+  _authorId: string | null,
   username: string | null,
 ): boolean {
-  if (authorId && comment.authorId && comment.authorId === authorId) {
-    return true;
-  }
   if (!username) return false;
   return comment.author.trim().toLowerCase() === username.trim().toLowerCase();
 }

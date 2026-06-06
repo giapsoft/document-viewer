@@ -28,8 +28,10 @@ import {
   fingerprintFileMap,
   listRemovedRemotePaths,
 } from './remoteProjectFiles';
-import { normalizeRelations } from './groupRelations';
+import { EMPTY_RELATIONS, normalizeRelations } from './groupRelations';
+import { createDefaultPageData } from './pageMutations';
 import { rebuildProject } from './projectMutations';
+import { serializePageComponents } from './pageIds';
 import {
   commentsEqual,
   mergeCommentsFromServer,
@@ -247,10 +249,6 @@ async function parseRemoteFileBlobs(
     }
   }
 
-  if (pageFiles.length === 0) {
-    throw new Error('Remote document has no pages');
-  }
-
   // Merge: new-format files win; fall back to values embedded in relations.json
   const relations: RelationsFile = {
     ...relationsMeta,
@@ -274,6 +272,36 @@ async function hashFileBlobs(fileBlobs: Map<string, Blob>): Promise<Map<string, 
   return fileHashes;
 }
 
+function createStarterRemoteProject(
+  meta: { id: string; title: string; updated_at?: string | null },
+  relations: RelationsFile = EMPTY_RELATIONS,
+): LoadedProject {
+  const normalized = normalizeRelations(relations);
+  const page = createDefaultPageData('page.p', normalized.pageNames);
+  return assembleLoadedProject(
+    {
+      pageFiles: [
+        {
+          name: page.fileName,
+          content: serializePageComponents(page.components, page.pageId),
+        },
+      ],
+      relations: normalized,
+      stylesPartial: null,
+      imageFiles: [],
+      mdFiles: [],
+    },
+    {
+      source: 'remote',
+      remoteDocId: meta.id,
+      remoteTitle: meta.title,
+      folderHandle: null,
+      remoteSync: { format: 'files', fileHashes: new Map(), bundleHash: null },
+      remoteUpdatedAt: meta.updated_at ?? null,
+    },
+  );
+}
+
 async function loadRemoteDocumentFromFiles(
   meta: { id: string; title: string; updated_at?: string | null },
   paths: string[],
@@ -281,6 +309,9 @@ async function loadRemoteDocumentFromFiles(
 ): Promise<LoadedProject> {
   const docId = meta.id;
   const parsed = await parseRemoteFileBlobs(docId, paths, fileBlobs);
+  if (parsed.pageFiles.length === 0) {
+    return createStarterRemoteProject(meta, parsed.relations);
+  }
   const fileHashes = await hashFileBlobs(fileBlobs);
 
   return assembleLoadedProject(
@@ -359,7 +390,7 @@ export async function loadRemoteDocument(
     return loadRemoteDocumentFromBundle(meta, bundle);
   } catch {
     if (docPaths.length === 0) {
-      throw new Error('Remote document has no saved files');
+      return createStarterRemoteProject(meta);
     }
     const fileBlobs = await downloadRemotePaths(docPaths);
     return loadRemoteDocumentFromFiles(meta, docPaths, fileBlobs);

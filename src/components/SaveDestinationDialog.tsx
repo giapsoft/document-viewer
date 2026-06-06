@@ -7,6 +7,7 @@ export type SaveDestination = 'local' | 'remote';
 
 interface SaveDestinationDialogProps {
   project: LoadedProject;
+  dirty: boolean;
   onClose: () => void;
   onChoose: (destination: SaveDestination) => void;
   onDeleteRemote?: () => void;
@@ -14,6 +15,7 @@ interface SaveDestinationDialogProps {
 
 export function SaveDestinationDialog({
   project,
+  dirty,
   onClose,
   onChoose,
   onDeleteRemote,
@@ -38,11 +40,13 @@ export function SaveDestinationDialog({
       ? 'Choose a folder on your computer.'
       : 'Folder saving requires Chrome or Edge.';
 
-  const remoteHint = hasRemoteDoc
-    ? `Update “${project.remoteTitle ?? defaultRemoteTitle(project)}” in remote storage.`
-    : remoteStorageReady
-      ? 'Create a new document in remote storage (you will name it).'
-      : 'Remote storage is not available on this site.';
+  const remoteHint = !dirty
+    ? 'No unsaved changes — remote save is only needed after you edit.'
+    : hasRemoteDoc
+      ? `Update “${project.remoteTitle ?? defaultRemoteTitle(project)}” in remote storage.`
+      : remoteStorageReady
+        ? 'Create a new document in remote storage (you will name it).'
+        : 'Remote storage is not available on this site.';
 
   const remoteTitle = project.remoteTitle ?? defaultRemoteTitle(project);
 
@@ -108,7 +112,7 @@ export function SaveDestinationDialog({
                 <button
                   type="button"
                   className="save-destination-option"
-                  disabled={!remoteStorageReady}
+                  disabled={!remoteStorageReady || !dirty}
                   onClick={() => onChoose('remote')}
                 >
                   <span className="save-destination-option-title">Remote storage</span>

@@ -22,7 +22,7 @@ export interface DocComment {
   id: string;
   parentId: string | null;
   author: string;
-  /** Browser-local id of the author — used to allow edit/delete on this device */
+  /** Legacy browser-local id — not used for edit/delete permission (username only) */
   authorId?: string;
   body: string;
   createdAt: number;

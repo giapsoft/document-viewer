@@ -242,6 +242,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
       return;
     }
 
+    if (!dirty) return;
+
     if (project.remoteDocId) {
       void runToolbarAction(async () => runRemoteSave());
       return;
@@ -415,6 +417,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
       {saveDestinationOpen && (
         <SaveDestinationDialog
           project={project}
+          dirty={dirty}
           onClose={() => setSaveDestinationOpen(false)}
           onChoose={handleChooseDestination}
           onDeleteRemote={() => {
