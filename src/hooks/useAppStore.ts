@@ -1,6 +1,7 @@
 import { useReducer, useCallback, useRef, useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { AppAction, CommentAnchor, Component, LoadedProject } from '../types';
+import { stripCommentTombstones } from '../lib/comments';
 import { setStoredCommentUsername } from '../lib/commentSession';
 import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus } from '../lib/saveProject';
@@ -536,10 +537,10 @@ export function useAppStore() {
       const projectForSave: LoadedProject = { ...project, folderHandle };
       await saveProjectToFolder(projectForSave);
 
-      const nextProject: LoadedProject = {
+      const nextProject = stripCommentTombstones({
         ...project,
         folderHandle,
-      };
+      });
       projectRef.current = nextProject;
       dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
       setDirty(false);
@@ -604,12 +605,12 @@ export function useAppStore() {
           projectToSave,
           title ?? project.remoteTitle ?? undefined,
         );
-        const nextProject: LoadedProject = {
+        const nextProject = stripCommentTombstones({
           ...saveResult.mergedProject,
           remoteTitle: title?.trim() || project.remoteTitle || defaultRemoteTitle(project),
           remoteSync: saveResult.remoteSync,
           remoteUpdatedAt: saveResult.remoteUpdatedAt,
-        };
+        });
         projectRef.current = nextProject;
         dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
         setDocIdInUrl(project.remoteDocId);
@@ -731,11 +732,11 @@ export function useAppStore() {
         project.remoteTitle ?? undefined,
       );
 
-      const nextProject: LoadedProject = {
+      const nextProject = stripCommentTombstones({
         ...saveResult.mergedProject,
         remoteSync: saveResult.remoteSync,
         remoteUpdatedAt: saveResult.remoteUpdatedAt,
-      };
+      });
       projectRef.current = nextProject;
       dispatch({ type: 'PATCH_PROJECT', project: nextProject });
 

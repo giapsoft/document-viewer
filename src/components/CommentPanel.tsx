@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CommentAnchor, DocComment, LoadedProject } from '../types';
 import {
+  activeComments,
   buildCommentTree,
   canOwnComment,
   formatCommentAnchorLabel,
@@ -343,7 +344,7 @@ export function CommentPanel({
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState(username ?? '');
 
-  const comments = project.relations.comments ?? [];
+  const comments = activeComments(project.relations.comments ?? []);
   const tree = buildCommentTree(comments);
   const commentCount = comments.length;
 
@@ -525,7 +526,7 @@ export function getCommentAnchorForComponent(
   comments: DocComment[],
   componentId: string,
 ): CommentAnchor[] {
-  return comments
+  return activeComments(comments)
     .filter((c) => c.anchor?.componentId === componentId)
     .map((c) => c.anchor!)
     .filter(Boolean);

@@ -30,6 +30,10 @@ export function normalizeComments(raw: unknown): DocComment[] {
       typeof record.updatedAt === 'number' && Number.isFinite(record.updatedAt)
         ? record.updatedAt
         : createdAt;
+    const deletedAt =
+      typeof record.deletedAt === 'number' && Number.isFinite(record.deletedAt)
+        ? record.deletedAt
+        : undefined;
 
     if (!id || !author) continue;
 
@@ -37,6 +41,20 @@ export function normalizeComments(raw: unknown): DocComment[] {
       typeof record.authorId === 'string' && record.authorId.trim()
         ? record.authorId.trim()
         : undefined;
+
+    if (deletedAt !== undefined) {
+      comments.push({
+        id,
+        parentId,
+        author,
+        ...(authorId ? { authorId } : {}),
+        body,
+        createdAt,
+        updatedAt,
+        deletedAt,
+      });
+      continue;
+    }
 
     let anchor: CommentAnchor | undefined;
     const rawAnchor = record.anchor;
@@ -72,8 +90,37 @@ export function normalizeComments(raw: unknown): DocComment[] {
   return comments;
 }
 
+export function isDeletedComment(comment: DocComment): boolean {
+  return typeof comment.deletedAt === 'number' && Number.isFinite(comment.deletedAt);
+}
+
+export function activeComments(comments: DocComment[]): DocComment[] {
+  return comments.filter((comment) => !isDeletedComment(comment));
+}
+
+/** Comments written to disk / remote storage (includes tombstones for multi-session delete sync). */
+export function commentsForPersistence(comments: DocComment[]): DocComment[] {
+  return comments;
+}
+
+export function stripCommentTombstones<T extends { relations: RelationsFile }>(project: T): T {
+  const comments = project.relations.comments;
+  if (!comments?.some(isDeletedComment)) return project;
+  return {
+    ...project,
+    relations: {
+      ...project.relations,
+      comments: activeComments(comments),
+    },
+  };
+}
+
 export function getComments(relations: RelationsFile): DocComment[] {
-  return relations.comments ?? [];
+  return activeComments(relations.comments ?? []);
+}
+
+function commentTimestamp(comment: DocComment): number {
+  return comment.deletedAt ?? comment.updatedAt ?? comment.createdAt;
 }
 
 export function createCommentId(): string {
@@ -100,11 +147,11 @@ export function canOwnComment(
  * Merge server and local comment lists for multi-session sync.
  *
  * Rules:
- * - Comments only on server (from another session) are always kept.
- * - Comments only on local (just created, not yet saved) are always kept.
- * - For the same id: pick whichever has the higher updatedAt (falling back
- *   to createdAt for old comments that predate the updatedAt field).
- *   This means edits/deletes from another session win when they are newer.
+ * - Comments only on server (from another session) are kept unless tombstoned.
+ * - Comments only on local are kept when they look newly created (timestamp
+ *   after the newest server change); otherwise treat as deleted on server.
+ * - For the same id: pick whichever has the higher timestamp (updatedAt,
+ *   deletedAt, or createdAt). Tombstones win over older active copies.
  */
 export function mergeCommentsFromServer(
   server: DocComment[],
@@ -115,26 +162,37 @@ export function mergeCommentsFromServer(
     localById.set(comment.id, comment);
   }
 
+  const serverIds = new Set(server.map((comment) => comment.id));
+  const newestServerTs = server.reduce(
+    (max, comment) => Math.max(max, commentTimestamp(comment)),
+    0,
+  );
+
   const byId = new Map<string, DocComment>();
 
-  // Start with server state as the base
   for (const serverComment of server) {
     const localComment = localById.get(serverComment.id);
     if (!localComment) {
-      // Only on server — keep it (written by another session)
-      byId.set(serverComment.id, serverComment);
+      if (!isDeletedComment(serverComment)) {
+        byId.set(serverComment.id, serverComment);
+      }
       continue;
     }
-    // Both sides have this id — pick the newer version
-    const serverTs = serverComment.updatedAt ?? serverComment.createdAt;
-    const localTs = localComment.updatedAt ?? localComment.createdAt;
-    byId.set(serverComment.id, localTs > serverTs ? localComment : serverComment);
+    const serverTs = commentTimestamp(serverComment);
+    const localTs = commentTimestamp(localComment);
+    const winner = localTs > serverTs ? localComment : serverComment;
+    if (!isDeletedComment(winner)) {
+      byId.set(serverComment.id, winner);
+    }
   }
 
-  // Add local-only comments (created in this session, not yet on server)
   for (const localComment of local) {
-    if (!byId.has(localComment.id)) {
-      byId.set(localComment.id, localComment);
+    if (byId.has(localComment.id) || isDeletedComment(localComment)) continue;
+    if (!serverIds.has(localComment.id)) {
+      const localTs = commentTimestamp(localComment);
+      if (localTs > newestServerTs) {
+        byId.set(localComment.id, localComment);
+      }
     }
   }
 
@@ -142,9 +200,11 @@ export function mergeCommentsFromServer(
 }
 
 export function commentsEqual(a: DocComment[], b: DocComment[]): boolean {
-  if (a.length !== b.length) return false;
-  const bById = new Map(b.map((comment) => [comment.id, comment]));
-  return a.every((comment) => {
+  const activeA = activeComments(a);
+  const activeB = activeComments(b);
+  if (activeA.length !== activeB.length) return false;
+  const bById = new Map(activeB.map((comment) => [comment.id, comment]));
+  return activeA.every((comment) => {
     const other = bById.get(comment.id);
     if (!other) return false;
     return (
@@ -154,6 +214,7 @@ export function commentsEqual(a: DocComment[], b: DocComment[]): boolean {
       comment.authorId === other.authorId &&
       comment.createdAt === other.createdAt &&
       (comment.updatedAt ?? comment.createdAt) === (other.updatedAt ?? other.createdAt) &&
+      comment.deletedAt === other.deletedAt &&
       JSON.stringify(comment.anchor ?? null) === JSON.stringify(other.anchor ?? null)
     );
   });
@@ -161,7 +222,7 @@ export function commentsEqual(a: DocComment[], b: DocComment[]): boolean {
 
 export function buildCommentTree(comments: DocComment[]): CommentTreeNode[] {
   const byParent = new Map<string | null, DocComment[]>();
-  for (const comment of comments) {
+  for (const comment of activeComments(comments)) {
     const key = comment.parentId;
     const list = byParent.get(key) ?? [];
     list.push(comment);
@@ -291,7 +352,11 @@ export function deleteCommentSubtree(
   };
   markDoomed(commentId);
 
-  return comments.filter((comment) => !doomed.has(comment.id));
+  const now = Date.now();
+  return comments.map((comment) => {
+    if (!doomed.has(comment.id)) return comment;
+    return { ...comment, deletedAt: now, updatedAt: now };
+  });
 }
 
 export function removeCommentsForComponent(
@@ -332,7 +397,7 @@ export function getAnchorsByComponent(
   comments: DocComment[],
 ): Map<string, CommentAnchor[]> {
   const map = new Map<string, CommentAnchor[]>();
-  for (const comment of comments) {
+  for (const comment of activeComments(comments)) {
     if (!comment.anchor) continue;
     const list = map.get(comment.anchor.componentId) ?? [];
     list.push(comment.anchor);

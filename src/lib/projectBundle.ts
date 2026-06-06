@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import type { LoadedProject, RelationsFile, RemoteSyncState } from '../types';
+import { commentsForPersistence } from './comments';
 import { serializePageComponents } from './pageIds';
 import { mdSidecarFileName, componentIdFromMdFileName, MD_FILE_EXT } from './mdFiles';
 import { assembleProject, type RawProjectInput } from './loadProject';
@@ -89,7 +90,10 @@ export async function packProjectBundle(project: LoadedProject): Promise<Blob> {
   zip.file(RELATIONS_ZIP_PATH, `${JSON.stringify(relationsMetaOnly(raw.relations), null, 2)}\n`);
   // groups.json and comments.json as separate entries
   zip.file(GROUPS_ZIP_PATH, `${JSON.stringify(raw.relations.groups ?? [], null, 2)}\n`);
-  zip.file(COMMENTS_ZIP_PATH, `${JSON.stringify(raw.relations.comments ?? [], null, 2)}\n`);
+  zip.file(
+    COMMENTS_ZIP_PATH,
+    `${JSON.stringify(commentsForPersistence(raw.relations.comments ?? []), null, 2)}\n`,
+  );
 
   for (const page of raw.pageFiles) {
     zip.file(`${DOCS_ZIP_PREFIX}${page.name}`, `${JSON.stringify(page.content, null, 2)}\n`);

@@ -11,6 +11,7 @@ import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigation
 import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
 import { useRemoteStalePoll } from '../hooks/useRemoteStalePoll';
 import { CommentPanel } from './CommentPanel';
+import { activeComments } from '../lib/comments';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { useCallback, useState } from 'react';
 
@@ -95,7 +96,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   });
 
   const commentLinkMode = Boolean(state.commentLinkTargetId);
-  const comments = project.relations.comments ?? [];
+  const comments = activeComments(project.relations.comments ?? []);
 
   const findComponentType = (componentId: string) => {
     for (const page of project.pages) {

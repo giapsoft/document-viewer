@@ -28,6 +28,8 @@ export interface DocComment {
   createdAt: number;
   /** Last time body or anchor changed — used for multi-session merge conflict resolution */
   updatedAt?: number;
+  /** Set when deleted locally — tombstone kept until save so sync does not restore the comment */
+  deletedAt?: number;
   /** Optional link to a component or md passage */
   anchor?: CommentAnchor;
 }

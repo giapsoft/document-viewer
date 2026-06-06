@@ -13,6 +13,7 @@ import type {
   PageData,
   SelectionState,
 } from '../types';
+import { activeComments } from '../lib/comments';
 import { resolveComponentForDisplay, isTextType } from '../lib/componentDisplay';
 import { PageLabel } from './PageLabel';
 import { MarkdownPreview } from './MarkdownPreview';
@@ -436,7 +437,7 @@ export function PagePanel({
       ? getHighlightedIdsForPage(page, selection, isCurrent)
       : new Set<string>();
 
-  const comments = project.relations.comments ?? [];
+  const comments = activeComments(project.relations.comments ?? []);
 
   useEffect(() => {
     if (!expanded) {
