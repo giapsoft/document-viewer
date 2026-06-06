@@ -2,7 +2,6 @@ import type { SaveStatus } from '../lib/saveProject';
 
 interface ProjectToolbarProps {
   dirty: boolean;
-  canReload: boolean;
   canSave: boolean;
   loading: boolean;
   error: string | null;
@@ -10,8 +9,6 @@ interface ProjectToolbarProps {
   saveError: string | null;
   sourceLabel: string | null;
   onSave: () => void;
-  onReload: () => void;
-  onSelectFolder: () => void;
   onClose: () => void;
 }
 
@@ -30,7 +27,6 @@ function saveStatusLabel(status: SaveStatus, dirty: boolean): string | null {
 
 export function ProjectToolbar({
   dirty,
-  canReload,
   canSave,
   loading,
   error,
@@ -38,8 +34,6 @@ export function ProjectToolbar({
   saveError,
   sourceLabel,
   onSave,
-  onReload,
-  onSelectFolder,
   onClose,
 }: ProjectToolbarProps) {
   const saveLabel = canSave ? saveStatusLabel(saveStatus, dirty) : null;
@@ -72,24 +66,6 @@ export function ProjectToolbar({
         }
       >
         Save
-      </button>
-      <button
-        type="button"
-        className="project-folder-btn"
-        onClick={onReload}
-        disabled={!canReload || loading}
-        title="Discard unsaved changes and reload"
-      >
-        {loading ? 'Loading…' : 'Reload'}
-      </button>
-      <button
-        type="button"
-        className="project-folder-btn"
-        onClick={onSelectFolder}
-        disabled={loading}
-        title="Choose a different local folder"
-      >
-        Select folder
       </button>
       <button
         type="button"

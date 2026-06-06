@@ -1024,11 +1024,43 @@ code {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.35rem;
   padding: 0.35rem 0.5rem;
   border-bottom: 1px solid #eee;
   background: #fafafa;
   min-height: 36px;
   flex-shrink: 0;
+}
+
+.page-panel-highlight-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.page-panel-highlight-nav-btn {
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  cursor: pointer;
+  color: #333;
+}
+
+.page-panel-highlight-nav-btn:hover {
+  background: #f0f0f0;
+  border-color: #999;
+}
+
+.page-panel-highlight-nav-label {
+  font-size: 0.7rem;
+  color: #666;
+  min-width: 2.2rem;
+  text-align: center;
+  user-select: none;
 }
 
 .page-panel.shrunk .page-panel-header {

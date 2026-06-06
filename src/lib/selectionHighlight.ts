@@ -32,3 +32,51 @@ export function getFirstHighlightedComponentId(
   }
   return null;
 }
+
+/** Linked components on this page in document order (for in-panel prev/next). */
+export function getOrderedHighlightedIdsForPage(
+  page: PageData,
+  selection: SelectionState,
+): string[] {
+  const ids: string[] = [];
+  for (const c of page.components) {
+    if (selection.relatedIds.has(c.id)) {
+      ids.push(c.id);
+    }
+  }
+  return ids;
+}
+
+/** Split highlighted ids into runs that are adjacent in the page component list. */
+export function groupConsecutiveHighlightedIds(
+  page: PageData,
+  orderedIds: string[],
+): string[][] {
+  if (orderedIds.length === 0) return [];
+
+  const indexById = new Map(page.components.map((c, i) => [c.id, i]));
+  const groups: string[][] = [];
+  let current: string[] = [orderedIds[0]!];
+
+  for (let i = 1; i < orderedIds.length; i++) {
+    const prevIdx = indexById.get(orderedIds[i - 1]!);
+    const currIdx = indexById.get(orderedIds[i]!);
+    if (prevIdx !== undefined && currIdx === prevIdx + 1) {
+      current.push(orderedIds[i]!);
+    } else {
+      groups.push(current);
+      current = [orderedIds[i]!];
+    }
+  }
+  groups.push(current);
+  return groups;
+}
+
+/** First component of each consecutive highlight run — scroll targets for panel nav. */
+export function getHighlightNavTargetsForPage(
+  page: PageData,
+  selection: SelectionState,
+): string[] {
+  const ordered = getOrderedHighlightedIdsForPage(page, selection);
+  return groupConsecutiveHighlightedIds(page, ordered).map((group) => group[0]!);
+}

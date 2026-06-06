@@ -64,7 +64,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     togglePinPage,
     appendClipboardImageToPage,
     reloadProject,
-    selectProjectFolder,
     saveToLocal,
     saveToRemote,
     checkRemoteDocumentStale,
@@ -337,7 +336,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             />
             <ProjectToolbar
               dirty={dirty}
-              canReload
               canSave={canSave}
               loading={toolbarLoading}
               error={toolbarError}
@@ -345,8 +343,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               saveError={saveError}
               sourceLabel={sourceLabel}
               onSave={handleSave}
-              onReload={() => void runToolbarAction(reloadProject)}
-              onSelectFolder={() => void runToolbarAction(selectProjectFolder)}
               onClose={handleClose}
             />
           </div>
