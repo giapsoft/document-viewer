@@ -28,6 +28,7 @@ import {
   fetchRemoteDocumentUpdatedAt,
   loadRemoteDocument,
   saveRemoteDocument,
+  applyRemoteCommentSync,
   syncRemoteComments,
   syncRemoteRelations,
 } from '../lib/remoteProject';
@@ -579,9 +580,9 @@ export function useAppStore() {
         if (isRemoteVersionStale(project.remoteUpdatedAt, serverUpdatedAt)) {
           const merged = await syncRemoteComments(project);
           if (merged) {
-            projectToSave = merged;
-            projectRef.current = merged;
-            dispatch({ type: 'PATCH_PROJECT', project: merged });
+            projectToSave = applyRemoteCommentSync(projectRef.current ?? project, merged);
+            projectRef.current = projectToSave;
+            dispatch({ type: 'PATCH_PROJECT', project: projectToSave });
           }
           const serverUpdatedAtAfterMerge = await fetchRemoteDocumentUpdatedAt(
             project.remoteDocId,
@@ -687,6 +688,7 @@ export function useAppStore() {
   const checkRemoteDocumentStale = useCallback(async (): Promise<boolean> => {
     const project = projectRef.current;
     if (!project?.remoteDocId || !project.remoteUpdatedAt) return false;
+    if (dirtyRef.current) return false;
     if (!isSupabaseConfigured()) return false;
     try {
       const serverUpdatedAt = await fetchRemoteDocumentUpdatedAt(project.remoteDocId);
@@ -772,8 +774,9 @@ export function useAppStore() {
           // Only merge comments — never touch page/group data while user is editing
           const commentMerged = await syncRemoteComments(current);
           if (commentMerged && !cancelled) {
-            projectRef.current = commentMerged;
-            dispatch({ type: 'PATCH_PROJECT', project: commentMerged });
+            const next = applyRemoteCommentSync(projectRef.current ?? current, commentMerged);
+            projectRef.current = next;
+            dispatch({ type: 'PATCH_PROJECT', project: next });
           }
         } else {
           // Full relations sync already merges comments internally

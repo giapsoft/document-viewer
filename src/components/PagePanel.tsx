@@ -14,6 +14,7 @@ import type {
   SelectionState,
 } from '../types';
 import { activeComments } from '../lib/comments';
+import { isTypingTarget } from '../lib/keyboard';
 import { resolveComponentForDisplay, isTextType } from '../lib/componentDisplay';
 import { PageLabel } from './PageLabel';
 import { MarkdownPreview } from './MarkdownPreview';
@@ -155,6 +156,8 @@ function ComponentShell({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
+        if (isTypingTarget(e.target)) return;
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           if (commentLinkMode && onCommentLinkComponent) {

@@ -8,6 +8,7 @@ import {
   type CommentTreeNode,
 } from '../lib/comments';
 import { UsernamePrompt } from './UsernamePrompt';
+import { isTypingTarget } from '../lib/keyboard';
 import { setStoredCommentUsername } from '../lib/commentSession';
 import { authorAvatarColors, authorInitial } from '../lib/commentAvatar';
 
@@ -122,6 +123,8 @@ function CommentTreeItem({
         onKeyDown={
           canLink
             ? (event) => {
+                if (isTypingTarget(event.target)) return;
+                if (event.target !== event.currentTarget) return;
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
                   handleSelectForLink();

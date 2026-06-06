@@ -34,8 +34,31 @@ import {
   commentsEqual,
   mergeCommentsFromServer,
 } from './comments';
+import { pickNewerRemoteUpdatedAt } from './remoteConflict';
 
 export type { RemoteDocumentMeta };
+
+/** Apply a comment-only pull onto the latest in-memory project (avoids stale snapshot races). */
+export function applyRemoteCommentSync(
+  latest: LoadedProject,
+  synced: LoadedProject,
+): LoadedProject {
+  const syncedComments = synced.relations.comments ?? [];
+  const latestComments = latest.relations.comments ?? [];
+  const commentsChanged = !commentsEqual(latestComments, syncedComments);
+
+  return {
+    ...latest,
+    relations: {
+      ...latest.relations,
+      comments: commentsChanged ? syncedComments : latestComments,
+    },
+    remoteSync: synced.remoteSync ?? latest.remoteSync,
+    remoteUpdatedAt:
+      pickNewerRemoteUpdatedAt(latest.remoteUpdatedAt, synced.remoteUpdatedAt) ??
+      latest.remoteUpdatedAt,
+  };
+}
 
 export type SaveRemoteResult = {
   remoteSync: RemoteSyncState;
@@ -458,8 +481,15 @@ export async function syncRemoteComments(
       // Comments content same after merge — just update the hash so we stop polling
       const nextHashes = new Map(project.remoteSync?.fileHashes ?? []);
       nextHashes.set(commentsPath, commentsHash);
+      let remoteUpdatedAt = project.remoteUpdatedAt;
+      try {
+        remoteUpdatedAt = await fetchRemoteDocumentUpdatedAt(docId);
+      } catch {
+        // keep previous timestamp
+      }
       return {
         ...project,
+        remoteUpdatedAt,
         remoteSync: {
           ...(project.remoteSync ?? { format: 'files' as const }),
           format: 'files' as const,

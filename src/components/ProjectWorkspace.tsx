@@ -302,7 +302,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             </div>
           )}
 
-          {remoteStaleOnServer && project.remoteDocId && (
+          {remoteStaleOnServer && !dirty && project.remoteDocId && (
             <div className="remote-stale-banner" role="status">
               <span>A newer version of this document is on the server.</span>
               <button

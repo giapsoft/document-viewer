@@ -1,3 +1,17 @@
+/** Keep the later of two server timestamps (ISO strings from documents.updated_at). */
+export function pickNewerRemoteUpdatedAt(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): string | null | undefined {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  const aMs = Date.parse(a);
+  const bMs = Date.parse(b);
+  if (Number.isNaN(aMs)) return b;
+  if (Number.isNaN(bMs)) return a;
+  return bMs > aMs ? b : a;
+}
+
 /** True when the server copy is newer than the version this session loaded. */
 export function isRemoteVersionStale(
   loadedUpdatedAt: string | null | undefined,
