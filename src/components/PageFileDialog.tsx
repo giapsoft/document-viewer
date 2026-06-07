@@ -145,6 +145,7 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   onConfirm: () => void;
   onClose: () => void;
+  elevated?: boolean;
 }
 
 export function ConfirmDialog({
@@ -153,6 +154,7 @@ export function ConfirmDialog({
   confirmLabel = 'Delete',
   onConfirm,
   onClose,
+  elevated = false,
 }: ConfirmDialogProps) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -163,7 +165,11 @@ export function ConfirmDialog({
   }, [onClose]);
 
   return (
-    <div className="picker-overlay" role="presentation" onClick={onClose}>
+    <div
+      className={`picker-overlay${elevated ? ' picker-overlay-elevated' : ''}`}
+      role="presentation"
+      onClick={onClose}
+    >
       <div
         className="picker-dialog page-file-dialog"
         role="dialog"

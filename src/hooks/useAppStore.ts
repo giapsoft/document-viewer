@@ -96,6 +96,17 @@ export function useAppStore() {
   const runRemoteAutoSaveRef = useRef<
     () => Promise<import('../lib/remoteAutoSave').RemoteAutoSaveResult>
   >(async () => ({ ok: true, skipped: true }));
+  const jumpFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const FLASH_HIGHLIGHT_MS = 5000;
+
+  useEffect(() => {
+    return () => {
+      if (jumpFlashTimerRef.current) {
+        window.clearTimeout(jumpFlashTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setRemoteSaveStatusListener((status, message) => {
@@ -335,6 +346,20 @@ export function useAppStore() {
   const selectComponent = useCallback(
     (componentId: string, pageFile: string) => {
       dispatch({ type: 'SELECT_COMPONENT', componentId, pageFile });
+    },
+    [dispatch],
+  );
+
+  const jumpToComponent = useCallback(
+    (componentId: string) => {
+      if (jumpFlashTimerRef.current) {
+        window.clearTimeout(jumpFlashTimerRef.current);
+      }
+      dispatch({ type: 'JUMP_TO_COMPONENT', componentId });
+      jumpFlashTimerRef.current = window.setTimeout(() => {
+        dispatch({ type: 'CLEAR_FLASHED_COMPONENT' });
+        jumpFlashTimerRef.current = null;
+      }, FLASH_HIGHLIGHT_MS);
     },
     [dispatch],
   );
@@ -1057,6 +1082,7 @@ export function useAppStore() {
     expandSidebar,
     openPage,
     selectComponent,
+    jumpToComponent,
     clearSelection,
     togglePanel,
     updateComponent,

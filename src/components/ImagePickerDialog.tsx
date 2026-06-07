@@ -13,6 +13,7 @@ interface ImagePickerDialogProps {
   onClose: () => void;
   onImport?: () => Promise<ImportImageResult>;
   onImportFromClipboard?: () => Promise<ImportImageResult>;
+  elevated?: boolean;
 }
 
 export function ImagePickerDialog({
@@ -22,6 +23,7 @@ export function ImagePickerDialog({
   onClose,
   onImport,
   onImportFromClipboard,
+  elevated = false,
 }: ImagePickerDialogProps) {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -65,7 +67,7 @@ export function ImagePickerDialog({
 
   return (
     <div
-      className="picker-overlay"
+      className={`picker-overlay${elevated ? ' picker-overlay-elevated' : ''}`}
       role="presentation"
       onClick={onClose}
     >

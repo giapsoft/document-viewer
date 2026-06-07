@@ -492,7 +492,9 @@ function annotateToken(
   return end;
 }
 
-function createOffsetRenderer(): Renderer {
+function createOffsetRenderer(
+  resolveComponentLink?: (href: string) => string | null,
+): Renderer {
   const renderer = new Renderer();
 
   const renderInline = function (this: Renderer, tokens: Token[]) {
@@ -501,6 +503,11 @@ function createOffsetRenderer(): Renderer {
 
   renderer.text = function (token: Tokens.Text | Tokens.Escape) {
     const annotated = token as Tokens.Text & { mdOffset?: number };
+    // List paragraphs and other block inlines wrap links inside a parent text
+    // token — delegate to parseInline so links/emphasis render instead of raw MD.
+    if (annotated.tokens?.length) {
+      return renderInline.call(this, annotated.tokens);
+    }
     return wrapWithOffset(annotated.text, annotated.mdOffset);
   };
 
@@ -517,9 +524,15 @@ function createOffsetRenderer(): Renderer {
   };
 
   renderer.link = function (token: Tokens.Link) {
+    const componentId = resolveComponentLink?.(token.href) ?? null;
+    const inner = renderInline.call(this, token.tokens);
+    if (componentId) {
+      const title = token.title ? ` title="${escapeHtml(token.title)}"` : '';
+      return `<a href="#" class="md-component-link" data-component-id="${escapeHtml(componentId)}"${title}>${inner}</a>`;
+    }
     const href = escapeHtml(token.href);
     const title = token.title ? ` title="${escapeHtml(token.title)}"` : '';
-    return `<a href="${href}"${title}>${renderInline.call(this, token.tokens)}</a>`;
+    return `<a href="${href}"${title}>${inner}</a>`;
   };
 
   renderer.codespan = function (token: Tokens.Codespan) {
@@ -546,10 +559,15 @@ function createOffsetRenderer(): Renderer {
 }
 
 /** Render markdown with data-md-offset-start on text nodes for selection mapping. */
-export function parseMarkdownWithOffsets(source: string): string {
+export function parseMarkdownWithOffsets(
+  source: string,
+  resolveComponentLink?: (href: string) => string | null,
+): string {
   const tokens = marked.lexer(source);
   annotateTokens(source, [...tokens], 0);
-  return marked.parser(tokens, { renderer: createOffsetRenderer() }) as string;
+  return marked.parser(tokens, {
+    renderer: createOffsetRenderer(resolveComponentLink),
+  }) as string;
 }
 
 function expandHighlightParts(range: MdHighlightRange): MdSourceSegment[] {
@@ -730,15 +748,21 @@ function applySourceRangeHighlightsToOffsetHtml(
 export function renderSelectableMarkdown(
   source: string,
   ranges: MdHighlightRange[] = [],
+  resolveComponentLink?: (href: string) => string | null,
 ): string {
-  let html = parseMarkdownWithOffsets(source);
+  let html = parseMarkdownWithOffsets(source, resolveComponentLink);
   if (ranges.length > 0) {
     html = applySourceRangeHighlightsToOffsetHtml(html, source, ranges);
   }
   return html;
 }
 
-export const MD_PREVIEW_SANITIZE_ATTRS = ['class', 'data-md-offset-start', 'data-comment-id'] as const;
+export const MD_PREVIEW_SANITIZE_ATTRS = [
+  'class',
+  'data-md-offset-start',
+  'data-comment-id',
+  'data-component-id',
+] as const;
 
 export function findFencedCodeBlocks(source: string): SourceRegion[] {
   const blocks: SourceRegion[] = [];

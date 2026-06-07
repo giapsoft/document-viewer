@@ -131,6 +131,7 @@ export const initialAppState: AppState = {
   selectionHistory: [],
   selectionHistoryIndex: -1,
   scrollToComponent: null,
+  flashedComponent: null,
   selectionScrollNonce: 0,
   commentPanelExpanded: false,
   commentUsername: null,
@@ -910,6 +911,32 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selectionHistoryIndex: index,
       };
     }
+
+    case 'JUMP_TO_COMPONENT': {
+      if (!state.project) return state;
+      const pageFile = state.project.index.componentToPage.get(action.componentId);
+      if (!pageFile) return state;
+
+      const sidebarOrder = getSidebarOrder(state);
+      const panels = addPageToPanels(state.panels, pageFile, sidebarOrder);
+
+      return {
+        ...state,
+        currentPage: pageFile,
+        panels,
+        scrollToComponent: {
+          componentId: action.componentId,
+          nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+        },
+        flashedComponent: {
+          componentId: action.componentId,
+          nonce: (state.flashedComponent?.nonce ?? 0) + 1,
+        },
+      };
+    }
+
+    case 'CLEAR_FLASHED_COMPONENT':
+      return { ...state, flashedComponent: null };
 
     case 'OUTSTANDING_COMMENT': {
       if (!state.project) return state;

@@ -8,20 +8,46 @@ import type {
 } from '../types';
 import { findComponent } from '../lib/projectMutations';
 import type { ImportImageResult } from '../lib/importImage';
-import { ContentEditorDialog, isContentEditableType } from './ContentEditorDialog';
+import { ContentEditorDialog } from './ContentEditorDialog';
 import { ImagePickerDialog } from './ImagePickerDialog';
 import { ConfirmDialog } from './PageFileDialog';
+import { Toast } from './Toast';
 
 const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'md'];
 const STATUSES: ComponentStatus[] = ['undefined', 'pending', 'working', 'done', 'blocked'];
 
+const TOAST_MS = 2000;
+
 function ComponentIdHeader({ componentId, listBadge }: { componentId: string; listBadge?: ReactNode }) {
+  const [toast, setToast] = useState<string | null>(null);
+
+  const handleCopyId = async () => {
+    try {
+      await navigator.clipboard.writeText(componentId);
+      setToast('Copied');
+      window.setTimeout(() => setToast(null), TOAST_MS);
+    } catch {
+      setToast('Copy failed');
+      window.setTimeout(() => setToast(null), TOAST_MS);
+    }
+  };
+
   return (
-    <span className="edit-bar-header-id">
-      <span className="edit-bar-header-id-label">ID</span>
-      <code className="edit-bar-component-id">{componentId}</code>
-      {listBadge}
-    </span>
+    <>
+      <span className="edit-bar-header-id">
+        <span className="edit-bar-header-id-label">ID</span>
+        <button
+          type="button"
+          className="edit-bar-component-id"
+          onClick={() => void handleCopyId()}
+          title="Copy component id"
+        >
+          {componentId}
+        </button>
+        {listBadge}
+      </span>
+      {toast ? <Toast message={toast} /> : null}
+    </>
   );
 }
 
@@ -155,8 +181,8 @@ function EditBarForm({
   const imgFilename = component.content.trim();
   const imgLabel = imgFilename || 'select image';
   const mdContent = project.mdFiles.get(component.id) ?? '';
-  const contentEditable = isContentEditableType(component.type);
-  const fullscreenValue = component.type === 'md' ? mdContent : component.content;
+  const editorValue =
+    component.type === 'md' ? mdContent : component.type === 'img' ? '' : component.content;
   const handleFullscreenCommit = (committedValue: string) => {
     if (component.type === 'md') {
       onUpdateMdContent(component.id, committedValue);
@@ -169,13 +195,29 @@ function EditBarForm({
     selection.matchingGroupIndices.length > 1 ? (
       <span className="edit-bar-list-badge">{selection.matchingGroupIndices.length} lists</span>
     ) : null;
+  const fullscreenListBadge =
+    selection.matchingGroupIndices.length > 1 ? (
+      <span className="content-editor-list-badge">
+        {selection.matchingGroupIndices.length} lists
+      </span>
+    ) : null;
 
   const hasBodyEditor = component.type !== 'img';
+
+  const handleExpandAreaClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!hasBodyEditor) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('button, select, textarea, input')) return;
+    onToggleBodyExpanded();
+  };
 
   return (
     <footer className={`edit-bar ${bodyExpanded ? 'edit-bar-body-expanded' : ''}`}>
       <div className="edit-bar-inner">
-        <div className="edit-bar-row">
+        <div
+          className={`edit-bar-row${hasBodyEditor ? ' edit-bar-row-expandable' : ''}`}
+          onClick={handleExpandAreaClick}
+        >
           {hasBodyEditor && (
             <button
               type="button"
@@ -194,16 +236,14 @@ function EditBarForm({
             <ComponentIdHeader componentId={component.id} listBadge={listBadge} />
           </span>
           <div className="edit-bar-actions">
-            {contentEditable && (
-              <button
-                type="button"
-                className="edit-bar-icon-btn"
-                onClick={openFullscreen}
-                title="Full screen editor"
-              >
-                ⛶
-              </button>
-            )}
+            <button
+              type="button"
+              className="edit-bar-icon-btn"
+              onClick={openFullscreen}
+              title="Full screen editor"
+            >
+              ⛶
+            </button>
             <button
               type="button"
               className="edit-bar-icon-btn"
@@ -310,13 +350,19 @@ function EditBarForm({
         />
       )}
 
-      {fullscreenOpen && contentEditable && (
+      {fullscreenOpen && (
         <ContentEditorDialog
-          componentId={component.id}
-          componentType={component.type}
-          value={fullscreenValue}
+          project={project}
+          component={component}
+          listBadge={fullscreenListBadge}
+          canDelete={canDelete}
+          value={editorValue}
+          onPatch={patch}
           onCommit={handleFullscreenCommit}
+          onDelete={() => onDeleteComponent(pageFile, component.id)}
           onClose={closeFullscreen}
+          onImportImage={onImportImage}
+          onImportImageFromClipboard={onImportImageFromClipboard}
         />
       )}
     </footer>

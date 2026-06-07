@@ -162,6 +162,8 @@ export interface AppState {
   selectionHistory: SelectionHistoryEntry[];
   selectionHistoryIndex: number;
   scrollToComponent: { componentId: string; nonce: number } | null;
+  /** Temporary highlight after md component-link navigation (does not affect selection). */
+  flashedComponent: { componentId: string; nonce: number } | null;
   /** Bumped when selection/group changes — each panel scrolls to first related component */
   selectionScrollNonce: number;
   commentPanelExpanded: boolean;
@@ -258,6 +260,8 @@ export type AppAction =
   | { type: 'UPDATE_COMMENT'; commentId: string; body: string }
   | { type: 'DELETE_COMMENT'; commentId: string }
   | { type: 'FOCUS_COMMENT'; commentId: string | null }
+  | { type: 'JUMP_TO_COMPONENT'; componentId: string }
+  | { type: 'CLEAR_FLASHED_COMPONENT' }
   | { type: 'OUTSTANDING_COMMENT'; commentId: string | null }
   | { type: 'SET_CONTENT_EDITOR_OPEN'; open: boolean };
 

@@ -3,12 +3,14 @@ import type { SaveStatus } from '../lib/saveProject';
 interface ProjectToolbarProps {
   dirty: boolean;
   canSave: boolean;
+  canReloadFromLocal?: boolean;
   loading: boolean;
   error: string | null;
   saveStatus: SaveStatus;
   saveError: string | null;
   sourceLabel: string | null;
   onSave: () => void;
+  onReload?: () => void;
   onClose: () => void;
 }
 
@@ -28,12 +30,14 @@ function saveStatusLabel(status: SaveStatus, dirty: boolean): string | null {
 export function ProjectToolbar({
   dirty,
   canSave,
+  canReloadFromLocal = false,
   loading,
   error,
   saveStatus,
   saveError,
   sourceLabel,
   onSave,
+  onReload,
   onClose,
 }: ProjectToolbarProps) {
   const saveLabel = canSave ? saveStatusLabel(saveStatus, dirty) : null;
@@ -53,6 +57,17 @@ export function ProjectToolbar({
         <span className="project-folder-error" role="alert">
           {error}
         </span>
+      )}
+      {canReloadFromLocal && onReload && (
+        <button
+          type="button"
+          className="project-folder-btn"
+          onClick={onReload}
+          disabled={loading}
+          title="Reload document from local folder"
+        >
+          Reload
+        </button>
       )}
       <button
         type="button"

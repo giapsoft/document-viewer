@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import type {
   AppStyles,
   CommentAnchor,
@@ -11,6 +11,7 @@ import type {
 import { activeComments } from '../lib/comments';
 import { isTypingTarget } from '../lib/keyboard';
 import { resolveComponentForDisplay, isTextType } from '../lib/componentDisplay';
+import { createMarkdownComponentLinkResolver } from '../lib/mdComponentLinks';
 import { PageLabel } from './PageLabel';
 import { MarkdownPreview } from './MarkdownPreview';
 import { COMMENT_LINK_PREVIEW_HIGHLIGHT, LINK_MODE_HIGHLIGHT } from '../lib/styles';
@@ -178,6 +179,9 @@ interface ComponentBlockProps {
     range: MdTextRange,
   ) => void;
   onCommentMarkClick?: (commentId: string, componentId: string, pageFile: string) => void;
+  onNavigateToComponent?: (componentId: string) => void;
+  flashedComponentId?: string | null;
+  flashNonce?: number;
   registerRef: (id: string, el: HTMLElement | null) => void;
 }
 
@@ -185,6 +189,8 @@ interface ComponentShellProps {
   component: Component;
   highlightKind: 'none' | 'primary' | 'related' | 'link' | 'comment-link';
   isDimmed: boolean;
+  linkFlashActive: boolean;
+  linkFlashNonce: number;
   className: string;
   style: CSSProperties;
   onSelect: (componentId: string, pageFile: string) => void;
@@ -199,6 +205,8 @@ function ComponentShell({
   component,
   highlightKind,
   isDimmed,
+  linkFlashActive,
+  linkFlashNonce,
   className,
   style,
   onSelect,
@@ -208,9 +216,26 @@ function ComponentShell({
   registerRef,
   children,
 }: ComponentShellProps) {
+  const shellRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = shellRef.current;
+    if (!linkFlashActive) {
+      el?.classList.remove('component-link-flash');
+      return;
+    }
+    if (!el) return;
+    el.classList.remove('component-link-flash');
+    void el.offsetWidth;
+    el.classList.add('component-link-flash');
+  }, [linkFlashActive, linkFlashNonce]);
+
   return (
     <div
-      ref={(el) => registerRef(component.id, el)}
+      ref={(el) => {
+        shellRef.current = el;
+        registerRef(component.id, el);
+      }}
       className={`component-block ${className} ${highlightKind !== 'none' ? 'selected' : ''} ${highlightKind === 'primary' ? 'selected-primary' : ''} ${highlightKind === 'related' ? 'selected-related' : ''} ${highlightKind === 'link' ? 'link-selected' : ''} ${highlightKind === 'comment-link' ? 'comment-link-preview' : ''} ${isDimmed ? 'dimmed' : ''}`}
       style={style}
       onClick={(e) => {
@@ -260,10 +285,17 @@ export function ComponentBlock({
   onCommentLinkComponent,
   onCommentLinkMdRange,
   onCommentMarkClick,
+  onNavigateToComponent,
+  flashedComponentId = null,
+  flashNonce = 0,
   registerRef,
 }: ComponentBlockProps) {
   const resolved = resolveComponentForDisplay(component, project.mdFiles);
   const mdSelectionHandledRef = useRef(false);
+  const resolveComponentLink = useMemo(
+    () => createMarkdownComponentLinkResolver(pageFile, project),
+    [pageFile, project],
+  );
 
   const isCommentLinkPreview =
     commentLinkMode &&
@@ -323,6 +355,8 @@ export function ComponentBlock({
     component,
     highlightKind,
     isDimmed,
+    linkFlashActive: flashedComponentId === component.id,
+    linkFlashNonce: flashNonce,
     onSelect,
     onCommentLinkComponent:
       resolved.type === 'md' && commentLinkMode
@@ -376,6 +410,7 @@ export function ComponentBlock({
             source={resolved.content}
             highlightRanges={mdHighlightRanges}
             selectable={commentLinkMode}
+            resolveComponentLink={resolveComponentLink}
             onTextSelect={(range) => {
               mdSelectionHandledRef.current = true;
               onCommentLinkMdRange?.(component.id, pageFile, range);
@@ -384,6 +419,9 @@ export function ComponentBlock({
               commentLinkMode || linkMode
                 ? undefined
                 : (commentId) => onCommentMarkClick?.(commentId, component.id, pageFile)
+            }
+            onComponentLinkClick={
+              commentLinkMode || linkMode ? undefined : onNavigateToComponent
             }
           />
         ) : isMdPending ? (
@@ -500,6 +538,9 @@ interface PagePanelProps {
     range: MdTextRange,
   ) => void;
   onCommentMarkClick?: (commentId: string, componentId: string, pageFile: string) => void;
+  onNavigateToComponent?: (componentId: string) => void;
+  flashedComponentId?: string | null;
+  flashNonce?: number;
 }
 
 export function PagePanel({
@@ -522,6 +563,9 @@ export function PagePanel({
   onCommentLinkComponent,
   onCommentLinkMdRange,
   onCommentMarkClick,
+  onNavigateToComponent,
+  flashedComponentId = null,
+  flashNonce = 0,
   scrollToComponentId = null,
   scrollNonce = 0,
   selectionScrollNonce = 0,
@@ -842,6 +886,9 @@ export function PagePanel({
                   onCommentLinkComponent={onCommentLinkComponent}
                   onCommentLinkMdRange={onCommentLinkMdRange}
                   onCommentMarkClick={onCommentMarkClick}
+                  onNavigateToComponent={onNavigateToComponent}
+                  flashedComponentId={flashedComponentId}
+                  flashNonce={flashNonce}
                   registerRef={registerRef}
                 />
                 );

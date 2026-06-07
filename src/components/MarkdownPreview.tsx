@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import {
   MD_PREVIEW_SANITIZE_ATTRS,
@@ -13,8 +12,10 @@ interface MarkdownPreviewProps {
   className?: string;
   highlightRanges?: MdHighlightRange[];
   selectable?: boolean;
+  resolveComponentLink?: (href: string) => string | null;
   onTextSelect?: (range: import('../lib/mdSelection').MdTextRange) => void;
   onCommentMarkClick?: (commentId: string) => void;
+  onComponentLinkClick?: (componentId: string) => void;
 }
 
 export function MarkdownPreview({
@@ -22,18 +23,17 @@ export function MarkdownPreview({
   className = '',
   highlightRanges = [],
   selectable = false,
+  resolveComponentLink,
   onTextSelect,
   onCommentMarkClick,
+  onComponentLinkClick,
 }: MarkdownPreviewProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const html = useMemo(() => {
-    const raw =
-      selectable || highlightRanges.length > 0
-        ? renderSelectableMarkdown(source, highlightRanges)
-        : (marked.parse(source, { async: false }) as string);
+    const raw = renderSelectableMarkdown(source, highlightRanges, resolveComponentLink);
     return DOMPurify.sanitize(raw, { ADD_ATTR: [...MD_PREVIEW_SANITIZE_ATTRS] });
-  }, [source, highlightRanges, selectable]);
+  }, [source, highlightRanges, resolveComponentLink]);
 
   useEffect(() => {
     if (!selectable) return;
@@ -41,7 +41,6 @@ export function MarkdownPreview({
     const onMouseDown = (event: MouseEvent) => {
       const root = rootRef.current;
       if (!root?.contains(event.target as Node)) return;
-      // Hide preview marks via CSS only — no DOM rebuild so drag-select still works.
       root.classList.add('is-dragging');
     };
 
@@ -72,12 +71,24 @@ export function MarkdownPreview({
   }, [selectable, onTextSelect, source]);
 
   useEffect(() => {
-    if (!onCommentMarkClick) return;
-
     const root = rootRef.current;
     if (!root) return;
 
     const handleClick = (event: MouseEvent) => {
+      const componentLink = (event.target as HTMLElement).closest(
+        'a.md-component-link[data-component-id]',
+      );
+      if (componentLink && root.contains(componentLink)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const componentId = componentLink.getAttribute('data-component-id');
+        if (componentId && onComponentLinkClick) {
+          onComponentLinkClick(componentId);
+        }
+        return;
+      }
+
+      if (!onCommentMarkClick) return;
       const mark = (event.target as HTMLElement).closest('[data-comment-id]');
       if (!mark || !root.contains(mark)) return;
       event.stopPropagation();
@@ -87,7 +98,7 @@ export function MarkdownPreview({
 
     root.addEventListener('click', handleClick);
     return () => root.removeEventListener('click', handleClick);
-  }, [onCommentMarkClick]);
+  }, [onComponentLinkClick, onCommentMarkClick]);
 
   return (
     <div

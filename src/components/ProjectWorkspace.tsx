@@ -36,6 +36,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     expandSidebar,
     openPage,
     selectComponent,
+    jumpToComponent,
     clearSelection,
     togglePanel,
     updateComponent,
@@ -314,6 +315,21 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     sourceParts.push('Local folder');
   }
   const sourceLabel = sourceParts.length > 0 ? sourceParts.join(' · ') : 'Unsaved draft';
+  const canReloadFromLocal = Boolean(project.folderHandle && !project.remoteDocId);
+
+  const handleReloadFromLocal = () => {
+    if (state.contentEditorOpen) {
+      setToolbarError('Close the content editor before reloading.');
+      return;
+    }
+    if (dirty) {
+      const proceed = window.confirm(
+        'You have unsaved changes. Reload from disk anyway? Unsaved edits will be lost.',
+      );
+      if (!proceed) return;
+    }
+    void runToolbarAction(reloadProject);
+  };
 
   return (
     <>
@@ -380,12 +396,14 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             <ProjectToolbar
               dirty={dirty}
               canSave={canSave}
+              canReloadFromLocal={canReloadFromLocal}
               loading={toolbarLoading}
               error={toolbarError}
               saveStatus={saveStatus}
               saveError={saveError}
               sourceLabel={sourceLabel}
               onSave={handleSave}
+              onReload={handleReloadFromLocal}
               onClose={handleClose}
             />
           </div>
@@ -415,6 +433,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 onClearSelection={clearSelection}
                 scrollToComponentId={state.scrollToComponent?.componentId ?? null}
                 scrollNonce={state.scrollToComponent?.nonce ?? 0}
+                flashedComponentId={state.flashedComponent?.componentId ?? null}
+                flashNonce={state.flashedComponent?.nonce ?? 0}
                 selectionScrollNonce={state.selectionScrollNonce}
                 commentLinkMode={commentLinkMode}
                 commentLinkPreviewAnchor={commentLinkPreviewAnchor}
@@ -423,6 +443,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 onCommentLinkComponent={handleCommentLinkComponent}
                 onCommentLinkMdRange={handleCommentLinkMdRange}
                 onCommentMarkClick={handleCommentMarkClick}
+                onNavigateToComponent={jumpToComponent}
               />
             ))}
             <CommentPanel
