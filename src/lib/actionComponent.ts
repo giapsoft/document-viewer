@@ -117,6 +117,25 @@ export function resolveActionLabelPlacement(position: FramePosition): 'above' | 
   return spaceAbove >= labelSpace ? 'above' : 'below';
 }
 
+/** Max label width as a fraction of frame width, centered on the action zone. */
+export function resolveActionLabelMaxWidthRatio(position: FramePosition): number {
+  const p = clampLayerPosition(position);
+  const centerX = p.leftRatio + p.widthRatio / 2;
+  return 2 * Math.min(centerX, 1 - centerX);
+}
+
+/** CSS max-width for action_name; zone-relative when the label sits inside the action layer box. */
+export function resolveActionLabelMaxWidthCssPercent(
+  position: FramePosition,
+  relativeTo: 'frame' | 'zone',
+): string {
+  const frameRatio = resolveActionLabelMaxWidthRatio(position);
+  if (relativeTo === 'frame') return ratioToCssPercent(frameRatio);
+
+  const zoneWidthRatio = Math.max(clampLayerPosition(position).widthRatio, 0.001);
+  return ratioToCssPercent(frameRatio / zoneWidthRatio);
+}
+
 export function layerPositionStyle(position: FramePosition): {
   top: string;
   left: string;
@@ -145,7 +164,7 @@ export function createDefaultActionData(): ActionData {
     editor_frame_position: { ...DEFAULT_FULL_FRAME },
     image_before: '',
     image_after: '',
-    action_name: 'Click',
+    action_name: '',
     title: '',
     image_before_position: { ...DEFAULT_FULL_FRAME },
     image_after_position: { ...DEFAULT_FULL_FRAME },

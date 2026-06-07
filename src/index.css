@@ -3453,9 +3453,12 @@ code {
   position: absolute;
   z-index: 4;
   pointer-events: none;
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
+  width: auto;
+  max-width: min(14rem, var(--action-label-max-width, 100%));
+  min-width: 0;
 }
 
 .action-bubble-above {
@@ -3468,22 +3471,27 @@ code {
 }
 
 .action-bubble-text {
+  display: block;
+  box-sizing: border-box;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
   background: #fd7e14;
   color: #fff;
   font-size: 0.82rem;
   font-weight: 600;
   padding: 0.35rem 0.65rem;
   border-radius: 6px;
-  max-width: 14rem;
-  white-space: normal;
-  overflow-wrap: break-word;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: center;
   line-height: 1.35;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .action-bubble-tail {
+  align-self: center;
   width: 0;
   height: 0;
   border-left: 7px solid transparent;
@@ -4010,6 +4018,21 @@ code {
 .action-editor-outline-label-below {
   top: auto;
   bottom: -1.35rem;
+}
+
+.action-editor-action-name-label {
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(14rem, var(--action-label-max-width, 100%));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.action-editor-action-name-label.action-editor-outline-label-below {
+  transform: translateX(-50%);
 }
 
 .action-editor-resize-layer {

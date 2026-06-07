@@ -13,6 +13,7 @@ import {
   layerPositionStyle,
   parseActionData,
   ratioToCssPercent,
+  resolveActionLabelMaxWidthCssPercent,
   resolveActionLabelPlacement,
   serializeActionData,
   storedToEditorLayout,
@@ -283,7 +284,7 @@ export const ActionEditor = forwardRef<ActionEditorHandle, ActionEditorProps>(fu
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
 
-  const [activeTarget, setActiveTarget] = useState<ActionEditorTarget>('before');
+  const [activeTarget, setActiveTarget] = useState<ActionEditorTarget>('action');
   const [layerVisibility, setLayerVisibility] = useState(DEFAULT_EDITOR_LAYER_VISIBILITY);
   const editorRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<EditorDragState | null>(null);
@@ -484,6 +485,10 @@ export const ActionEditor = forwardRef<ActionEditorHandle, ActionEditorProps>(fu
     const position = storedLayerPosition(previewData, layer);
     const isActive = activeTarget === layer;
     const labelPlacement = layer === 'action' ? resolveActionLabelPlacement(position) : 'above';
+    const actionLabelStyle =
+      layer === 'action'
+        ? ({ '--action-label-max-width': resolveActionLabelMaxWidthCssPercent(position, 'zone') } as React.CSSProperties)
+        : undefined;
     return (
       <div
         key={`outline-${layer}`}
@@ -492,11 +497,12 @@ export const ActionEditor = forwardRef<ActionEditorHandle, ActionEditorProps>(fu
           ...layerPositionStyle(position),
           zIndex: isActive ? 12 : EDIT_LAYER_STACK[layer] + 11,
           '--action-layer-color': meta.color,
+          ...actionLabelStyle,
         } as React.CSSProperties}
         aria-hidden
       >
         <span
-          className={`action-editor-outline-label${labelPlacement === 'below' ? ' action-editor-outline-label-below' : ''}`}
+          className={`action-editor-outline-label${layer === 'action' ? ' action-editor-action-name-label' : ''}${labelPlacement === 'below' ? ' action-editor-outline-label-below' : ''}`}
         >
           {layer === 'action' && metaRef.current.action_name.trim()
             ? metaRef.current.action_name
@@ -519,10 +525,19 @@ export const ActionEditor = forwardRef<ActionEditorHandle, ActionEditorProps>(fu
       <div
         key={`resize-${layer}`}
         className="action-editor-resize-layer"
-        style={{ ...layerPositionStyle(position), zIndex: 6 }}
+        style={{
+          ...layerPositionStyle(position),
+          zIndex: 6,
+          ...(layer === 'action'
+            ? { '--action-label-max-width': resolveActionLabelMaxWidthCssPercent(position, 'zone') }
+            : {}),
+        } as React.CSSProperties}
         aria-hidden
       >
-        <span className="action-editor-handle-label" style={{ '--action-layer-color': meta.color } as React.CSSProperties}>
+        <span
+          className={`action-editor-handle-label${layer === 'action' ? ' action-editor-action-name-label' : ''}`}
+          style={{ '--action-layer-color': meta.color } as React.CSSProperties}
+        >
           {layer === 'action' && metaRef.current.action_name.trim()
             ? metaRef.current.action_name
             : meta.label}

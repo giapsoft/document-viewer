@@ -5,6 +5,7 @@ import {
   layerPositionStyle,
   parseActionData,
   resolveActionAfterImage,
+  resolveActionLabelMaxWidthCssPercent,
   resolveActionLabelPlacement,
   type ActionData,
   type FramePosition,
@@ -44,8 +45,10 @@ export function ActionFrameViewport({
 
   const showBefore = phase === 'idle' || phase === 'blink' || phase === 'fade';
   const showAfter = phase === 'after';
-  const showCover = phase === 'blink' || phase === 'fade';
-  const coverFading = phase === 'fade';
+  const showActionZone = phase !== 'after';
+  const zoneBlinking = phase === 'blink';
+  const zoneFading = phase === 'fade';
+  const actionLabel = data.action_name.trim() || undefined;
 
   return (
     <div className="action-frame-viewport">
@@ -77,12 +80,12 @@ export function ActionFrameViewport({
         )
       )}
 
-      {showCover && data.action_name.trim() && (
-        <ActionCoverOverlay
+      {showActionZone && (
+        <ActionZoneOverlay
           position={data.action_position}
-          label={data.action_name}
-          blinking={phase === 'blink'}
-          fading={coverFading}
+          label={actionLabel}
+          blinking={zoneBlinking}
+          fading={zoneFading}
         />
       )}
     </div>
@@ -217,37 +220,43 @@ export function ActionComponent({ content, project, pendingImageNames }: ActionC
   );
 }
 
-function ActionCoverOverlay({
+function ActionZoneOverlay({
   position,
   label,
   blinking,
   fading,
 }: {
   position: FramePosition;
-  label: string;
+  label?: string;
   blinking: boolean;
   fading: boolean;
 }) {
   const style = layerPositionStyle(position);
   const placement = resolveActionLabelPlacement(position);
   const bubbleAbove = placement === 'above';
+  const labelMaxWidth = resolveActionLabelMaxWidthCssPercent(position, 'frame');
 
   return (
     <>
       <div
         className={`action-cover-zone${blinking ? ' action-cover-zone-blink' : ''}${fading ? ' action-cover-zone-fade-out' : ''}`}
         style={style}
+        aria-hidden={label ? undefined : true}
+        aria-label={label ? undefined : 'Action zone'}
       />
-      <div
-        className={`action-bubble action-bubble-${placement}${fading ? ' action-bubble-fade-out' : ''}`}
-        style={{
-          top: bubbleAbove ? style.top : `calc(${style.top} + ${style.height})`,
-          left: `calc(${style.left} + ${style.width} / 2)`,
-        }}
-      >
-        <span className="action-bubble-text">{label}</span>
-        <span className="action-bubble-tail" aria-hidden />
-      </div>
+      {label ? (
+        <div
+          className={`action-bubble action-bubble-${placement}${fading ? ' action-bubble-fade-out' : ''}`}
+          style={{
+            top: bubbleAbove ? style.top : `calc(${style.top} + ${style.height})`,
+            left: `calc(${style.left} + ${style.width} / 2)`,
+            maxWidth: `min(14rem, ${labelMaxWidth})`,
+          }}
+        >
+          <span className="action-bubble-text">{label}</span>
+          <span className="action-bubble-tail" aria-hidden />
+        </div>
+      ) : null}
     </>
   );
 }
