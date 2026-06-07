@@ -9,7 +9,7 @@ import type { ImportImageResult } from '../lib/importImage';
 interface ImagePickerDialogProps {
   project: LoadedProject;
   selectedFilename: string;
-  onSelect: (filename: string) => void;
+  onSelect: (filename: string, previewSrc?: string) => void;
   onClose: () => void;
   onImport?: () => Promise<ImportImageResult>;
   onImportFromClipboard?: () => Promise<ImportImageResult>;
@@ -53,7 +53,7 @@ export function ImagePickerDialog({
     try {
       const result = await importFn();
       if (result.ok) {
-        onSelect(result.filename);
+        onSelect(result.filename, result.objectUrl);
         onClose();
         return;
       }

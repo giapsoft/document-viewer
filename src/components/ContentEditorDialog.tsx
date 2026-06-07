@@ -5,8 +5,9 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { ImagePickerDialog } from './ImagePickerDialog';
 import { ConfirmDialog } from './PageFileDialog';
 import { Toast } from './Toast';
+import { ActionEditor } from './ActionEditor';
 
-const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'md'];
+const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'md', 'action'];
 const STATUSES: ComponentStatus[] = ['undefined', 'pending', 'working', 'done', 'blocked'];
 const TOAST_MS = 2000;
 
@@ -83,6 +84,7 @@ export function ContentEditorDialog({
   const valueRef = useRef(value);
   const isMd = component.type === 'md';
   const isImg = component.type === 'img';
+  const isAction = component.type === 'action';
   const hasTextEditor = isContentEditableType(component.type);
 
   draftRef.current = draft;
@@ -192,8 +194,16 @@ export function ContentEditorDialog({
             />
           </aside>
 
-          <div className={`content-editor-body ${isMd ? 'content-editor-body-split' : ''}`}>
-            {isImg ? (
+          <div className={`content-editor-body ${isMd ? 'content-editor-body-split' : ''}${isAction ? ' content-editor-body-action' : ''}`}>
+            {isAction ? (
+              <ActionEditor
+                project={project}
+                content={component.content}
+                onChange={(content) => onPatch({ content })}
+                onImportImage={onImportImage}
+                onImportImageFromClipboard={onImportImageFromClipboard}
+              />
+            ) : isImg ? (
               <div className="content-editor-img-pane">
                 <div className="content-editor-pane-label">Image</div>
                 <div className="content-editor-img-body">
@@ -281,5 +291,5 @@ export function ContentEditorDialog({
 }
 
 export function isContentEditableType(type: ComponentType): boolean {
-  return type !== 'img';
+  return type !== 'img' && type !== 'action';
 }

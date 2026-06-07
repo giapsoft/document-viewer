@@ -19,8 +19,8 @@ export function resolveComponentForDisplay(
 
 export function isTextType(
   type: ComponentType,
-): type is Exclude<ComponentType, 'img' | 'md'> {
-  return type !== 'img' && type !== 'md';
+): type is Exclude<ComponentType, 'img' | 'md' | 'action'> {
+  return type !== 'img' && type !== 'md' && type !== 'action';
 }
 
 export function isValidStatus(status: string): status is ComponentStatus {
@@ -28,5 +28,5 @@ export function isValidStatus(status: string): status is ComponentStatus {
 }
 
 export function isValidType(type: string): type is ComponentType {
-  return ['header', 'title', 'body', 'listItem', 'img', 'md'].includes(type);
+  return ['header', 'title', 'body', 'listItem', 'img', 'md', 'action'].includes(type);
 }

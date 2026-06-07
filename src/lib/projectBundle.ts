@@ -1,4 +1,5 @@
 import type { LoadedProject, RelationsFile } from '../types';
+import { collectActionImageFilenamesFromProject } from './actionComponent';
 import { serializePageComponents } from './pageIds';
 import { mdSidecarFileName } from './mdFiles';
 import { assembleProject, type RawProjectInput } from './loadProject';
@@ -87,10 +88,14 @@ export function collectReferencedImageNames(project: LoadedProject): Set<string>
   const names = new Set<string>();
   for (const page of project.pages) {
     for (const component of page.components) {
-      if (component.type !== 'img') continue;
-      const name = component.content.trim();
-      if (name) names.add(name);
+      if (component.type === 'img') {
+        const name = component.content.trim();
+        if (name) names.add(name);
+      }
     }
+  }
+  for (const name of collectActionImageFilenamesFromProject(project.pages)) {
+    names.add(name);
   }
   return names;
 }

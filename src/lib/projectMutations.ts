@@ -1,4 +1,5 @@
 import type { Component, DocComment, LoadedProject } from '../types';
+import { createInitialActionContent } from './actionComponent';
 import { removeCommentsForComponent } from './comments';
 import { removeMemberIdsFromGroups } from './groupRelations';
 import { buildIndex } from './index';
@@ -60,6 +61,10 @@ export function updateComponentInProject(
         if (c.id !== componentId) return c;
         const next = { ...c, ...patch };
         if (next.type === 'md') {
+          next.content = '';
+        } else if (patch.type === 'action' && c.type !== 'action') {
+          next.content = createInitialActionContent();
+        } else if (patch.type !== undefined && c.type === 'action' && patch.type !== 'action') {
           next.content = '';
         }
         return next;

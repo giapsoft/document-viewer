@@ -1,4 +1,4 @@
-export type ComponentType = 'header' | 'title' | 'body' | 'listItem' | 'img' | 'md';
+export type ComponentType = 'header' | 'title' | 'body' | 'listItem' | 'img' | 'md' | 'action';
 export type ComponentStatus = 'pending' | 'working' | 'done' | 'blocked' | 'undefined';
 
 export interface Component {
@@ -69,7 +69,7 @@ export interface ScrollMarkerStyle {
 
 export interface AppStyles {
   statuses: Record<ComponentStatus, StatusStyle>;
-  type: Record<Exclude<ComponentType, 'img' | 'md'>, TypeStyle>;
+  type: Record<Exclude<ComponentType, 'img' | 'md' | 'action'>, TypeStyle>;
   /** Primary clicked / focused component in a selection. */
   selectedComponent: SelectedComponentStyle;
   /** Other components in the same active relation group. */

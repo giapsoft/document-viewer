@@ -13,7 +13,7 @@ import { ImagePickerDialog } from './ImagePickerDialog';
 import { ConfirmDialog } from './PageFileDialog';
 import { Toast } from './Toast';
 
-const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'md'];
+const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'md', 'action'];
 const STATUSES: ComponentStatus[] = ['undefined', 'pending', 'working', 'done', 'blocked'];
 
 const TOAST_MS = 2000;
@@ -181,8 +181,13 @@ function EditBarForm({
   const imgFilename = component.content.trim();
   const imgLabel = imgFilename || 'select image';
   const mdContent = project.mdFiles.get(component.id) ?? '';
+  const isAction = component.type === 'action';
   const editorValue =
-    component.type === 'md' ? mdContent : component.type === 'img' ? '' : component.content;
+    component.type === 'md'
+      ? mdContent
+      : component.type === 'img' || isAction
+        ? ''
+        : component.content;
   const handleFullscreenCommit = (committedValue: string) => {
     if (component.type === 'md') {
       onUpdateMdContent(component.id, committedValue);
@@ -202,7 +207,7 @@ function EditBarForm({
       </span>
     ) : null;
 
-  const hasBodyEditor = component.type !== 'img';
+  const hasBodyEditor = component.type !== 'img' && !isAction;
 
   const handleExpandAreaClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!hasBodyEditor) return;
@@ -303,6 +308,16 @@ function EditBarForm({
                 title="Image file"
               >
                 {imgLabel}
+              </button>
+            )}
+            {isAction && (
+              <button
+                type="button"
+                className="edit-bar-input edit-bar-action-open"
+                onClick={openFullscreen}
+                title="Open full editor to configure action"
+              >
+                Edit action…
               </button>
             )}
           </div>

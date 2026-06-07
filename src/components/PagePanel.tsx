@@ -14,6 +14,7 @@ import { resolveComponentForDisplay, isTextType } from '../lib/componentDisplay'
 import { createMarkdownComponentLinkResolver } from '../lib/mdComponentLinks';
 import { PageLabel } from './PageLabel';
 import { MarkdownPreview } from './MarkdownPreview';
+import { ActionComponent } from './ActionComponent';
 import { COMMENT_LINK_PREVIEW_HIGHLIGHT, LINK_MODE_HIGHLIGHT } from '../lib/styles';
 import { scheduleScrollToComponent, scheduleScrollToMdCommentHighlight } from '../lib/scrollIntoContainer';
 import { getPageScrollTop, setPageScrollTop } from '../lib/pageScrollMemory';
@@ -376,6 +377,22 @@ export function ComponentBlock({
   const shellClassExtra =
     !commentLinkMode && hasComponentCommentAnchor ? ' comment-component-anchor' : '';
   const stickyClassExtra = resolved.type === 'title' ? ' component-sticky' : '';
+
+  if (resolved.type === 'action') {
+    return (
+      <ComponentShell
+        {...shellProps}
+        className={`component-action-wrap${shellClassExtra}`}
+        style={shellStyle}
+      >
+        <ActionComponent
+          content={resolved.content}
+          project={project}
+          pendingImageNames={pendingImageNames}
+        />
+      </ComponentShell>
+    );
+  }
 
   if (resolved.type === 'img') {
     const src = project.imageUrls.get(resolved.content);
