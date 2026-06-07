@@ -13,6 +13,7 @@ import { useRemoteStalePoll } from '../hooks/useRemoteStalePoll';
 import { CommentPanel } from './CommentPanel';
 import { activeComments, canOwnComment, resolveCommentAnchorHighlightId } from '../lib/comments';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
+import { isSaveInProgress } from '../lib/saveProject';
 import { useCallback, useMemo, useState } from 'react';
 import { pageHasHighlightedComponents } from '../lib/selectionHighlight';
 
@@ -232,7 +233,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const [pendingRemoteTitle, setPendingRemoteTitle] = useState<string | undefined>();
 
   const remoteStaleOnServer = useRemoteStalePoll(
-    Boolean(project.remoteDocId && project.remoteUpdatedAt),
+    Boolean(project.remoteDocId && project.remoteUpdatedAt) && !isSaveInProgress(saveStatus),
     checkRemoteDocumentStale,
     undefined,
     project.remoteUpdatedAt,

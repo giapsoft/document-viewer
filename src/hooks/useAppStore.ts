@@ -5,7 +5,7 @@ import { stripCommentTombstones } from '../lib/comments';
 import { setStoredCommentUsername } from '../lib/commentSession';
 import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus } from '../lib/saveProject';
-import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave } from '../lib/saveProject';
+import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave, isSaveInProgress } from '../lib/saveProject';
 import { importImageFromComputer, importImageFromClipboardSource, type ImportImageResult } from '../lib/importImage';
 import { clearPageScrollMemory } from '../lib/pageScrollMemory';
 import {
@@ -35,7 +35,6 @@ import {
   cancelRemoteAutoSave,
   scheduleRemoteAutoSave,
   setRemoteSaveStatusListener,
-  isRemoteAutoSaveBusy,
 } from '../lib/remoteAutoSave';
 import { isRemoteVersionStale } from '../lib/remoteConflict';
 import { defaultRemoteTitle, collectReferencedImageNames, collectReferencedMdComponentIds } from '../lib/projectBundle';
@@ -78,6 +77,7 @@ export function useAppStore() {
   const dirtyRef = useRef(false);
   const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const saveStatusRef = useRef(saveStatus);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingRemoteImages, setPendingRemoteImages] = useState<Set<string>>(() => new Set());
   const [pendingRemoteMd, setPendingRemoteMd] = useState<Set<string>>(() => new Set());
@@ -90,6 +90,7 @@ export function useAppStore() {
   projectRef.current = state.project;
   appStateRef.current = state;
   dirtyRef.current = dirty;
+  saveStatusRef.current = saveStatus;
 
   const runRemoteAutoSaveRef = useRef<
     () => Promise<import('../lib/remoteAutoSave').RemoteAutoSaveResult>
@@ -962,8 +963,8 @@ export function useAppStore() {
       const current = projectRef.current;
       if (!current?.remoteDocId || cancelled) return;
       if (remoteBackgroundLoadRef.current) return;
+      if (isSaveInProgress(saveStatusRef.current)) return;
       if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) return;
-      if (dirtyRef.current && isRemoteAutoSaveBusy()) return;
 
       try {
         if (dirtyRef.current) {

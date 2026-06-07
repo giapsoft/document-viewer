@@ -7,6 +7,10 @@ import { collectReferencedImageNames } from './projectBundle';
 
 export type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
+export function isSaveInProgress(status: SaveStatus): boolean {
+  return status === 'pending' || status === 'saving';
+}
+
 const SAVE_DEBOUNCE_MS = 600;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
