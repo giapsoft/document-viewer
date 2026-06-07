@@ -15,7 +15,12 @@ export function isSaveInProgress(status: SaveStatus): boolean {
 const SAVE_DEBOUNCE_MS = 600;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let saveInFlight = false;
 let statusListener: ((status: SaveStatus, message?: string) => void) | null = null;
+
+export function isLocalAutoSaveBusy(): boolean {
+  return saveTimer !== null || saveInFlight;
+}
 
 export function setSaveStatusListener(
   listener: ((status: SaveStatus, message?: string) => void) | null,
@@ -153,24 +158,35 @@ export async function saveProjectToFolder(project: LoadedProject): Promise<void>
   await writeJsonFile(root, 'comments.json', comments ?? []);
 }
 
-export function scheduleAutoSave(getProject: () => LoadedProject | null): void {
+export type LocalAutoSaveResult =
+  | { ok: true; skipped?: boolean }
+  | { ok: false; error?: string };
+
+export function scheduleAutoSave(save: () => Promise<LocalAutoSaveResult>): void {
   if (saveTimer) clearTimeout(saveTimer);
   notify('pending');
 
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    const project = getProject();
-    if (!project?.folderHandle) {
-      notify('idle');
-      return;
-    }
-
+    saveInFlight = true;
     notify('saving');
-    void saveProjectToFolder(project)
-      .then(() => notify('saved'))
+    void save()
+      .then((result) => {
+        if (result.ok) {
+          notify(result.skipped ? 'idle' : 'saved');
+          if (!result.skipped) {
+            window.setTimeout(() => notify('idle'), 2000);
+          }
+          return;
+        }
+        notify('error', result.error ?? 'Could not save project');
+      })
       .catch((err) => {
         const message = err instanceof Error ? err.message : 'Could not save project';
         notify('error', message);
+      })
+      .finally(() => {
+        saveInFlight = false;
       });
   }, SAVE_DEBOUNCE_MS);
 }

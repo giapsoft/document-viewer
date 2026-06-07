@@ -1902,6 +1902,23 @@ code {
   cursor: not-allowed;
 }
 
+.content-editor-cancel-btn {
+  height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+  color: #495057;
+  cursor: pointer;
+}
+
+.content-editor-cancel-btn:hover {
+  background: #f8f9fa;
+  border-color: #adb5bd;
+}
+
 .content-editor-done-btn {
   height: 2rem;
   padding: 0 0.9rem;

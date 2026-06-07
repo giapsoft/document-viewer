@@ -48,16 +48,40 @@ function OptionToggleGroup<T extends string>({
   );
 }
 
+export type ContentEditorDraft = {
+  type: ComponentType;
+  status: ComponentStatus;
+  content: string;
+  mdContent: string;
+};
+
+function createEditorDraft(component: Component, mdContent: string): ContentEditorDraft {
+  return {
+    type: component.type,
+    status: component.status,
+    content: component.content,
+    mdContent,
+  };
+}
+
+function draftsEqual(a: ContentEditorDraft, b: ContentEditorDraft): boolean {
+  return (
+    a.type === b.type &&
+    a.status === b.status &&
+    a.content === b.content &&
+    a.mdContent === b.mdContent
+  );
+}
+
 interface ContentEditorDialogProps {
   project: LoadedProject;
   component: Component;
+  mdContent: string;
   listBadge?: ReactNode;
   canDelete: boolean;
-  value: string;
-  onPatch: (patch: Partial<Omit<Component, 'id'>>) => void;
-  onCommit: (value: string) => void;
+  onDone: (draft: ContentEditorDraft) => void;
+  onCancel: () => void;
   onDelete: () => void;
-  onClose: () => void;
   onImportImage?: () => Promise<ImportImageResult>;
   onImportImageFromClipboard?: () => Promise<ImportImageResult>;
   onDeleteProjectImage?: (filename: string) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -66,20 +90,20 @@ interface ContentEditorDialogProps {
 export function ContentEditorDialog({
   project,
   component,
+  mdContent,
   listBadge,
   canDelete,
-  value,
-  onPatch,
-  onCommit,
+  onDone,
+  onCancel,
   onDelete,
-  onClose,
   onImportImage,
   onImportImageFromClipboard,
   onDeleteProjectImage,
 }: ContentEditorDialogProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const actionEditorRef = useRef<ActionEditorHandle>(null);
-  const [draft, setDraft] = useState(value);
+  const [draft, setDraft] = useState<ContentEditorDraft>(() => createEditorDraft(component, mdContent));
+  const initialDraftRef = useRef(draft);
   const [toast, setToast] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [actionImagePicker, setActionImagePicker] = useState<{
@@ -87,43 +111,51 @@ export function ContentEditorDialog({
     selectedFilename: string;
   } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const draftRef = useRef(draft);
-  const valueRef = useRef(value);
-  const isMd = component.type === 'md';
-  const isImg = component.type === 'img';
-  const isAction = component.type === 'action';
-  const hasTextEditor = isContentEditableType(component.type);
-
-  draftRef.current = draft;
-  valueRef.current = value;
+  const isMd = draft.type === 'md';
+  const isImg = draft.type === 'img';
+  const isAction = draft.type === 'action';
+  const hasTextEditor = isContentEditableType(draft.type);
 
   useEffect(() => {
-    setDraft(value);
-  }, [component.id, component.type, value]);
+    const next = createEditorDraft(component, mdContent);
+    setDraft(next);
+    initialDraftRef.current = next;
+  }, [component.id, component.type, component.status, component.content, mdContent]);
 
-  const handleClose = useCallback(() => {
-    onClose();
-    if (hasTextEditor && draftRef.current !== valueRef.current) {
-      onCommit(draftRef.current);
+  const isDraftDirty = useCallback(
+    () => !draftsEqual(draft, initialDraftRef.current),
+    [draft],
+  );
+
+  const handleCancel = useCallback(() => {
+    if (isDraftDirty()) {
+      const discard = window.confirm('Discard unsaved changes?');
+      if (!discard) return;
     }
-  }, [hasTextEditor, onCommit, onClose]);
+    onCancel();
+  }, [isDraftDirty, onCancel]);
+
+  const handleDone = useCallback(() => {
+    onCancel();
+    onDone(draft);
+  }, [draft, onCancel, onDone]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !pickerOpen && !actionImagePicker && !confirmDelete) {
         event.stopPropagation();
-        handleClose();
+        handleCancel();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [actionImagePicker, confirmDelete, handleClose, pickerOpen]);
+  }, [actionImagePicker, confirmDelete, handleCancel, pickerOpen]);
 
   useEffect(() => {
     if (hasTextEditor) {
       textareaRef.current?.focus();
     }
-  }, [component.id, component.type, hasTextEditor]);
+  }, [component.id, draft.type, hasTextEditor]);
 
   const handleCopyId = async () => {
     try {
@@ -136,8 +168,12 @@ export function ContentEditorDialog({
     }
   };
 
-  const imgSrc = isImg ? project.imageUrls.get(component.content.trim()) : undefined;
-  const imgLabel = component.content.trim() || 'Select image';
+  const patchDraft = (patch: Partial<ContentEditorDraft>) => {
+    setDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const imgSrc = isImg ? project.imageUrls.get(draft.content.trim()) : undefined;
+  const imgLabel = draft.content.trim() || 'Select image';
 
   return (
     <div className="content-editor-overlay" role="presentation">
@@ -177,8 +213,15 @@ export function ContentEditorDialog({
             </button>
             <button
               type="button"
+              className="content-editor-cancel-btn"
+              onClick={handleCancel}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
               className="content-editor-done-btn"
-              onClick={handleClose}
+              onClick={handleDone}
             >
               Done
             </button>
@@ -190,14 +233,14 @@ export function ContentEditorDialog({
             <OptionToggleGroup
               label="Type"
               options={TYPES}
-              value={component.type}
-              onChange={(type) => onPatch({ type })}
+              value={draft.type}
+              onChange={(type) => patchDraft({ type })}
             />
             <OptionToggleGroup
               label="Status"
               options={STATUSES}
-              value={component.status}
-              onChange={(status) => onPatch({ status })}
+              value={draft.status}
+              onChange={(status) => patchDraft({ status })}
             />
           </aside>
 
@@ -206,8 +249,8 @@ export function ContentEditorDialog({
               <ActionEditor
                 ref={actionEditorRef}
                 project={project}
-                content={component.content}
-                onChange={(content) => onPatch({ content })}
+                content={draft.content}
+                onChange={(content) => patchDraft({ content })}
                 onRequestImagePicker={(target, selectedFilename) => {
                   setActionImagePicker({ target, selectedFilename });
                 }}
@@ -217,7 +260,7 @@ export function ContentEditorDialog({
                 <div className="content-editor-pane-label">Image</div>
                 <div className="content-editor-img-body">
                   {imgSrc ? (
-                    <img src={imgSrc} alt={component.content} className="content-editor-img-preview" />
+                    <img src={imgSrc} alt={draft.content} className="content-editor-img-preview" />
                   ) : (
                     <p className="content-editor-preview-empty">No image selected</p>
                   )}
@@ -237,17 +280,17 @@ export function ContentEditorDialog({
                   <textarea
                     ref={textareaRef}
                     className="content-editor-textarea"
-                    value={draft}
+                    value={draft.mdContent}
                     placeholder="Markdown…"
                     spellCheck={false}
-                    onChange={(event) => setDraft(event.target.value)}
+                    onChange={(event) => patchDraft({ mdContent: event.target.value })}
                   />
                 </div>
                 <div className="content-editor-pane content-editor-preview-pane">
                   <div className="content-editor-pane-label">Preview</div>
                   <div className="content-editor-preview-scroll">
-                    {draft.trim() ? (
-                      <MarkdownPreview source={draft} className="content-editor-preview" />
+                    {draft.mdContent.trim() ? (
+                      <MarkdownPreview source={draft.mdContent} className="content-editor-preview" />
                     ) : (
                       <p className="content-editor-preview-empty">Nothing to preview yet.</p>
                     )}
@@ -258,9 +301,9 @@ export function ContentEditorDialog({
               <textarea
                 ref={textareaRef}
                 className="content-editor-textarea content-editor-textarea-full"
-                value={draft}
+                value={draft.content}
                 placeholder="Content…"
-                onChange={(event) => setDraft(event.target.value)}
+                onChange={(event) => patchDraft({ content: event.target.value })}
               />
             )}
           </div>
@@ -273,8 +316,11 @@ export function ContentEditorDialog({
         <ImagePickerDialog
           elevated
           project={project}
-          selectedFilename={component.content}
-          onSelect={(filename) => onPatch({ content: filename })}
+          selectedFilename={draft.content}
+          onSelect={(filename) => {
+            patchDraft({ content: filename });
+            setPickerOpen(false);
+          }}
           onClose={() => setPickerOpen(false)}
           onImport={onImportImage}
           onImportFromClipboard={onImportImageFromClipboard}
@@ -311,7 +357,7 @@ export function ContentEditorDialog({
           onClose={() => setConfirmDelete(false)}
           onConfirm={() => {
             setConfirmDelete(false);
-            onClose();
+            onCancel();
             onDelete();
           }}
         />

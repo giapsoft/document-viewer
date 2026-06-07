@@ -8,7 +8,7 @@ import type {
 } from '../types';
 import { findComponent } from '../lib/projectMutations';
 import type { ImportImageResult } from '../lib/importImage';
-import { ContentEditorDialog } from './ContentEditorDialog';
+import { ContentEditorDialog, type ContentEditorDraft } from './ContentEditorDialog';
 import { ImagePickerDialog } from './ImagePickerDialog';
 import { ConfirmDialog } from './PageFileDialog';
 import { Toast } from './Toast';
@@ -183,22 +183,25 @@ function EditBarForm({
     onUpdate(pageFile, component.id, changes);
   };
 
-  const imgFilename = component.content.trim();
-  const imgLabel = imgFilename || 'select image';
   const mdContent = project.mdFiles.get(component.id) ?? '';
   const isAction = component.type === 'action';
-  const editorValue =
-    component.type === 'md'
-      ? mdContent
-      : component.type === 'img' || isAction
-        ? ''
-        : component.content;
-  const handleFullscreenCommit = (committedValue: string) => {
-    if (component.type === 'md') {
-      onUpdateMdContent(component.id, committedValue);
-      return;
+  const imgFilename = component.content.trim();
+  const imgLabel = imgFilename || 'select image';
+
+  const handleFullscreenDone = (draft: ContentEditorDraft) => {
+    const patch: Partial<Component> = {};
+    if (draft.type !== component.type) patch.type = draft.type;
+    if (draft.status !== component.status) patch.status = draft.status;
+    if (draft.content !== component.content) patch.content = draft.content;
+    if (Object.keys(patch).length > 0) {
+      onUpdate(pageFile, component.id, patch);
     }
-    patch({ content: committedValue });
+    if (draft.type === 'md') {
+      const currentMd = project.mdFiles.get(component.id) ?? '';
+      if (draft.mdContent !== currentMd) {
+        onUpdateMdContent(component.id, draft.mdContent);
+      }
+    }
   };
 
   const listBadge =
@@ -375,13 +378,12 @@ function EditBarForm({
         <ContentEditorDialog
           project={project}
           component={component}
+          mdContent={mdContent}
           listBadge={fullscreenListBadge}
           canDelete={canDelete}
-          value={editorValue}
-          onPatch={patch}
-          onCommit={handleFullscreenCommit}
+          onDone={handleFullscreenDone}
+          onCancel={closeFullscreen}
           onDelete={() => onDeleteComponent(pageFile, component.id)}
-          onClose={closeFullscreen}
           onImportImage={onImportImage}
           onImportImageFromClipboard={onImportImageFromClipboard}
           onDeleteProjectImage={onDeleteProjectImage}

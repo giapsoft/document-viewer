@@ -5,7 +5,7 @@ import { stripCommentTombstones } from '../lib/comments';
 import { setStoredCommentUsername } from '../lib/commentSession';
 import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus } from '../lib/saveProject';
-import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave, isSaveInProgress } from '../lib/saveProject';
+import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave, cancelAutoSave, setSaveStatusListener, isSaveInProgress } from '../lib/saveProject';
 import { importImageFromComputer, importImageFromClipboardSource, type ImportImageResult } from '../lib/importImage';
 import { clearPageScrollMemory } from '../lib/pageScrollMemory';
 import {
@@ -109,6 +109,9 @@ export function useAppStore() {
   const runRemoteAutoSaveRef = useRef<
     () => Promise<import('../lib/remoteAutoSave').RemoteAutoSaveResult>
   >(async () => ({ ok: true, skipped: true }));
+  const runLocalAutoSaveRef = useRef<
+    () => Promise<import('../lib/saveProject').LocalAutoSaveResult>
+  >(async () => ({ ok: true, skipped: true }));
   const jumpFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const FLASH_HIGHLIGHT_MS = 5000;
@@ -123,11 +126,24 @@ export function useAppStore() {
 
   useEffect(() => {
     setRemoteSaveStatusListener((status, message) => {
+      const project = projectRef.current;
+      if (project?.folderHandle && !project.remoteDocId) return;
       setSaveStatus(status);
       if (message) setSaveError(message);
       else if (status !== 'error') setSaveError(null);
     });
     return () => setRemoteSaveStatusListener(null);
+  }, []);
+
+  useEffect(() => {
+    setSaveStatusListener((status, message) => {
+      const project = projectRef.current;
+      if (!project?.folderHandle || project.remoteDocId) return;
+      setSaveStatus(status);
+      if (message) setSaveError(message);
+      else if (status !== 'error') setSaveError(null);
+    });
+    return () => setSaveStatusListener(null);
   }, []);
 
   useEffect(() => {
@@ -157,10 +173,6 @@ export function useAppStore() {
       return;
     }
 
-    if (appStateRef.current.contentEditorOpen) {
-      return;
-    }
-
     if (!isDirtyAction) return;
 
     if (action.type === 'END_COMMENT_LINK_SESSION' && prevProject === projectRef.current) {
@@ -176,10 +188,11 @@ export function useAppStore() {
     setSaveError(null);
 
     const project = projectRef.current;
-    if (project?.folderHandle) {
-      scheduleAutoSave(() => projectRef.current);
+    const editorOpen = appStateRef.current.contentEditorOpen;
+    if (project?.folderHandle && !project.remoteDocId) {
+      scheduleAutoSave(() => runLocalAutoSaveRef.current());
     }
-    if (project?.remoteDocId && isSupabaseConfigured()) {
+    if (project?.remoteDocId && isSupabaseConfigured() && !editorOpen) {
       scheduleRemoteAutoSave(() => runRemoteAutoSaveRef.current());
     }
   }, []);
@@ -278,6 +291,7 @@ export function useAppStore() {
 
   const beginRemoteDocumentSession = useCallback(() => {
     cancelRemoteAutoSave();
+    cancelAutoSave();
     cancelRemoteBackgroundLoad();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
@@ -306,6 +320,7 @@ export function useAppStore() {
 
   const setProject = useCallback((project: LoadedProject) => {
     cancelRemoteAutoSave();
+    cancelAutoSave();
     cancelRemoteBackgroundLoad();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
@@ -322,6 +337,7 @@ export function useAppStore() {
 
   const closeProject = useCallback(() => {
     cancelRemoteAutoSave();
+    cancelAutoSave();
     cancelRemoteBackgroundLoad();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
@@ -835,7 +851,7 @@ export function useAppStore() {
         folderHandle,
       });
       projectRef.current = nextProject;
-      dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
+      dispatch({ type: 'PATCH_PROJECT', project: nextProject });
       setDirty(false);
       setSaveStatus('saved');
       window.setTimeout(() => setSaveStatus('idle'), 2000);
@@ -1086,6 +1102,34 @@ export function useAppStore() {
   }, [dispatch, flushRemoteBackgroundLoad]);
 
   runRemoteAutoSaveRef.current = runRemoteAutoSave;
+
+  const runLocalAutoSave = useCallback(async (): Promise<
+    import('../lib/saveProject').LocalAutoSaveResult
+  > => {
+    if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
+      return { ok: true, skipped: true };
+    }
+    const project = projectRef.current;
+    if (!project?.folderHandle || project.remoteDocId) {
+      return { ok: true, skipped: true };
+    }
+
+    try {
+      await saveProjectToFolder(project);
+      const nextProject = stripCommentTombstones({ ...project });
+      projectRef.current = nextProject;
+      dispatch({ type: 'PATCH_PROJECT', project: nextProject });
+      setDirty(false);
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Could not save project',
+      };
+    }
+  }, [dispatch]);
+
+  runLocalAutoSaveRef.current = runLocalAutoSave;
 
   useEffect(() => {
     const project = state.project;
