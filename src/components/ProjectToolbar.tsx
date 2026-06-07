@@ -61,11 +61,11 @@ export function ProjectToolbar({
         disabled={!canSave || loading || saveStatus === 'saving'}
         title={
           dirty
-            ? 'Save document (local folder or remote storage)'
-            : 'Save document to local folder'
+            ? 'Export document (local folder or remote storage)'
+            : 'Export document to local folder'
         }
       >
-        Save
+        Export
       </button>
       <button
         type="button"

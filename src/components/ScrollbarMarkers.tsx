@@ -26,6 +26,7 @@ export function ScrollbarMarkers({
   markerStyle,
 }: ScrollbarMarkersProps) {
   const [markers, setMarkers] = useState<Marker[]>([]);
+  const [trackWidth, setTrackWidth] = useState(10);
 
   const update = useCallback(() => {
     const container = scrollRef.current;
@@ -40,6 +41,9 @@ export function ScrollbarMarkers({
       setMarkers([]);
       return;
     }
+
+    const gutter = container.offsetWidth - container.clientWidth;
+    setTrackWidth(Math.max(gutter, 8));
 
     const trackHeight = clientHeight;
     const next: Marker[] = [];
@@ -72,7 +76,11 @@ export function ScrollbarMarkers({
   if (markers.length === 0) return null;
 
   return (
-    <div className="scrollbar-track" aria-hidden="true">
+    <div
+      className="scrollbar-track"
+      aria-hidden="true"
+      style={{ width: trackWidth }}
+    >
       {markers.map((m, i) => (
         <div
           key={i}
@@ -80,8 +88,10 @@ export function ScrollbarMarkers({
           style={{
             top: `${m.top}px`,
             height: `${m.height}px`,
-            width: markerStyle.width,
             backgroundColor: markerStyle.backgroundColor,
+            borderColor: markerStyle.borderColor,
+            borderWidth: 1,
+            borderStyle: 'solid',
           }}
         />
       ))}

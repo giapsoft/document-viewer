@@ -1,15 +1,33 @@
 import type { PageData, SelectionState } from '../types';
 
-/** Main page: selected component only. Other pages: all linked components on that page. */
+export function pageHasHighlightedComponents(
+  page: PageData,
+  selection: SelectionState | null,
+  currentPageFile: string | null,
+): boolean {
+  if (!selection) return false;
+  const isCurrent = currentPageFile === page.fileName;
+  return getHighlightedIdsForPage(page, selection, isCurrent).size > 0;
+}
+
+/** Current page: primary selection, or linked components when primary is elsewhere. Other pages: linked components. */
 export function getHighlightedIdsForPage(
   page: PageData,
   selection: SelectionState,
   isCurrent: boolean,
 ): Set<string> {
   if (isCurrent) {
-    return page.components.some((c) => c.id === selection.componentId)
-      ? new Set([selection.componentId])
-      : new Set();
+    if (page.components.some((c) => c.id === selection.componentId)) {
+      return new Set([selection.componentId]);
+    }
+
+    const ids = new Set<string>();
+    for (const c of page.components) {
+      if (selection.relatedIds.has(c.id)) {
+        ids.add(c.id);
+      }
+    }
+    return ids;
   }
 
   const ids = new Set<string>();

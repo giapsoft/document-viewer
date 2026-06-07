@@ -14,7 +14,8 @@ import { useRemoteStalePoll } from '../hooks/useRemoteStalePoll';
 import { CommentPanel } from './CommentPanel';
 import { activeComments, canOwnComment, resolveCommentAnchorHighlightId } from '../lib/comments';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { pageHasHighlightedComponents } from '../lib/selectionHighlight';
 
 type AppStore = ReturnType<typeof useAppStore>;
 
@@ -42,7 +43,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     deleteComponent,
     setLinkCtrlActive,
     finishLinkSession,
-    clearAllPins,
     toggleCommentPanel,
     setCommentUsername,
     selectComment,
@@ -65,8 +65,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     renamePage,
     reorderPages,
     deletePage,
-    togglePinPage,
-    appendClipboardImageToPage,
     reloadProject,
     saveToLocal,
     saveToRemote,
@@ -191,9 +189,27 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     componentCount: p.components.length,
   }));
   const canManagePages = true;
-  const pinnedPages = project.relations.pinnedPages ?? [];
-  const pinModeActive = pinnedPages.length > 0;
-  const autoScrollSecondary = !pinModeActive;
+  const panelPageFiles = useMemo(
+    () => new Set(state.panels.map((panel) => panel.pageFile)),
+    [state.panels],
+  );
+  const highlightedPageFiles = useMemo(() => {
+    const files = new Set<string>();
+    if (!state.selection) return files;
+    for (const page of project.pages) {
+      if (pageHasHighlightedComponents(page, state.selection, state.currentPage)) {
+        files.add(page.fileName);
+      }
+    }
+    return files;
+  }, [project.pages, state.selection, state.currentPage]);
+
+  const mainSelectionPageFile = useMemo(() => {
+    if (!state.selection) return null;
+    return (
+      project.index.componentToPage.get(state.selection.componentId) ?? null
+    );
+  }, [project.index, state.selection]);
 
   const matchingGroupIndices = state.selection?.matchingGroupIndices ?? [];
 
@@ -306,7 +322,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
         <Sidebar
           expanded={state.sidebarExpanded}
           pages={sidebarPages}
-          currentPage={state.currentPage}
           canManagePages={canManagePages}
           onSelectPage={openPage}
           onToggle={toggleSidebar}
@@ -314,9 +329,9 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
           onRenamePage={renamePage}
           onReorderPages={reorderPages}
           onDeletePage={deletePage}
-          pinnedPages={pinnedPages}
-          onTogglePinPage={togglePinPage}
-          onAppendClipboardImage={appendClipboardImageToPage}
+          panelPageFiles={panelPageFiles}
+          highlightedPageFiles={highlightedPageFiles}
+          mainSelectionPageFile={mainSelectionPageFile}
           suggestNewPageName={suggestNewPageName}
           normalizePageName={normalizePageName}
         />
@@ -352,8 +367,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
           <div className="workspace-top-bar">
             <WorkspaceTopBar
               linkMode={state.linkMode}
-              pinModeActive={pinModeActive}
-              onExitPinMode={clearAllPins}
               canUnlink={canUnlinkGroup}
               onUnlink={deleteActiveGroup}
               sidebarCollapsed={!state.sidebarExpanded}
@@ -402,8 +415,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 scrollToComponentId={state.scrollToComponent?.componentId ?? null}
                 scrollNonce={state.scrollToComponent?.nonce ?? 0}
                 selectionScrollNonce={state.selectionScrollNonce}
-                autoScrollSecondary={autoScrollSecondary}
-                isPinned={pinnedPages.includes(panel.pageFile)}
                 commentLinkMode={commentLinkMode}
                 commentLinkPreviewAnchor={commentLinkPreviewAnchor}
                 commentAnchorHighlightId={commentAnchorHighlightId}

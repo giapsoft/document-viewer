@@ -445,7 +445,6 @@ function shouldSkipScrollRestore(
   selection: SelectionState | null,
   selectionScrollNonce: number,
   linkMode: boolean,
-  autoScrollSecondary: boolean,
   linkGroupMembers?: Set<string>,
 ): boolean {
   if (
@@ -458,7 +457,7 @@ function shouldSkipScrollRestore(
 
   if (linkMode) return false;
 
-  if (autoScrollSecondary && !isCurrent && selectionScrollNonce > 0 && page) {
+  if (!isCurrent && selectionScrollNonce > 0 && page) {
     const targetId = getFirstSelectedComponentId(
       page,
       selection,
@@ -486,8 +485,6 @@ interface PagePanelProps {
   scrollToComponentId?: string | null;
   scrollNonce?: number;
   selectionScrollNonce?: number;
-  autoScrollSecondary?: boolean;
-  isPinned?: boolean;
   commentLinkMode?: boolean;
   commentLinkPreviewAnchor?: CommentAnchor | null;
   commentAnchorHighlightId?: string | null;
@@ -522,8 +519,6 @@ export function PagePanel({
   scrollToComponentId = null,
   scrollNonce = 0,
   selectionScrollNonce = 0,
-  autoScrollSecondary = true,
-  isPinned = false,
 }: PagePanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -606,7 +601,6 @@ export function PagePanel({
         selection,
         selectionScrollNonce,
         linkMode,
-        autoScrollSecondary,
         linkGroupMembers,
       )
     ) {
@@ -627,7 +621,6 @@ export function PagePanel({
     selection,
     selectionScrollNonce,
     linkMode,
-    autoScrollSecondary,
     linkGroupMembers,
   ]);
 
@@ -695,7 +688,7 @@ export function PagePanel({
     const justExpanded = !wasExpandedRef.current;
     wasExpandedRef.current = true;
 
-    if (!autoScrollSecondary || linkMode || isCurrent || !page || !selection) return;
+    if (linkMode || isCurrent || !page || !selection) return;
 
     const targetId = getFirstSelectedComponentId(
       page,
@@ -726,7 +719,6 @@ export function PagePanel({
     page,
     selection,
     selectionScrollNonce,
-    autoScrollSecondary,
     linkGroupMembers,
   ]);
 
@@ -742,11 +734,31 @@ export function PagePanel({
     />
   );
 
+  const openPanel = () => {
+    if (!expanded) onToggle();
+  };
+
   return (
     <div
       ref={panelRef}
-      className={`page-panel ${expanded ? 'expanded' : 'shrunk'} ${isCurrent ? 'current' : ''} ${isPinned ? 'pinned' : ''}`}
+      className={`page-panel ${expanded ? 'expanded' : 'shrunk'} ${isCurrent ? 'current' : ''}`}
       data-page={pageFile}
+      onClick={expanded ? undefined : openPanel}
+      onKeyDown={
+        expanded
+          ? undefined
+          : (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openPanel();
+              }
+            }
+      }
+      role={expanded ? undefined : 'button'}
+      tabIndex={expanded ? undefined : 0}
+      aria-label={
+        expanded ? undefined : `Open page panel: ${page.pageName} (${page.components.length})`
+      }
     >
       <div className="page-panel-header">
         {expanded ? (
@@ -788,14 +800,9 @@ export function PagePanel({
           </>
         ) : (
           <>
-            <button
-              type="button"
-              className="panel-toggle-btn"
-              onClick={onToggle}
-              title="Expand"
-            >
+            <span className="panel-toggle-btn panel-toggle-btn-hint" aria-hidden="true">
               ▶
-            </button>
+            </span>
             <span
               className="page-panel-vertical-title"
               title={`${page.pageName} (${page.components.length})`}
@@ -809,6 +816,7 @@ export function PagePanel({
 
       {expanded ? (
         <div className="page-panel-body">
+          <div className="page-scroll-host">
           <div
             ref={scrollRef}
             className="page-scroll-area"
@@ -882,6 +890,7 @@ export function PagePanel({
               markerStyle={project.styles.linkedScrollMarker}
             />
           )}
+          </div>
         </div>
       ) : null}
     </div>

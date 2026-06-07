@@ -3,6 +3,13 @@ export function getDocIdFromUrl(): string | null {
   return params.get('doc') ?? params.get('page');
 }
 
+export function buildDocShareUrl(docId: string): string {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.searchParams.set('doc', docId);
+  return url.toString();
+}
+
 export function setDocIdInUrl(docId: string | null): void {
   const url = new URL(window.location.href);
   url.searchParams.delete('page');

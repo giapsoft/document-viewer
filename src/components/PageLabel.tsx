@@ -4,6 +4,8 @@ interface PageLabelProps {
   fileName?: string;
   componentCount?: number;
   className?: string;
+  /** Linked selection exists on this page — style page name only. */
+  nameHighlighted?: boolean;
 }
 
 /** pageName on top; pageId below only when it differs from pageName. */
@@ -13,6 +15,7 @@ export function PageLabel({
   fileName,
   componentCount,
   className = '',
+  nameHighlighted = false,
 }: PageLabelProps) {
   const showId = pageName !== pageId;
   const countNote =
@@ -23,7 +26,9 @@ export function PageLabel({
 
   return (
     <span className={`page-label-stack ${className}`.trim()} title={title}>
-      <span className="page-label-name">
+      <span
+        className={`page-label-name${nameHighlighted ? ' page-label-name-highlighted' : ''}`}
+      >
         {pageName}
         {componentCount != null && (
           <span className="page-label-count"> ({componentCount})</span>

@@ -8,7 +8,7 @@ import {
 } from './pageOrder';
 import { rebuildProject } from './projectMutations';
 import { castPageId, createComponentId, resolvePageId, resolvePageName } from './pageIds';
-import { buildPanelsForPageContext, refreshPanelsWithPins, removePinnedPage } from './pagePins';
+import { addPageToPanels, getSidebarOrder } from './pagePanels';
 import { getOrphanedPageAssets } from './pageFileOps';
 
 function uniquePageFileName(baseId: string, existingFiles: Iterable<string>): string {
@@ -159,7 +159,6 @@ export function deletePageFromProject(
 
   const pages = remainingPages;
   const groups = removeMemberIdsFromGroups(project.relations.groups, removedIds);
-  const pinnedPages = removePinnedPage(project.relations.pinnedPages, fileName);
   const pageOrder = removePageFromOrder(
     getStoredPageOrder(
       project.relations,
@@ -171,7 +170,7 @@ export function deletePageFromProject(
   return rebuildProject({
     ...project,
     pages: sortPagesByOrder(pages, pageOrder),
-    relations: { ...project.relations, pageNames, groups, pinnedPages, pageOrder },
+    relations: { ...project.relations, pageNames, groups, pageOrder },
     mdFiles,
     imageUrls,
   });
@@ -224,9 +223,10 @@ export function applyCreatePageState(
     project,
     currentPage: fileName,
     selection: state.linkMode ? state.selection : null,
-    panels: [{ pageFile: fileName, expanded: true }],
+    panels: state.panels,
   };
-  const panels = buildPanelsForPageContext(nextState, fileName);
+  const sidebarOrder = getSidebarOrder(nextState);
+  const panels = addPageToPanels(nextState.panels, fileName, sidebarOrder);
   return { ...nextState, panels };
 }
 
@@ -265,11 +265,6 @@ export function applyDeletePageState(state: AppState, fileName: string): AppStat
       ...nextState,
       panels: [{ pageFile: currentPage, expanded: true }],
     };
-  }
-
-  const refreshed = refreshPanelsWithPins(nextState);
-  if (refreshed) {
-    nextState = { ...nextState, panels: refreshed };
   }
 
   return nextState;

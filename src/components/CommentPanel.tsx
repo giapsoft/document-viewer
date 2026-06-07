@@ -395,10 +395,28 @@ export function CommentPanel({
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [expanded, outstandingCommentId, commentPanelScrollNonce]);
 
+  const openPanel = () => {
+    if (!expanded) onToggle();
+  };
+
   return (
     <div
       className={`page-panel comment-panel ${expanded ? 'expanded' : 'shrunk'}`}
       data-panel="comments"
+      onClick={expanded ? undefined : openPanel}
+      onKeyDown={
+        expanded
+          ? undefined
+          : (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openPanel();
+              }
+            }
+      }
+      role={expanded ? undefined : 'button'}
+      tabIndex={expanded ? undefined : 0}
+      aria-label={expanded ? undefined : `Open comments panel (${commentCount})`}
     >
       <div className="page-panel-header comment-panel-header">
         {expanded ? (
@@ -415,9 +433,9 @@ export function CommentPanel({
           </>
         ) : (
           <>
-            <button type="button" className="panel-toggle-btn" onClick={onToggle} title="Expand">
+            <span className="panel-toggle-btn panel-toggle-btn-hint" aria-hidden="true">
               ▶
-            </button>
+            </span>
             <span className="page-panel-vertical-title" title={`Comments (${commentCount})`}>
               Comments
             </span>

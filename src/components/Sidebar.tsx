@@ -14,7 +14,9 @@ export interface SidebarPageEntry {
 interface SidebarProps {
   expanded: boolean;
   pages: SidebarPageEntry[];
-  currentPage: string | null;
+  panelPageFiles: Set<string>;
+  highlightedPageFiles: Set<string>;
+  mainSelectionPageFile: string | null;
   canManagePages: boolean;
   onSelectPage: (pageFile: string) => void;
   onToggle: () => void;
@@ -25,9 +27,6 @@ interface SidebarProps {
   ) => Promise<{ ok: boolean; error?: string }>;
   onReorderPages: (orderedPageFiles: string[]) => void;
   onDeletePage: (fileName: string) => Promise<{ ok: boolean; error?: string }>;
-  pinnedPages: string[];
-  onTogglePinPage: (fileName: string) => void;
-  onAppendClipboardImage: (fileName: string) => Promise<{ ok: boolean; error?: string }>;
   suggestNewPageName: () => string;
   normalizePageName: (input: string) => string | null;
 }
@@ -35,7 +34,9 @@ interface SidebarProps {
 export function Sidebar({
   expanded,
   pages,
-  currentPage,
+  panelPageFiles,
+  highlightedPageFiles,
+  mainSelectionPageFile,
   canManagePages,
   onSelectPage,
   onToggle,
@@ -43,9 +44,6 @@ export function Sidebar({
   onRenamePage,
   onReorderPages,
   onDeletePage,
-  pinnedPages,
-  onTogglePinPage,
-  onAppendClipboardImage,
   suggestNewPageName,
   normalizePageName,
 }: SidebarProps) {
@@ -55,7 +53,6 @@ export function Sidebar({
     | null
   >(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [appendingImageFor, setAppendingImageFor] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
@@ -122,6 +119,23 @@ export function Sidebar({
         <p className="sidebar-hint">Drag the handle to reorder pages.</p>
       )}
 
+      <div className="sidebar-status-key" aria-label="Page status legend">
+        <div className="sidebar-status-key-row">
+          <span className="sidebar-status-key-swatch sidebar-status-key-swatch-panel" aria-hidden />
+          <span className="sidebar-status-key-text">In workspace</span>
+        </div>
+        <div className="sidebar-status-key-row">
+          <span className="sidebar-status-key-name-demo sidebar-status-key-name-demo-linked" aria-hidden>
+            Page
+          </span>
+          <span className="sidebar-status-key-text">Linked selection</span>
+        </div>
+        <div className="sidebar-status-key-row">
+          <span className="sidebar-status-key-dot-demo" aria-hidden />
+          <span className="sidebar-status-key-text">Main selected component</span>
+        </div>
+      </div>
+
       {actionError && (
         <p className="sidebar-action-error" role="alert">
           {actionError}
@@ -130,15 +144,17 @@ export function Sidebar({
 
       <ul className="page-list">
         {pages.map((page, index) => {
-          const isActive = currentPage === page.fileName;
-          const isPinned = pinnedPages.includes(page.fileName);
+          const inPanel = panelPageFiles.has(page.fileName);
+          const hasHighlight = highlightedPageFiles.has(page.fileName);
+          const hasMainSelection = mainSelectionPageFile === page.fileName;
           const isDragging = dragIndex === index;
           const isDropTarget = dropIndex === index && dragIndex !== null && dragIndex !== index;
 
           return (
             <li
               key={page.fileName}
-              className={`page-list-row ${isActive ? 'page-list-row-active' : ''} ${isPinned ? 'page-list-row-pinned' : ''} ${isDragging ? 'page-list-row-dragging' : ''} ${isDropTarget ? 'page-list-row-drop-target' : ''}`}
+              className={`page-list-row${inPanel ? ' page-list-row-in-panel' : ''}${hasMainSelection ? ' page-list-row-main-selected' : ''} ${isDragging ? 'page-list-row-dragging' : ''} ${isDropTarget ? 'page-list-row-drop-target' : ''}`}
+              aria-label={`${page.pageName}: ${inPanel ? 'in panel area' : 'not in panel area'}, ${hasHighlight ? 'has linked selection' : 'no linked selection'}, ${hasMainSelection ? 'contains main selected component' : 'no main selected component'}`}
               onDragOver={(event) => handleDragOver(event, index)}
               onDrop={(event) => handleDrop(event, index)}
               onDragLeave={() => {
@@ -160,49 +176,19 @@ export function Sidebar({
               )}
               <button
                 type="button"
-                className={`page-list-item ${isActive ? 'active' : ''}`}
+                className="page-list-item"
                 onClick={() => onSelectPage(page.fileName)}
+                title={inPanel ? 'Remove from workspace' : 'Add to workspace'}
               >
                 <PageLabel
                   pageName={page.pageName}
                   pageId={page.pageId}
                   fileName={page.fileName}
                   componentCount={page.componentCount}
+                  nameHighlighted={hasHighlight}
                 />
               </button>
               <div className="page-list-actions">
-                <button
-                  type="button"
-                  className={`page-list-action-btn page-list-action-pin${isPinned ? ' page-list-action-pin-active' : ''}`}
-                  title={
-                    isPinned
-                      ? 'Unpin — remove from panel list'
-                      : 'Pin — panel list shows pinned pages only (no link pages or scroll)'
-                  }
-                  aria-pressed={isPinned}
-                  onClick={() => onTogglePinPage(page.fileName)}
-                >
-                  📌
-                </button>
-                {canManagePages && (
-                  <button
-                    type="button"
-                    className="page-list-action-btn page-list-action-image"
-                    title="Add image from clipboard at end of page"
-                    disabled={appendingImageFor === page.fileName}
-                    onClick={() => {
-                      setActionError(null);
-                      setAppendingImageFor(page.fileName);
-                      void runAction(() => onAppendClipboardImage(page.fileName)).finally(() => {
-                        setAppendingImageFor((current) =>
-                          current === page.fileName ? null : current,
-                        );
-                      });
-                    }}
-                  >
-                    🖼
-                  </button>
-                )}
                 {canManagePages && (
                   <button
                     type="button"

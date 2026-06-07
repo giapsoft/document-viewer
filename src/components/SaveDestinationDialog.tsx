@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { LoadedProject } from '../types';
+import { buildDocShareUrl } from '../lib/docUrl';
 import { defaultRemoteTitle } from '../lib/projectBundle';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 
@@ -25,6 +26,20 @@ export function SaveDestinationDialog({
   const hasRemoteDoc = Boolean(project.remoteDocId);
   const canPickLocal = Boolean(window.showDirectoryPicker);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  const handleCopyLink = async () => {
+    if (!project.remoteDocId) return;
+    const url = buildDocShareUrl(project.remoteDocId);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyFeedback('Copied!');
+      window.setTimeout(() => setCopyFeedback(null), 2000);
+    } catch {
+      setCopyFeedback('Copy failed');
+      window.setTimeout(() => setCopyFeedback(null), 2500);
+    }
+  };
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -49,6 +64,11 @@ export function SaveDestinationDialog({
         : 'Remote storage is not available on this site.';
 
   const remoteTitle = project.remoteTitle ?? defaultRemoteTitle(project);
+  const shareUrl = hasRemoteDoc ? buildDocShareUrl(project.remoteDocId!) : '';
+
+  const selectLinkInput = (event: { currentTarget: HTMLInputElement }) => {
+    event.currentTarget.select();
+  };
 
   return (
     <div className="picker-overlay" role="presentation" onClick={onClose}>
@@ -61,7 +81,7 @@ export function SaveDestinationDialog({
       >
         <header className="picker-header">
           <h2 id="save-destination-title" className="picker-title">
-            Save document
+            Export document
           </h2>
           <button type="button" className="picker-close-btn" onClick={onClose} aria-label="Close">
             ×
@@ -98,28 +118,57 @@ export function SaveDestinationDialog({
             </>
           ) : (
             <>
-              <p className="page-file-dialog-message">Choose where to save your changes.</p>
-              <div className="save-destination-options">
-                <button
-                  type="button"
-                  className="save-destination-option"
-                  disabled={!canPickLocal}
-                  onClick={() => onChoose('local')}
-                >
-                  <span className="save-destination-option-title">Local folder</span>
-                  <span className="save-destination-option-hint">{localHint}</span>
-                </button>
-                <button
-                  type="button"
-                  className="save-destination-option"
-                  disabled={!remoteStorageReady || !dirty}
-                  onClick={() => onChoose('remote')}
-                >
-                  <span className="save-destination-option-title">Remote storage</span>
-                  <span className="save-destination-option-hint">{remoteHint}</span>
-                </button>
-              </div>
-              <footer className="page-file-dialog-footer page-file-dialog-footer-split">
+              <p className="save-destination-intro">Choose where to export your changes.</p>
+
+              {hasRemoteDoc && (
+                <section className="save-destination-section save-destination-link-section">
+                  <h3 className="save-destination-section-title">Remote link</h3>
+                  <div className="save-destination-link-field">
+                    <input
+                      type="text"
+                      readOnly
+                      className="save-destination-link-input"
+                      value={shareUrl}
+                      aria-label="Remote document link"
+                      onFocus={selectLinkInput}
+                      onClick={selectLinkInput}
+                    />
+                    <button
+                      type="button"
+                      className="save-destination-link-copy"
+                      onClick={() => void handleCopyLink()}
+                    >
+                      {copyFeedback ?? 'Copy'}
+                    </button>
+                  </div>
+                </section>
+              )}
+
+              <section className="save-destination-section">
+                <h3 className="save-destination-section-title">Export to</h3>
+                <div className="save-destination-options">
+                  <button
+                    type="button"
+                    className="save-destination-option"
+                    disabled={!canPickLocal}
+                    onClick={() => onChoose('local')}
+                  >
+                    <span className="save-destination-option-title">Local folder</span>
+                    <span className="save-destination-option-hint">{localHint}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="save-destination-option"
+                    disabled={!remoteStorageReady || !dirty}
+                    onClick={() => onChoose('remote')}
+                  >
+                    <span className="save-destination-option-title">Remote storage</span>
+                    <span className="save-destination-option-hint">{remoteHint}</span>
+                  </button>
+                </div>
+              </section>
+
+              <footer className="save-destination-footer">
                 <button
                   type="button"
                   className="picker-import-btn page-file-dialog-danger"
@@ -133,11 +182,9 @@ export function SaveDestinationDialog({
                 >
                   Delete remote
                 </button>
-                <div className="page-file-dialog-footer-actions">
-                  <button type="button" className="picker-import-btn" onClick={onClose}>
-                    Cancel
-                  </button>
-                </div>
+                <button type="button" className="picker-import-btn" onClick={onClose}>
+                  Cancel
+                </button>
               </footer>
             </>
           )}

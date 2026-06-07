@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import type { AppStyles } from '../types';
+import type { AppStyles, ScrollMarkerStyle } from '../types';
 
 export const DEFAULT_STYLES: AppStyles = {
   statuses: {
@@ -26,10 +26,33 @@ export const DEFAULT_STYLES: AppStyles = {
     borderStyle: 'dashed',
   },
   linkedScrollMarker: {
-    backgroundColor: '#0D6EFD',
-    width: '4px',
+    backgroundColor: 'rgb(153 194 255 / 20%)',
+    borderColor: '#0D6EFD',
   },
 };
+
+function normalizeLinkedScrollMarker(
+  partial?: Partial<ScrollMarkerStyle> & { width?: string },
+): ScrollMarkerStyle {
+  const base = DEFAULT_STYLES.linkedScrollMarker;
+  if (!partial) return base;
+
+  const bg = partial.backgroundColor?.trim().toLowerCase();
+  const legacySolidFill =
+    bg === '#0d6efd' ||
+    bg === '#228be6' ||
+    bg === '#1c7ed6' ||
+    bg === '#a5d8ff' ||
+    bg === 'rgb(153, 194, 255)' ||
+    bg === 'rgb(153,194,255)';
+
+  return {
+    backgroundColor: legacySolidFill
+      ? base.backgroundColor
+      : (partial.backgroundColor ?? base.backgroundColor),
+    borderColor: partial.borderColor ?? base.borderColor,
+  };
+}
 
 /** Shared blue theme for component ↔ component relation linking. */
 export const COMPONENT_LINK_THEME = {
@@ -98,9 +121,6 @@ export function mergeStyles(partial?: Partial<AppStyles> | null): AppStyles {
       ...DEFAULT_STYLES.linkedComponent,
       ...partial.linkedComponent,
     },
-    linkedScrollMarker: {
-      ...DEFAULT_STYLES.linkedScrollMarker,
-      ...partial.linkedScrollMarker,
-    },
+    linkedScrollMarker: normalizeLinkedScrollMarker(partial.linkedScrollMarker),
   };
 }

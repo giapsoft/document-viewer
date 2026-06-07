@@ -1,16 +1,8 @@
-import type { AppState, PanelState, SelectionState, SelectionHistoryEntry } from '../types';
+import type { AppState, SelectionState, SelectionHistoryEntry } from '../types';
 import {
   getLinkedComponentIds,
-  orderPagesForSelection,
   getGroupIndicesForComponent,
 } from './index';
-import { buildPanelsInSidebarOrder, getStoredPageOrder } from './pageOrder';
-import {
-  getPinnedPages,
-  hasPinnedPages,
-  resolveVisiblePageFiles,
-  validPageFileSet,
-} from './pagePins';
 
 export const MAX_SELECTION_HISTORY = 20;
 
@@ -44,60 +36,18 @@ export function appendSelectionHistory(
   return { history: nextHistory, index: nextIndex };
 }
 
-export function buildSelectionForComponent(
+export function buildSelectionStateForComponent(
   state: AppState,
   componentId: string,
   pageFile: string,
-): {
-  panels: PanelState[];
-  currentPage: string;
-  selection: SelectionState;
-} | null {
+): { currentPage: string; selection: SelectionState } | null {
   if (!state.project) return null;
 
   const { index } = state.project;
   const matchingGroupIndices = getGroupIndicesForComponent(index.groups, componentId);
-  const { links: relatedIds, memberOrder: groupMemberOrder } = getLinkedComponentIds(
-    componentId,
-    index.groups,
-  );
-
-  const hasLinks = relatedIds.size > 1;
-  const validFiles = validPageFileSet(state);
-  const pinnedPages = getPinnedPages(state.project.relations);
-  const pinModeActive = hasPinnedPages(state.project.relations);
-  const sidebarOrder = getStoredPageOrder(
-    state.project.relations,
-    state.project.pages.map((p) => p.fileName),
-  );
-
-  const basePages = hasLinks
-    ? orderPagesForSelection(pageFile, relatedIds, index, groupMemberOrder)
-    : [pageFile];
-  const orderedPages = resolveVisiblePageFiles(
-    basePages,
-    pageFile,
-    pinnedPages,
-    validFiles,
-    sidebarOrder,
-    pinModeActive,
-  );
-
-  if (!hasLinks) {
-    return {
-      panels: buildPanelsInSidebarOrder(state.panels, orderedPages, sidebarOrder, pageFile),
-      currentPage: pageFile,
-      selection: {
-        componentId,
-        relatedIds,
-        activeGroupIndex: null,
-        matchingGroupIndices,
-      },
-    };
-  }
+  const { links: relatedIds } = getLinkedComponentIds(componentId, index.groups);
 
   return {
-    panels: buildPanelsInSidebarOrder(state.panels, orderedPages, sidebarOrder, pageFile),
     currentPage: pageFile,
     selection: {
       componentId,
@@ -112,12 +62,8 @@ export function applyComponentSelection(
   state: AppState,
   componentId: string,
   pageFile: string,
-): {
-  panels: PanelState[];
-  currentPage: string;
-  selection: SelectionState;
-} | null {
-  return buildSelectionForComponent(state, componentId, pageFile);
+): { currentPage: string; selection: SelectionState } | null {
+  return buildSelectionStateForComponent(state, componentId, pageFile);
 }
 
 export function remapSelectionHistoryId(

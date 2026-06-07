@@ -113,16 +113,37 @@ export async function fetchRemoteDocumentUpdatedAt(docId: string): Promise<strin
   return data?.updated_at ?? null;
 }
 
-export async function fetchRemoteRelations(docId: string): Promise<RelationsFile> {
-  try {
-    // Fetch all three relation files in parallel — fall back gracefully when absent
-    const [relBlob, groupsBlob, commentsBlob] = await Promise.all([
-      downloadStorageFile(relationsStoragePath(docId)),
-      downloadStorageFile(groupsStoragePath(docId)).catch(() => null),
-      downloadStorageFile(commentsStoragePath(docId)).catch(() => null),
-    ]);
+async function remoteStoragePathSet(docId: string): Promise<Set<string>> {
+  return new Set(await listAllStoragePaths(docId));
+}
 
-    const meta = relationsFromRaw(JSON.parse(await relBlob.text()));
+async function downloadKnownStorageFile(
+  existingPaths: Set<string>,
+  path: string,
+): Promise<Blob | null> {
+  if (!existingPaths.has(path)) return null;
+  return downloadStorageFile(path);
+}
+
+export async function fetchRemoteRelations(docId: string): Promise<RelationsFile> {
+  const existingPaths = await remoteStoragePathSet(docId);
+  if (existingPaths.size === 0) return EMPTY_RELATIONS;
+
+  const relPath = relationsStoragePath(docId);
+  const groupsPath = groupsStoragePath(docId);
+  const commentsPath = commentsStoragePath(docId);
+  const bundlePath = bundleStoragePath(docId);
+
+  const [relBlob, groupsBlob, commentsBlob] = await Promise.all([
+    downloadKnownStorageFile(existingPaths, relPath),
+    downloadKnownStorageFile(existingPaths, groupsPath),
+    downloadKnownStorageFile(existingPaths, commentsPath),
+  ]);
+
+  if (relBlob || groupsBlob || commentsBlob) {
+    const meta = relBlob
+      ? relationsFromRaw(JSON.parse(await relBlob.text()))
+      : { groups: [] as string[][] };
 
     // New format: groups and comments are in separate files
     // Old format: groups and comments are embedded in relations.json (backward compat)
@@ -135,11 +156,15 @@ export async function fetchRemoteRelations(docId: string): Promise<RelationsFile
       : ((meta as RelationsFile).comments ?? []);
 
     return normalizeRelations({ ...meta, groups, comments });
-  } catch {
-    const bundle = await downloadStorageFile(bundleStoragePath(docId));
+  }
+
+  const bundle = await downloadKnownStorageFile(existingPaths, bundlePath);
+  if (bundle) {
     const input = await unpackProjectBundle(bundle);
     return normalizeRelations(input.relations);
   }
+
+  return EMPTY_RELATIONS;
 }
 
 export async function listRemoteDocuments(): Promise<RemoteDocumentMeta[]> {
@@ -161,7 +186,11 @@ async function listAllStoragePaths(docId: string): Promise<string[]> {
     const { data, error } = await supabase.storage.from(STORAGE_BUCKET).list(folder, {
       limit: 1000,
     });
-    if (error) throw new Error(error.message);
+    if (error) {
+      // First save: document folder may not exist yet
+      if (error.message.toLowerCase().includes('not found')) return;
+      throw new Error(error.message);
+    }
     for (const entry of data ?? []) {
       const path = folder ? `${folder}/${entry.name}` : entry.name;
       if (entry.id === null) {
@@ -427,6 +456,11 @@ async function mergeRemoteCommentsIntoProject(
   project: LoadedProject,
   docId: string,
 ): Promise<LoadedProject> {
+  // First publish: nothing exists on the server yet — skip remote probes.
+  if (!project.remoteSync) {
+    return project;
+  }
+
   const remoteRelations = await fetchRemoteRelations(docId);
   const localComments = project.relations.comments ?? [];
   const mergedComments = mergeCommentsFromServer(
@@ -512,22 +546,21 @@ export async function syncRemoteComments(
   if (!docId) return null;
 
   try {
+    const existingPaths = await remoteStoragePathSet(docId);
+    const commentsPath = commentsStoragePath(docId);
+
     // Fetch only comments.json; fall back to full relations if it doesn't exist yet
     let remoteComments: RelationsFile['comments'];
     let commentsHash: string;
-    try {
-      const blob = await downloadStorageFile(commentsStoragePath(docId));
-      remoteComments = JSON.parse(await blob.text()) as RelationsFile['comments'];
-      commentsHash = await fingerprintBlob(blob);
-    } catch {
-      // comments.json not yet created — fetch full relations (old format)
+    const commentsBlob = await downloadKnownStorageFile(existingPaths, commentsPath);
+    if (commentsBlob) {
+      remoteComments = JSON.parse(await commentsBlob.text()) as RelationsFile['comments'];
+      commentsHash = await fingerprintBlob(commentsBlob);
+    } else {
       const remoteRelations = await fetchRemoteRelations(docId);
       remoteComments = remoteRelations.comments ?? [];
-      const blob = jsonBlob(remoteComments);
-      commentsHash = await fingerprintBlob(blob);
+      commentsHash = await fingerprintBlob(jsonBlob(remoteComments));
     }
-
-    const commentsPath = commentsStoragePath(docId);
     const prevHash = project.remoteSync?.fileHashes?.get(commentsPath);
     // If hash matches, nothing changed on server
     if (prevHash === commentsHash) return null;
@@ -594,12 +627,18 @@ export async function syncRemoteRelations(
 
   try {
     const prevHashes = project.remoteSync?.fileHashes;
+    const existingPaths = await remoteStoragePathSet(docId);
+    if (existingPaths.size === 0) return null;
 
-    // Fetch all three relation files in parallel
+    const relPath = relationsStoragePath(docId);
+    const groupsPath = groupsStoragePath(docId);
+    const commentsPath = commentsStoragePath(docId);
+
+    // Fetch only relation files that already exist on the server
     const [relBlob, groupsBlob, commentsBlob] = await Promise.all([
-      downloadStorageFile(relationsStoragePath(docId)).catch(() => null),
-      downloadStorageFile(groupsStoragePath(docId)).catch(() => null),
-      downloadStorageFile(commentsStoragePath(docId)).catch(() => null),
+      downloadKnownStorageFile(existingPaths, relPath),
+      downloadKnownStorageFile(existingPaths, groupsPath),
+      downloadKnownStorageFile(existingPaths, commentsPath),
     ]);
 
     if (!relBlob && !groupsBlob && !commentsBlob) return null;

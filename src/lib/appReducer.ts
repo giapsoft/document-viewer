@@ -22,7 +22,7 @@ import {
 import {
   appendSelectionHistory,
   applyComponentSelection,
-  buildSelectionForComponent,
+  buildSelectionStateForComponent,
   remapSelectionHistoryId,
   scrollToHistoryEntry,
 } from './selectionNavigation';
@@ -33,14 +33,8 @@ import {
   reorderPagesInProject,
 } from './pageMutations';
 import { reorderPanelsBySidebar } from './pageOrder';
-import {
-  buildPanelsForPageContext,
-  buildPanelsForPinList,
-  hasPinnedPages,
-  refreshPanelsWithPins,
-  shouldAutoScrollPanels,
-  togglePinnedPage,
-} from './pagePins';
+import { addPageToPanels, applyOpenPage, getSidebarOrder } from './pagePanels';
+import { getFirstHighlightedComponentId } from './selectionHighlight';
 import {
   addReplyComment,
   addRootComment,
@@ -137,7 +131,7 @@ export const initialAppState: AppState = {
   selectionHistoryIndex: -1,
   scrollToComponent: null,
   selectionScrollNonce: 0,
-  commentPanelExpanded: true,
+  commentPanelExpanded: false,
   commentUsername: null,
   commentAuthorId: getOrCreateCommentAuthorId(),
   selectedCommentId: null,
@@ -157,9 +151,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         commentUsername: getStoredCommentUsername(),
         commentAuthorId: getOrCreateCommentAuthorId(),
       };
-      if (hasPinnedPages(action.project.relations)) {
-        return { ...nextState, panels: buildPanelsForPinList(nextState) };
-      }
       return nextState;
     }
 
@@ -191,17 +182,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selectionScrollNonce: 0,
       };
 
-      if (hasPinnedPages(project.relations)) {
-        nextState = {
-          ...nextState,
-          panels: buildPanelsForPinList(nextState),
-        };
-      } else if (currentPage) {
-        nextState = {
-          ...nextState,
-          panels: buildPanelsForPageContext(nextState, currentPage),
-        };
-      }
+      const panels = state.panels.filter((p) => pageFiles.has(p.pageFile));
+      nextState = {
+        ...nextState,
+        panels,
+        currentPage:
+          currentPage && panels.some((p) => p.pageFile === currentPage)
+            ? currentPage
+            : panels[0]?.pageFile ?? currentPage,
+      };
 
       return nextState;
     }
@@ -216,14 +205,27 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, sidebarExpanded: true };
 
     case 'OPEN_PAGE': {
-      const nextState: AppState = {
-        ...state,
-        currentPage: action.pageFile,
-        selection: state.linkMode ? state.selection : null,
-        panels: [{ pageFile: action.pageFile, expanded: true }],
-      };
-      const panels = buildPanelsForPageContext(nextState, action.pageFile);
-      return { ...nextState, panels };
+      const opened = applyOpenPage(state, action.pageFile);
+      const nextState: AppState = { ...state, ...opened };
+
+      if (!state.linkMode && state.selection && nextState.currentPage === action.pageFile) {
+        const page = state.project?.pages.find((p) => p.fileName === action.pageFile);
+        const scrollTarget = page
+          ? getFirstHighlightedComponentId(page, state.selection, true)
+          : null;
+        if (scrollTarget) {
+          return {
+            ...nextState,
+            selectionScrollNonce: state.selectionScrollNonce + 1,
+            scrollToComponent: {
+              componentId: scrollTarget,
+              nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+            },
+          };
+        }
+      }
+
+      return nextState;
     }
 
     case 'SELECT_COMPONENT': {
@@ -240,8 +242,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         { componentId, pageFile },
       );
 
-      const shouldScrollSecondaryPanels =
-        shouldAutoScrollPanels(state) && applied.selection.relatedIds.size > 1;
+      const shouldScrollSecondaryPanels = applied.selection.relatedIds.size > 1;
 
       const resolved = findComponent(state.project, componentId);
       const isMd = resolved?.component.type === 'md';
@@ -282,9 +283,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         ...applied,
         selectionHistoryIndex: newIndex,
-        scrollToComponent: shouldAutoScrollPanels(state)
-          ? scrollToHistoryEntry(state, entry)
-          : null,
+        scrollToComponent: scrollToHistoryEntry(state, entry),
       };
     }
 
@@ -313,9 +312,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         ...applied,
         selectionHistoryIndex: newIndex,
-        scrollToComponent: shouldAutoScrollPanels(state)
-          ? scrollToHistoryEntry(state, entry)
-          : null,
+        scrollToComponent: scrollToHistoryEntry(state, entry),
       };
     }
 
@@ -389,7 +386,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       let selection = state.selection;
       if (selection?.componentId === componentId) {
-        const remapped = buildSelectionForComponent(
+        const remapped = buildSelectionStateForComponent(
           { ...state, project: rebuilt },
           newComponentId,
           pageFile,
@@ -486,9 +483,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           linkFocusComponentId: newComponent.id,
         };
 
+        const sidebarOrder = getSidebarOrder(nextState);
         return {
           ...nextState,
-          panels: buildPanelsForPageContext(nextState, pageFile),
+          panels: addPageToPanels(nextState.panels, pageFile, sidebarOrder),
         };
       }
 
@@ -590,10 +588,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           if (applied) {
             nextState = {
               ...nextState,
-              ...applied,
-              selectionScrollNonce: shouldAutoScrollPanels(state)
-                ? state.selectionScrollNonce + 1
-                : state.selectionScrollNonce,
+              currentPage: applied.currentPage,
+              selection: applied.selection,
+              selectionScrollNonce: state.selectionScrollNonce + 1,
             };
           } else {
             nextState = {
@@ -607,11 +604,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             };
           }
         }
-      }
-
-      const panels = refreshPanelsWithPins(nextState);
-      if (panels) {
-        nextState = { ...nextState, panels };
       }
 
       return nextState;
@@ -706,34 +698,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'DELETE_PAGE':
       return applyDeletePageState(state, action.fileName);
-
-    case 'TOGGLE_PIN_PAGE': {
-      if (!state.project) return state;
-      const pinnedPages = togglePinnedPage(
-        state.project.relations.pinnedPages,
-        action.pageFile,
-      );
-      const project = rebuildProject({
-        ...state.project,
-        relations: { ...state.project.relations, pinnedPages },
-      });
-      const nextState: AppState = { ...state, project };
-      const panels = refreshPanelsWithPins(nextState);
-      return panels ? { ...nextState, panels } : nextState;
-    }
-
-    case 'CLEAR_ALL_PINS': {
-      if (!state.project) return state;
-      const project = rebuildProject({
-        ...state.project,
-        relations: { ...state.project.relations, pinnedPages: [] },
-      });
-      const nextState: AppState = { ...state, project };
-      const panels = state.currentPage
-        ? buildPanelsForPageContext(nextState, state.currentPage)
-        : [];
-      return { ...nextState, panels };
-    }
 
     case 'TOGGLE_COMMENT_PANEL':
       return { ...state, commentPanelExpanded: !state.commentPanelExpanded };
@@ -878,13 +842,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         componentId,
         nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
       };
-      const singlePagePanels: PanelState[] = [{ pageFile, expanded: true }];
+      const sidebarOrder = getSidebarOrder(state);
+      const panels = addPageToPanels(state.panels, pageFile, sidebarOrder);
 
       const base = {
         ...state,
         ...bumpOutstandingComment(state, action.commentId),
         currentPage: pageFile,
-        panels: singlePagePanels,
+        panels,
         scrollToComponent,
       };
 

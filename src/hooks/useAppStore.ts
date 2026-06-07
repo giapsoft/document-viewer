@@ -59,8 +59,6 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'RENAME_PAGE',
   'REORDER_PAGES',
   'DELETE_PAGE',
-  'TOGGLE_PIN_PAGE',
-  'CLEAR_ALL_PINS',
   'DELETE_COMPONENT',
   'ADD_IMAGE',
   'ADD_ROOT_COMMENT',
@@ -355,16 +353,6 @@ export function useAppStore() {
     },
     [dispatch],
   );
-
-  const togglePinPage = useCallback((fileName: string) => {
-    if (!projectRef.current?.pages.some((p) => p.fileName === fileName)) return;
-    dispatch({ type: 'TOGGLE_PIN_PAGE', pageFile: fileName });
-  }, [dispatch]);
-
-  const clearAllPins = useCallback(() => {
-    if (!projectRef.current) return;
-    dispatch({ type: 'CLEAR_ALL_PINS' });
-  }, [dispatch]);
 
   const toggleCommentPanel = useCallback(() => {
     dispatch({ type: 'TOGGLE_COMMENT_PANEL' });
@@ -901,7 +889,6 @@ export function useAppStore() {
     setLinkMode,
     setLinkCtrlActive,
     finishLinkSession,
-    clearAllPins,
     toggleCommentPanel,
     setCommentUsername,
     selectComment,
@@ -926,7 +913,6 @@ export function useAppStore() {
     createPage,
     renamePage,
     reorderPages,
-    togglePinPage,
     deletePage,
     suggestNewPageName: () =>
       suggestNewPageName(projectRef.current?.pages.map((p) => p.fileName) ?? []),

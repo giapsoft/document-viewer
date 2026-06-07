@@ -2,8 +2,6 @@ interface WorkspaceTopBarProps {
   linkMode?: boolean;
   linkEditingListIndex?: number | null;
   linkTargetMemberCount?: number;
-  pinModeActive?: boolean;
-  onExitPinMode?: () => void;
   canUnlink?: boolean;
   onUnlink?: () => void;
   sidebarCollapsed?: boolean;
@@ -18,8 +16,6 @@ export function WorkspaceTopBar({
   linkMode = false,
   linkEditingListIndex = null,
   linkTargetMemberCount = 0,
-  pinModeActive = false,
-  onExitPinMode,
   canUnlink = false,
   onUnlink,
   sidebarCollapsed = false,
@@ -37,27 +33,6 @@ export function WorkspaceTopBar({
         <button type="button" className="sidebar-expand-btn" onClick={onExpandSidebar}>
           Expand
         </button>
-      )}
-
-      {pinModeActive && onExitPinMode && (
-        <div className="pin-mode-banner">
-          <span className="pin-mode-message">
-            You are in Pin mode. Only pinned pages are shown in the panel area.
-          </span>
-          <button
-            type="button"
-            className="pin-mode-toggle active"
-            onClick={onExitPinMode}
-            aria-pressed
-            title="Turn off Pin mode and unpin all pages"
-          >
-            <span className="pin-mode-toggle-track">
-              <span className="pin-mode-toggle-thumb" />
-            </span>
-            <span className="pin-mode-toggle-label">Pin mode</span>
-            <span className="pin-mode-status on">ON</span>
-          </button>
-        </div>
       )}
 
       {!linkMode && onSelectionBack && onSelectionNext && (

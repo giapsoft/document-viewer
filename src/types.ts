@@ -64,7 +64,7 @@ export interface SelectedComponentStyle {
 
 export interface ScrollMarkerStyle {
   backgroundColor: string;
-  width: string;
+  borderColor: string;
 }
 
 export interface AppStyles {
@@ -231,8 +231,6 @@ export type AppAction =
   | { type: 'CREATE_PAGE'; fileName: string; pageName?: string }
   | { type: 'RENAME_PAGE'; fileName: string; newPageName: string }
   | { type: 'DELETE_PAGE'; fileName: string }
-  | { type: 'TOGGLE_PIN_PAGE'; pageFile: string }
-  | { type: 'CLEAR_ALL_PINS' }
   | { type: 'DELETE_COMPONENT'; pageFile: string; componentId: string }
   | { type: 'TOGGLE_COMMENT_PANEL' }
   | { type: 'SET_COMMENT_USERNAME'; username: string }
