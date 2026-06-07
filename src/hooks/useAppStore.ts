@@ -133,6 +133,10 @@ export function useAppStore() {
       return;
     }
 
+    if (appStateRef.current.contentEditorOpen) {
+      return;
+    }
+
     if (!isDirtyAction) return;
 
     if (action.type === 'END_COMMENT_LINK_SESSION' && prevProject === projectRef.current) {
@@ -400,6 +404,10 @@ export function useAppStore() {
 
   const setLinkCtrlActive = useCallback((active: boolean) => {
     dispatch({ type: 'SET_LINK_CTRL_ACTIVE', active });
+  }, [dispatch]);
+
+  const setContentEditorOpen = useCallback((open: boolean) => {
+    dispatch({ type: 'SET_CONTENT_EDITOR_OPEN', open });
   }, [dispatch]);
 
   const finishLinkSession = useCallback(() => {
@@ -697,6 +705,12 @@ export function useAppStore() {
         error: 'Release Ctrl to finish linking before saving.',
       };
     }
+    if (appStateRef.current.contentEditorOpen) {
+      return {
+        ok: false,
+        error: 'Close the content editor before saving.',
+      };
+    }
 
     setSaveStatus('saving');
     setSaveError(null);
@@ -742,6 +756,12 @@ export function useAppStore() {
       return {
         ok: false,
         error: 'Release Ctrl to finish linking before saving.',
+      };
+    }
+    if (appStateRef.current.contentEditorOpen) {
+      return {
+        ok: false,
+        error: 'Close the content editor before saving.',
       };
     }
     if (!isSupabaseConfigured()) {
@@ -915,6 +935,9 @@ export function useAppStore() {
     if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
       return { ok: true, skipped: true };
     }
+    if (appStateRef.current.contentEditorOpen) {
+      return { ok: true, skipped: true };
+    }
     await flushRemoteBackgroundLoad();
     const project = projectRef.current;
     if (!project?.remoteDocId || !isSupabaseConfigured()) {
@@ -975,6 +998,7 @@ export function useAppStore() {
       if (remoteBackgroundLoadRef.current) return;
       if (isSaveInProgress(saveStatusRef.current)) return;
       if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) return;
+      if (appStateRef.current.contentEditorOpen) return;
 
       try {
         if (dirtyRef.current) {
@@ -1042,6 +1066,7 @@ export function useAppStore() {
     deleteComponent,
     setLinkMode,
     setLinkCtrlActive,
+    setContentEditorOpen,
     finishLinkSession,
     toggleCommentPanel,
     setCommentUsername,

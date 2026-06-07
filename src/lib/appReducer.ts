@@ -140,6 +140,7 @@ export const initialAppState: AppState = {
   commentPanelScrollNonce: 0,
   commentLinkPreviewAnchor: null,
   commentLinkCtrlActive: false,
+  contentEditorOpen: false,
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -318,6 +319,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
 
     case 'CLEAR_SELECTION':
+      if (state.contentEditorOpen) return state;
       if (state.linkMode) {
         return {
           ...state,
@@ -512,16 +514,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
 
     case 'TOGGLE_LINK_MODE':
+      if (state.contentEditorOpen) return state;
       return state.linkMode ? applyExitLinkMode(state) : applyEnterLinkPreview(state);
 
     case 'SET_LINK_MODE':
+      if (state.contentEditorOpen) return state;
       return action.enabled ? applyEnterLinkPreview(state) : applyExitLinkMode(state);
 
     case 'SET_LINK_CTRL_ACTIVE': {
       if (!action.active) {
         return { ...state, linkCtrlActive: false };
       }
-      if (state.commentLinkCtrlActive || state.linkMode) return state;
+      if (state.contentEditorOpen || state.commentLinkCtrlActive || state.linkMode) return state;
       return applyEnterLinkPreview(state);
     }
 
@@ -778,6 +782,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       if (!action.active) {
         return { ...state, commentLinkCtrlActive: false };
       }
+      if (state.contentEditorOpen) return state;
       const selected = (state.project.relations.comments ?? []).find(
         (c) => c.id === state.selectedCommentId,
       );
@@ -1029,6 +1034,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             : state.commentLinkCtrlActive,
       };
     }
+
+    case 'SET_CONTENT_EDITOR_OPEN':
+      return { ...state, contentEditorOpen: action.open };
 
     default:
       return state;

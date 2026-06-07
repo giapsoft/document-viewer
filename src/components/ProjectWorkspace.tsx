@@ -44,6 +44,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     insertComponentBelow,
     deleteComponent,
     setLinkCtrlActive,
+    setContentEditorOpen,
     finishLinkSession,
     toggleCommentPanel,
     setCommentUsername,
@@ -85,7 +86,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     state.selectionHistoryIndex < state.selectionHistory.length - 1;
 
   useSelectionNavigationShortcuts({
-    enabled: !state.linkMode && !state.commentLinkCtrlActive,
+    enabled: !state.linkMode && !state.commentLinkCtrlActive && !state.contentEditorOpen,
     canGoBack,
     canGoNext,
     onBack: goBackSelection,
@@ -102,14 +103,14 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   );
 
   useCtrlLinkModeHold({
-    enabled: !state.commentLinkCtrlActive && !canLinkSelectedComment,
+    enabled: !state.contentEditorOpen && !state.commentLinkCtrlActive && !canLinkSelectedComment,
     ctrlActive: state.linkCtrlActive,
     setCtrlActive: setLinkCtrlActive,
     onRelease: finishLinkSession,
   });
 
   useCtrlCommentLinkHold({
-    enabled: canLinkSelectedComment,
+    enabled: !state.contentEditorOpen && canLinkSelectedComment,
     ctrlActive: state.commentLinkCtrlActive,
     setCtrlActive: setCommentLinkCtrlActive,
     onRelease: finishCommentLinkSession,
@@ -271,6 +272,10 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   };
 
   const handleSave = () => {
+    if (state.contentEditorOpen) {
+      setToolbarError('Close the content editor before saving.');
+      return;
+    }
     if (!canSave) {
       setToolbarError('Saving requires Chrome/Edge (local) or remote storage on this site.');
       return;
@@ -451,6 +456,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             onDeleteComponent={deleteComponent}
             onImportImage={importImage}
             onImportImageFromClipboard={importImageFromClipboard}
+            onContentEditorOpenChange={setContentEditorOpen}
           />
         </main>
       </div>

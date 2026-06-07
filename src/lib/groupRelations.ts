@@ -31,7 +31,7 @@ export function normalizeRelations(relations: RelationsFile): RelationsFile {
     pageNames: relations.pageNames ? { ...relations.pageNames } : {},
     pinnedPages,
     pageOrder,
-    groups: cloneGroups(groups),
+    groups: pruneGroups(cloneGroups(groups)),
     comments,
   };
 }
@@ -49,14 +49,35 @@ export const EMPTY_RELATIONS: RelationsFile = { pageNames: {}, pinnedPages: [], 
 /** Groups with fewer members are dropped after removals. */
 export const MIN_GROUP_MEMBER_COUNT = 2;
 
+function pageIdPrefixFromComponentId(componentId: string): string {
+  const dot = componentId.indexOf('.');
+  return dot >= 0 ? componentId.slice(0, dot) : componentId;
+}
+
+/** True when every member shares the same page id prefix (same page). */
+export function isSamePageOnlyGroup(group: string[]): boolean {
+  if (group.length === 0) return false;
+  const pagePrefix = pageIdPrefixFromComponentId(group[0]);
+  return group.every((id) => pageIdPrefixFromComponentId(id) === pagePrefix);
+}
+
+/** Groups need cross-page links — singletons and same-page-only groups are dropped. */
+export function isRetainedGroup(group: string[]): boolean {
+  return group.length >= MIN_GROUP_MEMBER_COUNT && !isSamePageOnlyGroup(group);
+}
+
+export function pruneGroups(groups: string[][]): string[][] {
+  return groups.filter(isRetainedGroup);
+}
+
 export function removeMemberIdsFromGroups(
   groups: string[][],
   memberIds: Iterable<string>,
 ): string[][] {
   const removeSet = new Set(memberIds);
-  return groups
-    .map((group) => group.filter((id) => !removeSet.has(id)))
-    .filter((group) => group.length >= MIN_GROUP_MEMBER_COUNT);
+  return pruneGroups(
+    groups.map((group) => group.filter((id) => !removeSet.has(id))),
+  );
 }
 
 export function getGroupIndicesForComponent(
@@ -92,7 +113,7 @@ export function removeComponentFromGroup(
   if (!group) return { groups: next, removedGroupIndex: null };
 
   const filtered = group.filter((id) => id !== componentId);
-  if (filtered.length < MIN_GROUP_MEMBER_COUNT) {
+  if (!isRetainedGroup(filtered)) {
     next.splice(groupIndex, 1);
     return { groups: next, removedGroupIndex: groupIndex };
   }

@@ -341,6 +341,7 @@ export function ComponentBlock({
 
   const shellClassExtra =
     !commentLinkMode && hasComponentCommentAnchor ? ' comment-component-anchor' : '';
+  const stickyClassExtra = resolved.type === 'title' ? ' component-sticky' : '';
 
   if (resolved.type === 'img') {
     const src = project.imageUrls.get(resolved.content);
@@ -401,7 +402,7 @@ export function ComponentBlock({
   return (
     <ComponentShell
       {...shellProps}
-      className={`component-text component-${resolved.type}${shellClassExtra}`}
+      className={`component-text component-${resolved.type}${shellClassExtra}${stickyClassExtra}`}
       style={{
         ...shellStyle,
         fontSize: typeStyle?.fontSize,

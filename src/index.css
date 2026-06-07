@@ -1368,6 +1368,25 @@ code {
   opacity: 1;
 }
 
+.component-block.component-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  opacity: 1;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+}
+
+.component-block.dimmed.component-sticky {
+  opacity: 1;
+}
+
+.component-block.component-sticky.selected-primary,
+.component-block.component-sticky.selected-related,
+.component-block.component-sticky.link-selected,
+.component-block.component-sticky.comment-link-preview {
+  z-index: 6;
+}
+
 .component-error {
   color: #dc3545;
   font-style: italic;
@@ -1658,6 +1677,12 @@ code {
 .edit-bar-icon-btn:hover {
   background: #e9ecef;
   border-color: #ced4da;
+}
+
+.edit-bar-icon-btn-active {
+  background: #e7f1ff;
+  border-color: #86b7fe;
+  color: #0d6efd;
 }
 
 .edit-bar-icon-btn-danger:hover:not(:disabled) {

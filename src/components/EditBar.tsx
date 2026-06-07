@@ -39,6 +39,7 @@ interface EditBarProps {
   onUpdateMdContent: (componentId: string, content: string) => void;
   onImportImage?: () => Promise<ImportImageResult>;
   onImportImageFromClipboard?: () => Promise<ImportImageResult>;
+  onContentEditorOpenChange: (open: boolean) => void;
 }
 
 export function EditBar({
@@ -51,6 +52,7 @@ export function EditBar({
   onUpdateMdContent,
   onImportImage,
   onImportImageFromClipboard,
+  onContentEditorOpenChange,
 }: EditBarProps) {
   const [bodyExpanded, setBodyExpanded] = useState(false);
 
@@ -92,6 +94,7 @@ export function EditBar({
       onUpdateMdContent={onUpdateMdContent}
       onImportImage={onImportImage}
       onImportImageFromClipboard={onImportImageFromClipboard}
+      onContentEditorOpenChange={onContentEditorOpenChange}
     />
   );
 }
@@ -111,6 +114,7 @@ interface EditBarFormProps {
   onUpdateMdContent: EditBarProps['onUpdateMdContent'];
   onImportImage?: EditBarProps['onImportImage'];
   onImportImageFromClipboard?: EditBarProps['onImportImageFromClipboard'];
+  onContentEditorOpenChange: (open: boolean) => void;
 }
 
 function EditBarForm({
@@ -128,10 +132,21 @@ function EditBarForm({
   onUpdateMdContent,
   onImportImage,
   onImportImageFromClipboard,
+  onContentEditorOpenChange,
 }: EditBarFormProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+
+  const openFullscreen = () => {
+    setFullscreenOpen(true);
+    onContentEditorOpenChange(true);
+  };
+
+  const closeFullscreen = () => {
+    setFullscreenOpen(false);
+    onContentEditorOpenChange(false);
+  };
 
   const patch = (changes: Partial<Omit<Component, 'id'>>) => {
     onUpdate(pageFile, component.id, changes);
@@ -142,12 +157,12 @@ function EditBarForm({
   const mdContent = project.mdFiles.get(component.id) ?? '';
   const contentEditable = isContentEditableType(component.type);
   const fullscreenValue = component.type === 'md' ? mdContent : component.content;
-  const handleFullscreenChange = (value: string) => {
+  const handleFullscreenCommit = (committedValue: string) => {
     if (component.type === 'md') {
-      onUpdateMdContent(component.id, value);
+      onUpdateMdContent(component.id, committedValue);
       return;
     }
-    patch({ content: value });
+    patch({ content: committedValue });
   };
 
   const listBadge =
@@ -183,7 +198,7 @@ function EditBarForm({
               <button
                 type="button"
                 className="edit-bar-icon-btn"
-                onClick={() => setFullscreenOpen(true)}
+                onClick={openFullscreen}
                 title="Full screen editor"
               >
                 ⛶
@@ -300,8 +315,8 @@ function EditBarForm({
           componentId={component.id}
           componentType={component.type}
           value={fullscreenValue}
-          onChange={handleFullscreenChange}
-          onClose={() => setFullscreenOpen(false)}
+          onCommit={handleFullscreenCommit}
+          onClose={closeFullscreen}
         />
       )}
     </footer>

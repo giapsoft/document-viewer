@@ -177,6 +177,8 @@ export interface AppState {
   commentLinkPreviewAnchor: CommentAnchor | null;
   /** True while Control is held during comment link mode. */
   commentLinkCtrlActive: boolean;
+  /** True while the full-screen content editor dialog is open. */
+  contentEditorOpen: boolean;
 }
 
 export interface SelectionHistoryEntry {
@@ -256,7 +258,8 @@ export type AppAction =
   | { type: 'UPDATE_COMMENT'; commentId: string; body: string }
   | { type: 'DELETE_COMMENT'; commentId: string }
   | { type: 'FOCUS_COMMENT'; commentId: string | null }
-  | { type: 'OUTSTANDING_COMMENT'; commentId: string | null };
+  | { type: 'OUTSTANDING_COMMENT'; commentId: string | null }
+  | { type: 'SET_CONTENT_EDITOR_OPEN'; open: boolean };
 
 declare global {
   interface Window {

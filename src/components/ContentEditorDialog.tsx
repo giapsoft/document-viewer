@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ComponentType } from '../types';
 import { MarkdownPreview } from './MarkdownPreview';
 
@@ -6,7 +6,7 @@ interface ContentEditorDialogProps {
   componentId: string;
   componentType: ComponentType;
   value: string;
-  onChange: (value: string) => void;
+  onCommit: (value: string) => void;
   onClose: () => void;
 }
 
@@ -14,23 +14,43 @@ export function ContentEditorDialog({
   componentId,
   componentType,
   value,
-  onChange,
+  onCommit,
   onClose,
 }: ContentEditorDialogProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [draft, setDraft] = useState(value);
+  const draftRef = useRef(draft);
+  const valueRef = useRef(value);
   const isMd = componentType === 'md';
+
+  draftRef.current = draft;
+  valueRef.current = value;
+
+  useEffect(() => {
+    setDraft(value);
+  }, [componentId, value]);
+
+  const handleClose = useCallback(() => {
+    onClose();
+    if (draftRef.current !== valueRef.current) {
+      onCommit(draftRef.current);
+    }
+  }, [onCommit, onClose]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        handleClose();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  }, [handleClose]);
 
   useEffect(() => {
     textareaRef.current?.focus();
-  }, []);
+  }, [componentId]);
 
   return (
     <div className="content-editor-overlay" role="presentation">
@@ -40,6 +60,7 @@ export function ContentEditorDialog({
         aria-modal="true"
         aria-labelledby="content-editor-title"
         onClick={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="content-editor-header">
           <div className="content-editor-header-start">
@@ -52,7 +73,7 @@ export function ContentEditorDialog({
           <button
             type="button"
             className="content-editor-close-btn"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="Close"
           >
             ×
@@ -67,17 +88,17 @@ export function ContentEditorDialog({
                 <textarea
                   ref={textareaRef}
                   className="content-editor-textarea"
-                  value={value}
+                  value={draft}
                   placeholder="Markdown…"
                   spellCheck={false}
-                  onChange={(event) => onChange(event.target.value)}
+                  onChange={(event) => setDraft(event.target.value)}
                 />
               </div>
               <div className="content-editor-pane content-editor-preview-pane">
                 <div className="content-editor-pane-label">Preview</div>
                 <div className="content-editor-preview-scroll">
-                  {value.trim() ? (
-                    <MarkdownPreview source={value} className="content-editor-preview" />
+                  {draft.trim() ? (
+                    <MarkdownPreview source={draft} className="content-editor-preview" />
                   ) : (
                     <p className="content-editor-preview-empty">Nothing to preview yet.</p>
                   )}
@@ -88,9 +109,9 @@ export function ContentEditorDialog({
             <textarea
               ref={textareaRef}
               className="content-editor-textarea content-editor-textarea-full"
-              value={value}
+              value={draft}
               placeholder="Content…"
-              onChange={(event) => onChange(event.target.value)}
+              onChange={(event) => setDraft(event.target.value)}
             />
           )}
         </div>
