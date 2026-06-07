@@ -1,7 +1,14 @@
 import type { LoadedProject, RelationsFile, RemoteSyncState } from '../types';
-import { componentIdFromMdFileName, MD_FILE_EXT } from './mdFiles';
+import { componentIdFromMdFileName, mdSidecarFileName, MD_FILE_EXT } from './mdFiles';
 import { getSupabaseClient } from './supabaseClient';
-import { mapWithConcurrency, runWithConcurrency, DEFAULT_CONCURRENCY } from './concurrency';
+import {
+  mapWithConcurrency,
+  runWithConcurrency,
+  DEFAULT_CONCURRENCY,
+  REMOTE_IMAGE_LOAD_CONCURRENCY,
+  REMOTE_MD_LOAD_CONCURRENCY,
+} from './concurrency';
+import { assembleProject } from './loadProject';
 import { fingerprintBlob } from './fileFingerprint';
 import {
   assembleLoadedProject,
@@ -235,10 +242,83 @@ async function listRemoteDocEntries(docId: string): Promise<RemoteStorageEntry[]
   return entries.filter((entry) => entry.path !== legacyBundlePath(docId));
 }
 
+let remoteTextLoadDone: Promise<void> = Promise.resolve();
+let finishRemoteTextLoad: (() => void) | null = null;
+
+function beginRemoteTextLoad(): void {
+  remoteTextLoadDone = new Promise((resolve) => {
+    finishRemoteTextLoad = resolve;
+  });
+}
+
+function endRemoteTextLoad(): void {
+  finishRemoteTextLoad?.();
+  finishRemoteTextLoad = null;
+}
+
+function partitionRemoteTextEntries(
+  entries: RemoteStorageEntry[],
+  docId: string,
+): {
+  meta: RemoteStorageEntry[];
+  pages: RemoteStorageEntry[];
+  mds: RemoteStorageEntry[];
+} {
+  const meta: RemoteStorageEntry[] = [];
+  const pages: RemoteStorageEntry[] = [];
+  const mds: RemoteStorageEntry[] = [];
+
+  for (const entry of entries) {
+    if (isRemoteImageStoragePath(entry.path, docId)) continue;
+    if (
+      isRelationsPath(entry.path, docId) ||
+      isGroupsPath(entry.path, docId) ||
+      isCommentsPath(entry.path, docId)
+    ) {
+      meta.push(entry);
+      continue;
+    }
+    const fileName = parseStorageFileName(entry.path, docId);
+    if (!fileName) continue;
+    if (isPageFileName(fileName)) pages.push(entry);
+    else if (MD_FILE_EXT.test(fileName)) mds.push(entry);
+  }
+
+  return { meta, pages, mds };
+}
+
+function mergeDownloadResults(
+  ...results: Array<{ blobs: Map<string, Blob>; hashes: Map<string, string> }>
+): { blobs: Map<string, Blob>; hashes: Map<string, string> } {
+  const blobs = new Map<string, Blob>();
+  const hashes = new Map<string, string>();
+  for (const result of results) {
+    for (const [path, blob] of result.blobs) blobs.set(path, blob);
+    for (const [path, hash] of result.hashes) hashes.set(path, hash);
+  }
+  return { blobs, hashes };
+}
+
+function referencedMdFileNamesFromPages(
+  pages: ReturnType<typeof assembleProject>['pages'],
+): Set<string> {
+  const names = new Set<string>();
+  for (const page of pages) {
+    for (const component of page.components) {
+      if (component.type === 'md') names.add(mdSidecarFileName(component.id));
+    }
+  }
+  return names;
+}
+
 async function fetchRemoteStorageBlob(
   path: string,
   storageUpdatedAt: string | null,
+  options?: { afterText?: boolean },
 ): Promise<{ blob: Blob; hash: string }> {
+  if (options?.afterText) {
+    await remoteTextLoadDone;
+  }
   if (storageUpdatedAt) {
     const cached = await getRemoteCachedFile(path);
     if (cached && cached.storageUpdatedAt === storageUpdatedAt) {
@@ -456,13 +536,19 @@ async function loadRemoteDocumentFromFiles(
 
 async function downloadRemoteEntries(
   entries: RemoteStorageEntry[],
+  options?: { afterText?: boolean },
 ): Promise<{ blobs: Map<string, Blob>; hashes: Map<string, string> }> {
+  if (entries.length === 0) {
+    return { blobs: new Map(), hashes: new Map() };
+  }
   const blobs = new Map<string, Blob>();
   const hashes = new Map<string, string>();
   await mapWithConcurrency(
     entries,
     async (entry) => {
-      const { blob, hash } = await fetchRemoteStorageBlob(entry.path, entry.updatedAt);
+      const { blob, hash } = await fetchRemoteStorageBlob(entry.path, entry.updatedAt, {
+        afterText: options?.afterText,
+      });
       blobs.set(entry.path, blob);
       hashes.set(entry.path, hash);
     },
@@ -471,20 +557,32 @@ async function downloadRemoteEntries(
   return { blobs, hashes };
 }
 
+export type RemoteMdHandler = (
+  componentId: string,
+  content: string,
+  storagePath: string,
+  fileHash: string,
+) => void;
+
 export type DeferredRemoteLoad = {
   project: LoadedProject;
-  /** Call after the project is in app state — starts referenced-image downloads only. */
+  /** Call after the project is in app state — loads referenced markdown sidecars. */
+  startMd: (onMd: RemoteMdHandler) => void;
+  /** Call after the project is in app state — loads referenced images only. */
   startImages: (onImage: RemoteImageHandler) => void;
+  whenMdReady: Promise<void>;
   whenImagesReady: Promise<void>;
-  cancelImageLoad: () => void;
+  cancelBackgroundLoad: () => void;
 };
 
 function emptyDeferredLoad(project: LoadedProject): DeferredRemoteLoad {
   return {
     project,
+    startMd: () => {},
     startImages: () => {},
+    whenMdReady: Promise.resolve(),
     whenImagesReady: Promise.resolve(),
-    cancelImageLoad: () => {},
+    cancelBackgroundLoad: () => {},
   };
 }
 
@@ -493,14 +591,45 @@ async function loadRemoteDocumentFromFilesDeferred(
   entries: RemoteStorageEntry[],
 ): Promise<DeferredRemoteLoad> {
   const docId = meta.id;
+  beginRemoteTextLoad();
+  try {
+    return await loadRemoteDocumentFromFilesDeferredInner(meta, entries, docId);
+  } finally {
+    endRemoteTextLoad();
+  }
+}
+
+async function loadRemoteDocumentFromFilesDeferredInner(
+  meta: { id: string; title: string; updated_at?: string | null },
+  entries: RemoteStorageEntry[],
+  docId: string,
+): Promise<DeferredRemoteLoad> {
   const textEntries = entries.filter((entry) => !isRemoteImageStoragePath(entry.path, docId));
-  const textPaths = textEntries.map((entry) => entry.path);
-  const { blobs: fileBlobs, hashes: textHashes } = await downloadRemoteEntries(textEntries);
-  const parsed = await parseRemoteFileBlobs(docId, textPaths, fileBlobs);
+  const { meta: metaEntries, pages: pageEntries, mds: mdEntries } =
+    partitionRemoteTextEntries(textEntries, docId);
+
+  const metaResult = await downloadRemoteEntries(metaEntries);
+  const pageResult = await downloadRemoteEntries(pageEntries);
+  const metaPageBlobs = mergeDownloadResults(metaResult, pageResult);
+  const metaPagePaths = [...metaPageBlobs.blobs.keys()];
+  const parsed = await parseRemoteFileBlobs(docId, metaPagePaths, metaPageBlobs.blobs);
 
   if (parsed.pageFiles.length === 0) {
     return emptyDeferredLoad(createStarterRemoteProject(meta, parsed.relations));
   }
+
+  const assembledPages = assembleProject({
+    pageFiles: parsed.pageFiles,
+    relations: parsed.relations,
+    stylesPartial: null,
+    imageFiles: [],
+    mdFiles: [],
+  }).pages;
+  const referencedMdNames = referencedMdFileNamesFromPages(assembledPages);
+  const mdToFetch = mdEntries.filter((entry) => {
+    const fileName = parseStorageFileName(entry.path, docId);
+    return fileName ? referencedMdNames.has(fileName) : false;
+  });
 
   const project = assembleLoadedProject(
     {
@@ -508,14 +637,15 @@ async function loadRemoteDocumentFromFilesDeferred(
       relations: parsed.relations,
       stylesPartial: null,
       imageFiles: [],
-      mdFiles: parsed.mdFiles,
+      mdFiles: [],
+      deferMdWarnings: true,
     },
     {
       source: 'remote',
       remoteDocId: docId,
       remoteTitle: meta.title,
       folderHandle: null,
-      remoteSync: { fileHashes: new Map(textHashes) },
+      remoteSync: { fileHashes: new Map(metaPageBlobs.hashes) },
       remoteUpdatedAt: meta.updated_at ?? null,
     },
   );
@@ -526,14 +656,45 @@ async function loadRemoteDocumentFromFilesDeferred(
     .filter((entry): entry is RemoteStorageEntry => entry !== undefined);
 
   const abortController = new AbortController();
-  let resolveDone!: () => void;
-  const whenImagesReady = new Promise<void>((resolve) => {
-    resolveDone = resolve;
+  let resolveMdDone!: () => void;
+  let resolveImagesDone!: () => void;
+  const whenMdReady = new Promise<void>((resolve) => {
+    resolveMdDone = resolve;
   });
+  const whenImagesReady = new Promise<void>((resolve) => {
+    resolveImagesDone = resolve;
+  });
+
+  const startMd = (onMd: RemoteMdHandler) => {
+    if (mdToFetch.length === 0 || abortController.signal.aborted) {
+      resolveMdDone();
+      return;
+    }
+    void mapWithConcurrency(
+      mdToFetch,
+      async (entry) => {
+        if (abortController.signal.aborted) return;
+        try {
+          const { blob, hash } = await fetchRemoteStorageBlob(entry.path, entry.updatedAt, {
+            afterText: true,
+          });
+          const fileName = parseStorageFileName(entry.path, docId);
+          const componentId = fileName ? componentIdFromMdFileName(fileName) : null;
+          if (!componentId) return;
+          onMd(componentId, await blob.text(), entry.path, hash);
+        } catch {
+          // Skip missing or failed markdown; others can still load.
+        }
+      },
+      REMOTE_MD_LOAD_CONCURRENCY,
+    ).finally(() => {
+      resolveMdDone();
+    });
+  };
 
   const startImages = (onImage: RemoteImageHandler) => {
     if (imageEntries.length === 0 || abortController.signal.aborted) {
-      resolveDone();
+      resolveImagesDone();
       return;
     }
     void mapWithConcurrency(
@@ -541,24 +702,28 @@ async function loadRemoteDocumentFromFilesDeferred(
       async (entry) => {
         if (abortController.signal.aborted) return;
         try {
-          const { blob } = await fetchRemoteStorageBlob(entry.path, entry.updatedAt);
+          const { blob } = await fetchRemoteStorageBlob(entry.path, entry.updatedAt, {
+            afterText: true,
+          });
           const fileName = imageFileNameFromStoragePath(entry.path, docId);
           if (fileName) onImage(fileName, blob);
         } catch {
           // Skip missing or failed images; others can still load.
         }
       },
-      DEFAULT_CONCURRENCY,
+      REMOTE_IMAGE_LOAD_CONCURRENCY,
     ).finally(() => {
-      resolveDone();
+      resolveImagesDone();
     });
   };
 
   return {
     project,
+    startMd,
     startImages,
+    whenMdReady,
     whenImagesReady,
-    cancelImageLoad: () => abortController.abort(),
+    cancelBackgroundLoad: () => abortController.abort(),
   };
 }
 

@@ -9,6 +9,7 @@ import {
   updateProjectComments,
   findComponent,
 } from './projectMutations';
+import { reconcileMdWarnings } from './loadProject';
 import {
   addComponentToGroup,
   removeComponentFromGroup,
@@ -658,6 +659,33 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         project: { ...state.project, imageUrls, imageBlobs },
+      };
+    }
+
+    case 'HYDRATE_MD': {
+      if (!state.project) return state;
+      const mdFiles = new Map(state.project.mdFiles);
+      mdFiles.set(action.componentId, action.content);
+      let remoteSync = state.project.remoteSync;
+      if (action.storagePath && action.fileHash && state.project.remoteSync) {
+        const fileHashes = new Map(state.project.remoteSync.fileHashes);
+        fileHashes.set(action.storagePath, action.fileHash);
+        remoteSync = { fileHashes };
+      }
+      return {
+        ...state,
+        project: { ...state.project, mdFiles, remoteSync },
+      };
+    }
+
+    case 'RECONCILE_MD_WARNINGS': {
+      if (!state.project) return state;
+      return {
+        ...state,
+        project: {
+          ...state.project,
+          warnings: reconcileMdWarnings(state.project.warnings, state.project),
+        },
       };
     }
 

@@ -1,4 +1,8 @@
 const DEFAULT_CONCURRENCY = 8;
+/** Background image hydration — keep low so text/metadata keep bandwidth. */
+const REMOTE_IMAGE_LOAD_CONCURRENCY = 2;
+/** Background markdown sidecars — moderate concurrency after editor opens. */
+const REMOTE_MD_LOAD_CONCURRENCY = 4;
 
 export async function mapWithConcurrency<T, R>(
   items: readonly T[],
@@ -42,4 +46,4 @@ export async function runWithConcurrency(
   );
 }
 
-export { DEFAULT_CONCURRENCY };
+export { DEFAULT_CONCURRENCY, REMOTE_IMAGE_LOAD_CONCURRENCY, REMOTE_MD_LOAD_CONCURRENCY };

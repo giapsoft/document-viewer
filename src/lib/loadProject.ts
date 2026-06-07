@@ -57,6 +57,8 @@ export interface RawProjectInput {
   stylesPartial?: Partial<import('../types').AppStyles> | null;
   imageFiles: { name: string; blob: Blob }[];
   mdFiles?: { componentId: string; content: string }[];
+  /** Skip "Missing markdown file" warnings until background MD hydration finishes. */
+  deferMdWarnings?: boolean;
 }
 
 export type AssembledProject = Omit<
@@ -105,7 +107,9 @@ export function assembleProject(input: RawProjectInput): AssembledProject {
     for (const component of page.components) {
       if (component.type !== 'md') continue;
       if (!mdFiles.has(component.id)) {
-        warnings.push(`Missing markdown file for ${component.id}`);
+        if (!input.deferMdWarnings) {
+          warnings.push(`Missing markdown file for ${component.id}`);
+        }
         mdFiles.set(component.id, '');
       }
     }
@@ -124,6 +128,31 @@ export function assembleProject(input: RawProjectInput): AssembledProject {
     index,
     warnings,
   };
+}
+
+const MISSING_MD_WARNING_PREFIX = 'Missing markdown file for ';
+
+export function missingMdWarnings(project: LoadedProject): string[] {
+  const warnings: string[] = [];
+  for (const page of project.pages) {
+    for (const component of page.components) {
+      if (component.type !== 'md') continue;
+      const content = project.mdFiles.get(component.id) ?? '';
+      if (!content.trim()) {
+        warnings.push(`${MISSING_MD_WARNING_PREFIX}${component.id}`);
+      }
+    }
+  }
+  return warnings;
+}
+
+/** Replace deferred MD warnings with ones that reflect hydrated project state. */
+export function reconcileMdWarnings(
+  warnings: string[],
+  project: LoadedProject,
+): string[] {
+  const withoutMd = warnings.filter((warning) => !warning.startsWith(MISSING_MD_WARNING_PREFIX));
+  return [...withoutMd, ...missingMdWarnings(project)];
 }
 
 async function tryReadJsonFile<T>(

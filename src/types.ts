@@ -220,6 +220,14 @@ export type AppAction =
   | { type: 'ADD_IMAGE'; filename: string; objectUrl: string; blob: Blob }
   | { type: 'HYDRATE_IMAGE'; filename: string; objectUrl: string; blob: Blob }
   | {
+      type: 'HYDRATE_MD';
+      componentId: string;
+      content: string;
+      storagePath?: string;
+      fileHash?: string;
+    }
+  | { type: 'RECONCILE_MD_WARNINGS' }
+  | {
       type: 'APPEND_IMAGE_COMPONENT';
       pageFile: string;
       filename: string;

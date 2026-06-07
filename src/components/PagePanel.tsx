@@ -172,6 +172,7 @@ interface ComponentBlockProps {
   selection: SelectionState | null;
   highlightedIds: Set<string> | null;
   pendingImageNames?: ReadonlySet<string>;
+  pendingMdComponentIds?: ReadonlySet<string>;
   linkMode?: boolean;
   linkGroupMembers?: Set<string>;
   commentLinkMode?: boolean;
@@ -259,6 +260,7 @@ export function ComponentBlock({
   linkMode = false,
   linkGroupMembers,
   pendingImageNames,
+  pendingMdComponentIds,
   commentLinkMode = false,
   commentLinkPreviewAnchor = null,
   mdHighlightRanges = [],
@@ -370,6 +372,7 @@ export function ComponentBlock({
   }
 
   if (resolved.type === 'md') {
+    const isMdPending = pendingMdComponentIds?.has(component.id) ?? false;
     return (
       <ComponentShell
         {...shellProps}
@@ -391,6 +394,8 @@ export function ComponentBlock({
                 : (commentId) => onCommentMarkClick?.(commentId, component.id, pageFile)
             }
           />
+        ) : isMdPending ? (
+          <span className="loading-image">Loading markdown…</span>
         ) : (
           <span className="component-md-empty">Empty markdown</span>
         )}
@@ -485,6 +490,7 @@ interface PagePanelProps {
   linkMode?: boolean;
   linkGroupMembers?: Set<string>;
   pendingImageNames?: ReadonlySet<string>;
+  pendingMdComponentIds?: ReadonlySet<string>;
   onToggle: () => void;
   onSelect: (componentId: string, pageFile: string) => void;
   onClearSelection: () => void;
@@ -513,6 +519,7 @@ export function PagePanel({
   linkMode = false,
   linkGroupMembers,
   pendingImageNames,
+  pendingMdComponentIds,
   onToggle,
   onSelect,
   onClearSelection,
@@ -854,6 +861,7 @@ export function PagePanel({
                   linkMode={linkMode}
                   linkGroupMembers={linkGroupMembers}
                   pendingImageNames={pendingImageNames}
+                  pendingMdComponentIds={pendingMdComponentIds}
                   commentLinkMode={commentLinkMode}
                   commentLinkPreviewAnchor={commentLinkPreviewAnchor}
                   mdHighlightRanges={

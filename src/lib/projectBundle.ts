@@ -95,6 +95,16 @@ export function collectReferencedImageNames(project: LoadedProject): Set<string>
   return names;
 }
 
+export function collectReferencedMdComponentIds(project: LoadedProject): Set<string> {
+  const ids = new Set<string>();
+  for (const page of project.pages) {
+    for (const component of page.components) {
+      if (component.type === 'md') ids.add(component.id);
+    }
+  }
+  return ids;
+}
+
 export function collectReferencedMdFiles(project: LoadedProject): Map<string, string> {
   const files = new Map<string, string>();
   for (const page of project.pages) {
