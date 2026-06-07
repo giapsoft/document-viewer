@@ -1,5 +1,5 @@
 import type { AppAction, AppState, PanelState } from '../types';
-import { shrinkFarthestExpanded } from '../lib/index';
+import { shrinkFarthestExpanded, MAX_EXPANDED_PANELS } from '../lib/index';
 import {
   updateComponentInProject,
   insertComponentRelative,
@@ -333,18 +333,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       let panels: PanelState[];
       if (panel.expanded) {
-        if (action.pageFile === state.currentPage) {
-          return state;
-        }
         panels = state.panels.map((p) =>
           p.pageFile === action.pageFile ? { ...p, expanded: false } : p,
         );
       } else {
         const expandedCount = state.panels.filter((p) => p.expanded).length;
-        if (expandedCount >= 3 && state.currentPage) {
+        if (expandedCount >= MAX_EXPANDED_PANELS) {
           panels = shrinkFarthestExpanded(
             state.panels,
-            state.currentPage,
+            state.currentPage ?? '',
             action.pageFile,
           );
         } else {

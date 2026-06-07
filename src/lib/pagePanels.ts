@@ -26,6 +26,7 @@ export function addPageToPanels(
         p.pageFile === pageFile ? { ...p, expanded: true } : p,
       ),
       pageFile,
+      pageFile,
     );
   }
 

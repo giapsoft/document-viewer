@@ -86,10 +86,10 @@ export function buildPanelsInSidebarOrder(
     if (existing) {
       return { pageFile, expanded: existing.expanded };
     }
-    return { pageFile, expanded: false };
+    return { pageFile, expanded: pageFile === currentPage };
   });
 
-  return enforceExpandedLimit(panels, currentPage);
+  return enforceExpandedLimit(panels, currentPage, currentPage);
 }
 
 export function reorderPanelsBySidebar(

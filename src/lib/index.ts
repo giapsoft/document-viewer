@@ -291,33 +291,29 @@ export function orderPagesForSelection(
 
 const MAX_EXPANDED_PANELS = 3;
 
+export { MAX_EXPANDED_PANELS };
+
 export function applyExpandLimits(
   panels: { pageFile: string; expanded: boolean }[],
   _orderedPages: string[],
   currentPage: string,
 ): { pageFile: string; expanded: boolean }[] {
-  const withCurrent = panels.map((panel) => ({
-    ...panel,
-    expanded: panel.pageFile === currentPage ? true : panel.expanded,
-  }));
-  return enforceExpandedLimit(withCurrent, currentPage);
+  return enforceExpandedLimit(panels, currentPage);
 }
 
-/** Keep desired expand state; main page stays open; shrink extras past the limit. */
+/** Shrink panels past the expanded limit, starting from the farthest slot. */
 export function enforceExpandedLimit(
   panels: { pageFile: string; expanded: boolean }[],
-  currentPage: string,
+  _currentPage: string,
+  keepExpanded?: string,
 ): { pageFile: string; expanded: boolean }[] {
-  let result = panels.map((panel) => ({
-    ...panel,
-    expanded: panel.pageFile === currentPage ? true : panel.expanded,
-  }));
+  let result = panels.map((panel) => ({ ...panel }));
 
   let expandedCount = result.filter((panel) => panel.expanded).length;
   while (expandedCount > MAX_EXPANDED_PANELS) {
     const toShrink = [...result]
       .reverse()
-      .find((panel) => panel.expanded && panel.pageFile !== currentPage);
+      .find((panel) => panel.expanded && panel.pageFile !== keepExpanded);
     if (!toShrink) break;
 
     result = result.map((panel) =>
@@ -417,29 +413,20 @@ export function buildPanelsPreservingMainPosition(
 
 export function shrinkFarthestExpanded(
   panels: { pageFile: string; expanded: boolean }[],
-  currentPage: string,
+  _currentPage: string,
   expandingPage: string,
 ): { pageFile: string; expanded: boolean }[] {
   const expandedCount = panels.filter((p) => p.expanded).length;
 
-  if (expandedCount < 3) {
+  if (expandedCount < MAX_EXPANDED_PANELS) {
     return panels.map((p) =>
       p.pageFile === expandingPage ? { ...p, expanded: true } : p,
     );
   }
 
-  const toShrink =
-    [...panels]
-      .reverse()
-      .find(
-        (p) =>
-          p.expanded &&
-          p.pageFile !== currentPage &&
-          p.pageFile !== expandingPage,
-      ) ??
-    [...panels]
-      .reverse()
-      .find((p) => p.expanded && p.pageFile !== expandingPage);
+  const toShrink = [...panels]
+    .reverse()
+    .find((p) => p.expanded && p.pageFile !== expandingPage);
 
   if (!toShrink) {
     return panels.map((p) =>
