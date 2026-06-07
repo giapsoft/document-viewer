@@ -5,7 +5,7 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { ImagePickerDialog } from './ImagePickerDialog';
 import { ConfirmDialog } from './PageFileDialog';
 import { Toast } from './Toast';
-import { ActionEditor } from './ActionEditor';
+import { ActionEditor, type ActionEditorHandle, type ActionImagePickerTarget } from './ActionEditor';
 
 const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'md', 'action'];
 const STATUSES: ComponentStatus[] = ['undefined', 'pending', 'working', 'done', 'blocked'];
@@ -60,6 +60,7 @@ interface ContentEditorDialogProps {
   onClose: () => void;
   onImportImage?: () => Promise<ImportImageResult>;
   onImportImageFromClipboard?: () => Promise<ImportImageResult>;
+  onDeleteProjectImage?: (filename: string) => Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 export function ContentEditorDialog({
@@ -74,11 +75,17 @@ export function ContentEditorDialog({
   onClose,
   onImportImage,
   onImportImageFromClipboard,
+  onDeleteProjectImage,
 }: ContentEditorDialogProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const actionEditorRef = useRef<ActionEditorHandle>(null);
   const [draft, setDraft] = useState(value);
   const [toast, setToast] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [actionImagePicker, setActionImagePicker] = useState<{
+    target: ActionImagePickerTarget;
+    selectedFilename: string;
+  } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const draftRef = useRef(draft);
   const valueRef = useRef(value);
@@ -103,14 +110,14 @@ export function ContentEditorDialog({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !pickerOpen && !confirmDelete) {
+      if (event.key === 'Escape' && !pickerOpen && !actionImagePicker && !confirmDelete) {
         event.stopPropagation();
         handleClose();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [confirmDelete, handleClose, pickerOpen]);
+  }, [actionImagePicker, confirmDelete, handleClose, pickerOpen]);
 
   useEffect(() => {
     if (hasTextEditor) {
@@ -197,11 +204,13 @@ export function ContentEditorDialog({
           <div className={`content-editor-body ${isMd ? 'content-editor-body-split' : ''}${isAction ? ' content-editor-body-action' : ''}`}>
             {isAction ? (
               <ActionEditor
+                ref={actionEditorRef}
                 project={project}
                 content={component.content}
                 onChange={(content) => onPatch({ content })}
-                onImportImage={onImportImage}
-                onImportImageFromClipboard={onImportImageFromClipboard}
+                onRequestImagePicker={(target, selectedFilename) => {
+                  setActionImagePicker({ target, selectedFilename });
+                }}
               />
             ) : isImg ? (
               <div className="content-editor-img-pane">
@@ -269,6 +278,27 @@ export function ContentEditorDialog({
           onClose={() => setPickerOpen(false)}
           onImport={onImportImage}
           onImportFromClipboard={onImportImageFromClipboard}
+          onDeleteImage={onDeleteProjectImage}
+        />
+      )}
+
+      {actionImagePicker && isAction && (
+        <ImagePickerDialog
+          elevated
+          project={project}
+          selectedFilename={actionImagePicker.selectedFilename}
+          onSelect={(filename, previewSrc) => {
+            actionEditorRef.current?.applyImagePick(
+              actionImagePicker.target,
+              filename,
+              previewSrc,
+            );
+            setActionImagePicker(null);
+          }}
+          onClose={() => setActionImagePicker(null)}
+          onImport={onImportImage}
+          onImportFromClipboard={onImportImageFromClipboard}
+          onDeleteImage={onDeleteProjectImage}
         />
       )}
 

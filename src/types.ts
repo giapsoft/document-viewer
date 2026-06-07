@@ -222,6 +222,7 @@ export type AppAction =
   | { type: 'GO_BACK_SELECTION' }
   | { type: 'GO_NEXT_SELECTION' }
   | { type: 'ADD_IMAGE'; filename: string; objectUrl: string; blob: Blob }
+  | { type: 'DELETE_IMAGE'; filename: string }
   | { type: 'HYDRATE_IMAGE'; filename: string; objectUrl: string; blob: Blob }
   | {
       type: 'HYDRATE_MD';

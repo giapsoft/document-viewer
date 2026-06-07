@@ -272,6 +272,62 @@ export function fitEditorLayoutToBeforeImage(
   };
 }
 
+/** Contain-fit image layer inside component frame (0–1), centered. Frame aspect from frame_ratio. */
+export function computeLayerFitInComponentFrame(
+  imageWidth: number,
+  imageHeight: number,
+  frameRatio: number,
+): FramePosition {
+  if (!Number.isFinite(imageWidth) || !Number.isFinite(imageHeight) || imageWidth <= 0 || imageHeight <= 0) {
+    return { ...DEFAULT_FULL_FRAME };
+  }
+
+  const frameAspect = clampFrameRatio(frameRatio);
+  const imageAspect = imageWidth / imageHeight;
+  let widthRatio: number;
+  let heightRatio: number;
+
+  if (imageAspect >= frameAspect) {
+    widthRatio = 1;
+    heightRatio = frameAspect / imageAspect;
+  } else {
+    heightRatio = 1;
+    widthRatio = imageAspect / frameAspect;
+  }
+
+  return clampLayerPosition({
+    leftRatio: (1 - widthRatio) / 2,
+    topRatio: (1 - heightRatio) / 2,
+    widthRatio,
+    heightRatio,
+  });
+}
+
+/** Contain-fit a before/after layer inside the current component frame; editor frame unchanged. */
+export function fitEditorLayoutLayerInFrame(
+  layout: EditorLayout,
+  layer: 'before' | 'after',
+  imageWidth: number,
+  imageHeight: number,
+): EditorLayout {
+  const frameRatio = deriveFrameRatioFromEditorFrame(layout.editor_frame_position);
+  const componentPos = computeLayerFitInComponentFrame(imageWidth, imageHeight, frameRatio);
+  const editorPos = componentToEditorPosition(layout.editor_frame_position, componentPos);
+  if (layer === 'before') {
+    return { ...layout, image_before_position: editorPos };
+  }
+  return { ...layout, image_after_position: editorPos };
+}
+
+/** Refit after image inside the current component frame; editor frame unchanged. */
+export function fitEditorLayoutToAfterImage(
+  layout: EditorLayout,
+  imageWidth: number,
+  imageHeight: number,
+): EditorLayout {
+  return fitEditorLayoutLayerInFrame(layout, 'after', imageWidth, imageHeight);
+}
+
 export function storedToEditorLayout(data: ActionData): EditorLayout {
   const ef = data.editor_frame_position;
   return {

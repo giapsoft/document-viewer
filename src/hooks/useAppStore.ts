@@ -14,7 +14,13 @@ import {
   resolveNewPageFromName,
   suggestNewPageName,
 } from '../lib/pageMutations';
-import { getOrphanedPageAssets } from '../lib/pageFileOps';
+import {
+  deleteImageFileOnDisk,
+  deleteMdFileOnDisk,
+  deletePageFileOnDisk,
+  getOrphanedComponentAssets,
+  getOrphanedPageAssets,
+} from '../lib/pageFileOps';
 import {
   loadFromDirectoryHandle,
   pickProjectFolder,
@@ -38,7 +44,13 @@ import {
   setRemoteSaveStatusListener,
 } from '../lib/remoteAutoSave';
 import { isRemoteVersionStale } from '../lib/remoteConflict';
-import { defaultRemoteTitle, collectReferencedImageNames, collectReferencedMdComponentIds } from '../lib/projectBundle';
+import {
+  defaultRemoteTitle,
+  collectReferencedImageNames,
+  collectReferencedMdComponentIds,
+  findImageReferences,
+  formatImageDeleteBlockedMessage,
+} from '../lib/projectBundle';
 import { setDocIdInUrl } from '../lib/docUrl';
 
 export type PageActionResult = { ok: true } | { ok: false; error: string };
@@ -61,6 +73,7 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'DELETE_PAGE',
   'DELETE_COMPONENT',
   'ADD_IMAGE',
+  'DELETE_IMAGE',
   'ADD_ROOT_COMMENT',
   'ADD_REPLY_COMMENT',
   'SET_COMMENT_ANCHOR',
@@ -403,7 +416,31 @@ export function useAppStore() {
 
   const deleteComponent = useCallback(
     (pageFile: string, componentId: string) => {
+      const project = projectRef.current;
+      if (!project) return;
+
+      const page = project.pages.find((p) => p.fileName === pageFile);
+      const doomed = page?.components.find((c) => c.id === componentId);
+      if (!page || !doomed) return;
+
+      const remainingPages = project.pages.map((p) => {
+        if (p.fileName !== pageFile) return p;
+        return { ...p, components: p.components.filter((c) => c.id !== componentId) };
+      });
+      const orphaned = getOrphanedComponentAssets(doomed, remainingPages);
+
       dispatch({ type: 'DELETE_COMPONENT', pageFile, componentId });
+
+      if (project.folderHandle) {
+        for (const imageName of orphaned.imageFilenames) {
+          void deleteImageFileOnDisk(project.folderHandle, imageName).catch(() => {
+            // autosave will omit unreferenced images on next save
+          });
+        }
+        for (const mdId of orphaned.mdComponentIds) {
+          void deleteMdFileOnDisk(project.folderHandle, mdId).catch(() => {});
+        }
+      }
     },
     [dispatch],
   );
@@ -456,6 +493,38 @@ export function useAppStore() {
 
   const goNextSelection = useCallback(() => {
     dispatch({ type: 'GO_NEXT_SELECTION' });
+  }, [dispatch]);
+
+  const deleteProjectImage = useCallback(async (filename: string): Promise<PageActionResult> => {
+    const project = projectRef.current;
+    if (!project) {
+      return { ok: false, error: 'No project is open.' };
+    }
+
+    const name = filename.trim();
+    if (!name) {
+      return { ok: false, error: 'No image selected.' };
+    }
+
+    const refs = findImageReferences(project, name);
+    if (refs.length > 0) {
+      return { ok: false, error: formatImageDeleteBlockedMessage(refs) };
+    }
+
+    dispatch({ type: 'DELETE_IMAGE', filename: name });
+
+    if (project.folderHandle) {
+      try {
+        await deleteImageFileOnDisk(project.folderHandle, name);
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : 'Could not delete image file.',
+        };
+      }
+    }
+
+    return { ok: true };
   }, [dispatch]);
 
   const importImage = useCallback(async (): Promise<ImportImageResult> => {
@@ -600,8 +669,16 @@ export function useAppStore() {
       return { ok: false, error: 'Page not found.' };
     }
 
-    void getOrphanedPageAssets(page, project.pages.filter((p) => p.fileName !== fileName));
+    const remainingPages = project.pages.filter((p) => p.fileName !== fileName);
+    const orphaned = getOrphanedPageAssets(page, remainingPages);
     dispatch({ type: 'DELETE_PAGE', fileName });
+
+    if (project.folderHandle) {
+      void deletePageFileOnDisk(project.folderHandle, fileName, orphaned).catch(() => {
+        // autosave will retry cleanup on next save
+      });
+    }
+
     return { ok: true };
   }, [dispatch]);
 
@@ -1113,6 +1190,7 @@ export function useAppStore() {
     goBackSelection,
     goNextSelection,
     importImage,
+    deleteProjectImage,
     importImageFromClipboard: importImageFromClipboardAction,
     appendClipboardImageToPage,
     createPage,

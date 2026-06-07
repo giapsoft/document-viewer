@@ -3,6 +3,7 @@ import { createInitialActionContent } from './actionComponent';
 import { removeCommentsForComponent } from './comments';
 import { removeMemberIdsFromGroups } from './groupRelations';
 import { buildIndex } from './index';
+import { getOrphanedComponentAssets } from './pageFileOps';
 import { createComponentId } from './pageIds';
 
 export function rebuildProject(project: LoadedProject): LoadedProject {
@@ -145,14 +146,17 @@ export function deleteComponentFromProject(
   if (page.components.length <= 1) return null;
 
   const doomed = page.components.find((c) => c.id === componentId);
+  if (!doomed) return null;
 
-  let pages = project.pages.map((p) => {
+  const pages = project.pages.map((p) => {
     if (p.fileName !== pageFile) return p;
     return {
       ...p,
       components: p.components.filter((c) => c.id !== componentId),
     };
   });
+
+  const orphaned = getOrphanedComponentAssets(doomed, pages);
 
   const groups = removeMemberIdsFromGroups(project.relations.groups, [componentId]);
   const comments = removeCommentsForComponent(
@@ -161,8 +165,20 @@ export function deleteComponentFromProject(
   );
 
   const mdFiles = new Map(project.mdFiles);
-  if (doomed?.type === 'md') {
+  if (doomed.type === 'md') {
     mdFiles.delete(componentId);
+  }
+  for (const id of orphaned.mdComponentIds) {
+    mdFiles.delete(id);
+  }
+
+  const imageUrls = new Map(project.imageUrls);
+  const imageBlobs = new Map(project.imageBlobs);
+  for (const imageName of orphaned.imageFilenames) {
+    const url = imageUrls.get(imageName);
+    if (url) URL.revokeObjectURL(url);
+    imageUrls.delete(imageName);
+    imageBlobs.delete(imageName);
   }
 
   return rebuildProject({
@@ -170,6 +186,8 @@ export function deleteComponentFromProject(
     pages,
     relations: { ...project.relations, groups, comments },
     mdFiles,
+    imageUrls,
+    imageBlobs,
   });
 }
 

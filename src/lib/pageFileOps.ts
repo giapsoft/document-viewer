@@ -1,8 +1,11 @@
-import type { Component, PageData } from '../types';
+import type { Component, LoadedProject, PageData } from '../types';
 import { collectActionImageFilenames } from './actionComponent';
 import { serializePageComponents } from './pageIds';
-import { mdSidecarFileName } from './mdFiles';
+import { componentIdFromMdFileName, mdSidecarFileName, MD_FILE_EXT } from './mdFiles';
 import { ensureDocsDirectory, getDocsDirectoryIfPresent } from './docsFolder';
+import { collectReferencedMdComponentIds } from './projectBundle';
+
+const PAGE_EXT = /\.p$/i;
 
 function collectImageFilenames(pages: PageData[]): Set<string> {
   const names = new Set<string>();
@@ -31,6 +34,17 @@ function collectMdComponentIds(pages: PageData[]): Set<string> {
     }
   }
   return ids;
+}
+
+/** Image/md assets on `component` not referenced by any component on `remainingPages`. */
+export function getOrphanedComponentAssets(
+  component: Component,
+  remainingPages: PageData[],
+): { imageFilenames: string[]; mdComponentIds: string[] } {
+  return getOrphanedPageAssets(
+    { fileName: '', pageId: '', pageName: '', components: [component] },
+    remainingPages,
+  );
 }
 
 /** Assets on `deletedPage` not referenced by any component on `remainingPages`. */
@@ -144,4 +158,41 @@ export async function createPageFileOnDisk(
   const docsHandle = await ensureDocsDirectory(root);
   const serialized = serializePageComponents(components, pageId);
   await writeRawFile(docsHandle, fileName, `${JSON.stringify(serialized, null, 2)}\n`);
+}
+
+/** Remove page and markdown sidecar files in docs/ that are no longer in the project. */
+export async function removeOrphanedDocsOnSave(
+  root: FileSystemDirectoryHandle,
+  project: LoadedProject,
+): Promise<void> {
+  const docsHandle = await getDocsDirectoryIfPresent(root);
+  if (!docsHandle) return;
+
+  const activePages = new Set(project.pages.map((page) => page.fileName));
+  const activeMdIds = collectReferencedMdComponentIds(project);
+
+  for await (const entry of docsHandle.values()) {
+    if (entry.kind !== 'file') continue;
+    const name = entry.name;
+
+    if (PAGE_EXT.test(name) && !activePages.has(name)) {
+      try {
+        await docsHandle.removeEntry(name);
+      } catch {
+        // file may already be gone or locked
+      }
+      continue;
+    }
+
+    if (MD_FILE_EXT.test(name)) {
+      const componentId = componentIdFromMdFileName(name);
+      if (componentId && !activeMdIds.has(componentId)) {
+        try {
+          await docsHandle.removeEntry(name);
+        } catch {
+          // file may already be gone or locked
+        }
+      }
+    }
+  }
 }

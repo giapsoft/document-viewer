@@ -65,6 +65,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     goNextSelection,
     importImage,
     importImageFromClipboard,
+    deleteProjectImage,
     createPage,
     renamePage,
     reorderPages,
@@ -477,6 +478,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             onDeleteComponent={deleteComponent}
             onImportImage={importImage}
             onImportImageFromClipboard={importImageFromClipboard}
+            onDeleteProjectImage={deleteProjectImage}
             onContentEditorOpenChange={setContentEditorOpen}
           />
         </main>

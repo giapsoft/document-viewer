@@ -1,5 +1,5 @@
 import type { LoadedProject, RelationsFile } from '../types';
-import { collectActionImageFilenamesFromProject } from './actionComponent';
+import { collectActionImageFilenamesFromProject, parseActionData } from './actionComponent';
 import { serializePageComponents } from './pageIds';
 import { mdSidecarFileName } from './mdFiles';
 import { assembleProject, type RawProjectInput } from './loadProject';
@@ -82,6 +82,48 @@ export function assembleLoadedProject(
     remoteSync: meta.remoteSync ?? null,
     remoteUpdatedAt: meta.remoteUpdatedAt ?? null,
   };
+}
+
+export type ImageReference = {
+  pageFile: string;
+  componentId: string;
+  kind: 'img' | 'action-before' | 'action-after';
+};
+
+export function findImageReferences(project: LoadedProject, filename: string): ImageReference[] {
+  const target = filename.trim();
+  if (!target) return [];
+
+  const refs: ImageReference[] = [];
+  for (const page of project.pages) {
+    for (const component of page.components) {
+      if (component.type === 'img' && component.content.trim() === target) {
+        refs.push({ pageFile: page.fileName, componentId: component.id, kind: 'img' });
+        continue;
+      }
+      if (component.type === 'action') {
+        const data = parseActionData(component.content);
+        if (data.image_before.trim() === target) {
+          refs.push({ pageFile: page.fileName, componentId: component.id, kind: 'action-before' });
+        }
+        if (data.image_after.trim() === target) {
+          refs.push({ pageFile: page.fileName, componentId: component.id, kind: 'action-after' });
+        }
+      }
+    }
+  }
+  return refs;
+}
+
+export function formatImageReferenceLabel(ref: ImageReference): string {
+  if (ref.kind === 'img') return `${ref.componentId} (image)`;
+  if (ref.kind === 'action-before') return `${ref.componentId} (action · before)`;
+  return `${ref.componentId} (action · after)`;
+}
+
+export function formatImageDeleteBlockedMessage(refs: ImageReference[]): string {
+  const lines = refs.map((ref) => `• ${formatImageReferenceLabel(ref)} on ${ref.pageFile}`);
+  return `This image is still used and cannot be deleted:\n${lines.join('\n')}`;
 }
 
 export function collectReferencedImageNames(project: LoadedProject): Set<string> {

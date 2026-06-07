@@ -664,6 +664,22 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case 'DELETE_IMAGE': {
+      if (!state.project) return state;
+      const filename = action.filename.trim();
+      if (!filename) return state;
+      const imageUrls = new Map(state.project.imageUrls);
+      const imageBlobs = new Map(state.project.imageBlobs);
+      const objectUrl = imageUrls.get(filename);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      imageUrls.delete(filename);
+      imageBlobs.delete(filename);
+      return {
+        ...state,
+        project: { ...state.project, imageUrls, imageBlobs },
+      };
+    }
+
     case 'HYDRATE_MD': {
       if (!state.project) return state;
       const mdFiles = new Map(state.project.mdFiles);

@@ -3,6 +3,7 @@ import { serializePageComponents } from './pageIds';
 import { normalizeRelations } from './groupRelations';
 import { mdSidecarFileName } from './mdFiles';
 import { ensureDocsDirectory } from './docsFolder';
+import { removeOrphanedDocsOnSave } from './pageFileOps';
 import { collectReferencedImageNames } from './projectBundle';
 
 export type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
@@ -142,6 +143,8 @@ export async function saveProjectToFolder(project: LoadedProject): Promise<void>
       }
       await writeBlobFile(docsHandle, name, blob);
     }
+
+    await removeOrphanedDocsOnSave(root, project);
   }
 
   const { groups, comments, ...relationsMeta } = normalizeRelations(project.relations);

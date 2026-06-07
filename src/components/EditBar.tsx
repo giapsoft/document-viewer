@@ -65,6 +65,7 @@ interface EditBarProps {
   onUpdateMdContent: (componentId: string, content: string) => void;
   onImportImage?: () => Promise<ImportImageResult>;
   onImportImageFromClipboard?: () => Promise<ImportImageResult>;
+  onDeleteProjectImage?: (filename: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   onContentEditorOpenChange: (open: boolean) => void;
 }
 
@@ -78,6 +79,7 @@ export function EditBar({
   onUpdateMdContent,
   onImportImage,
   onImportImageFromClipboard,
+  onDeleteProjectImage,
   onContentEditorOpenChange,
 }: EditBarProps) {
   const [bodyExpanded, setBodyExpanded] = useState(false);
@@ -120,6 +122,7 @@ export function EditBar({
       onUpdateMdContent={onUpdateMdContent}
       onImportImage={onImportImage}
       onImportImageFromClipboard={onImportImageFromClipboard}
+      onDeleteProjectImage={onDeleteProjectImage}
       onContentEditorOpenChange={onContentEditorOpenChange}
     />
   );
@@ -140,6 +143,7 @@ interface EditBarFormProps {
   onUpdateMdContent: EditBarProps['onUpdateMdContent'];
   onImportImage?: EditBarProps['onImportImage'];
   onImportImageFromClipboard?: EditBarProps['onImportImageFromClipboard'];
+  onDeleteProjectImage?: EditBarProps['onDeleteProjectImage'];
   onContentEditorOpenChange: (open: boolean) => void;
 }
 
@@ -158,6 +162,7 @@ function EditBarForm({
   onUpdateMdContent,
   onImportImage,
   onImportImageFromClipboard,
+  onDeleteProjectImage,
   onContentEditorOpenChange,
 }: EditBarFormProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -362,6 +367,7 @@ function EditBarForm({
           onClose={() => setPickerOpen(false)}
           onImport={onImportImage}
           onImportFromClipboard={onImportImageFromClipboard}
+          onDeleteImage={onDeleteProjectImage}
         />
       )}
 
@@ -378,6 +384,7 @@ function EditBarForm({
           onClose={closeFullscreen}
           onImportImage={onImportImage}
           onImportImageFromClipboard={onImportImageFromClipboard}
+          onDeleteProjectImage={onDeleteProjectImage}
         />
       )}
     </footer>

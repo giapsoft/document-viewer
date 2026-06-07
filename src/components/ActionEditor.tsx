@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { LoadedProject } from '../types';
 import {
   clampFramePosition,
   clampLayerPosition,
   editorLayoutToStored,
   EDITOR_CANVAS_ASPECT,
+  fitEditorLayoutLayerInFrame,
+  fitEditorLayoutToAfterImage,
   fitEditorLayoutToBeforeImage,
   formatRatioForCss,
   framePositionStyle,
@@ -20,8 +22,6 @@ import {
   type EditorLayout,
   type FramePosition,
 } from '../lib/actionComponent';
-import { ImagePickerDialog } from './ImagePickerDialog';
-import type { ImportImageResult } from '../lib/importImage';
 import { ActionComponent, ActionImageLayer } from './ActionComponent';
 
 type DragMode =
@@ -69,12 +69,17 @@ type EditorDragState = {
   moved: boolean;
 };
 
+export type ActionImagePickerTarget = 'before' | 'after';
+
+export interface ActionEditorHandle {
+  applyImagePick: (target: ActionImagePickerTarget, filename: string, previewSrc?: string) => void;
+}
+
 interface ActionEditorProps {
   project: LoadedProject;
   content: string;
   onChange: (content: string) => void;
-  onImportImage?: () => Promise<ImportImageResult>;
-  onImportImageFromClipboard?: () => Promise<ImportImageResult>;
+  onRequestImagePicker?: (target: ActionImagePickerTarget, selectedFilename: string) => void;
 }
 
 function editorLayerPosition(layout: EditorLayout, layer: ActionEditorLayer): FramePosition {
@@ -105,6 +110,34 @@ const EDIT_LAYER_STACK: Record<ActionEditorLayer, number> = {
   after: 2,
 };
 
+const DEFAULT_EDITOR_LAYER_VISIBILITY: Record<ActionEditorLayer, boolean> = {
+  before: true,
+  after: true,
+  action: true,
+};
+
+function EditorLayerEyeIcon({ visible }: { visible: boolean }) {
+  if (visible) {
+    return (
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+        <path
+          fill="currentColor"
+          d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0-8c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3z"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"
+      />
+    </svg>
+  );
+}
+
 function stackEditLayers<L extends ActionEditorLayer>(
   layers: readonly L[],
   active: ActionEditorTarget,
@@ -133,6 +166,7 @@ function hitTestLayer(
   layout: EditorLayout,
   active: ActionEditorTarget,
   hasAfterImage: boolean,
+  layerVisibility: Record<ActionEditorLayer, boolean>,
 ): ActionEditorLayer | null {
   const rect = editorEl.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return null;
@@ -141,6 +175,7 @@ function hitTestLayer(
   const y = (clientY - rect.top) / rect.height;
 
   for (const layer of hitTestLayerOrder(active)) {
+    if (!layerVisibility[layer]) continue;
     if (layer === 'after' && !hasAfterImage) continue;
     const pos = clampLayerPosition(editorLayerPosition(layout, layer));
     if (
@@ -224,13 +259,12 @@ function applyDrag(
   return clamp({ topRatio, leftRatio, widthRatio, heightRatio });
 }
 
-export function ActionEditor({
+export const ActionEditor = forwardRef<ActionEditorHandle, ActionEditorProps>(function ActionEditor({
   project,
   content,
   onChange,
-  onImportImage,
-  onImportImageFromClipboard,
-}: ActionEditorProps) {
+  onRequestImagePicker,
+}, ref) {
   const stored = parseActionData(content);
   const metaRef = useRef({
     image_before: stored.image_before,
@@ -250,9 +284,18 @@ export function ActionEditor({
   layoutRef.current = layout;
 
   const [activeTarget, setActiveTarget] = useState<ActionEditorTarget>('before');
-  const [pickerTarget, setPickerTarget] = useState<'before' | 'after' | null>(null);
+  const [layerVisibility, setLayerVisibility] = useState(DEFAULT_EDITOR_LAYER_VISIBILITY);
   const editorRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<EditorDragState | null>(null);
+
+  const isEditorLayerVisible = useCallback(
+    (layer: ActionEditorLayer) => layerVisibility[layer],
+    [layerVisibility],
+  );
+
+  const toggleLayerVisibility = useCallback((layer: ActionEditorLayer) => {
+    setLayerVisibility((prev) => ({ ...prev, [layer]: !prev[layer] }));
+  }, []);
 
   const commitLayout = useCallback(
     (next: EditorLayout) => {
@@ -318,6 +361,7 @@ export function ActionEditor({
       layoutRef.current,
       activeTarget,
       Boolean(metaRef.current.image_after.trim()),
+      layerVisibility,
     );
     if (layer) {
       beginLayerDrag(event, layer, 'move');
@@ -385,10 +429,14 @@ export function ActionEditor({
   const canvasImageLayers = stackEditLayers(
     ['before', 'after'] as const,
     activeTarget,
-    (layer) => layer === 'before' || Boolean(afterFilename),
+    (layer) => (layer === 'before' || Boolean(afterFilename)) && isEditorLayerVisible(layer),
   );
 
-  const frameOutlineLayers = stackEditLayers(['before', 'after', 'action'] as const, activeTarget);
+  const frameOutlineLayers = stackEditLayers(
+    ['before', 'after', 'action'] as const,
+    activeTarget,
+    (layer) => isEditorLayerVisible(layer),
+  );
 
   const renderCanvasLayerImage = (layer: 'before' | 'after') => {
     const src = layer === 'before' ? beforeSrc : afterSrc;
@@ -462,6 +510,7 @@ export function ActionEditor({
     if (activeTarget === 'frame') return null;
     if (activeTarget === 'before' && !metaRef.current.image_before.trim()) return null;
     if (activeTarget === 'after' && !afterFilename) return null;
+    if (!isEditorLayerVisible(activeTarget)) return null;
 
     const layer = activeTarget;
     const position = editorLayerPosition(layout, layer);
@@ -525,7 +574,11 @@ export function ActionEditor({
     });
 
   const selectBeforeImage = async (filename: string, imageSrc?: string) => {
-    metaRef.current = { ...metaRef.current, image_before: filename };
+    const nextMeta = { ...metaRef.current, image_before: filename };
+    metaRef.current = nextMeta;
+    // Persist filename immediately so async gap does not lose it when metaRef re-syncs from content.
+    onChange(serializeActionData(editorLayoutToStored(layoutRef.current, nextMeta)));
+
     let nextLayout = layoutRef.current;
     const src = imageSrc ?? project.imageUrls.get(filename.trim());
     if (src) {
@@ -536,9 +589,63 @@ export function ActionEditor({
         // Keep layout if dimensions unavailable.
       }
     }
-    commitLayout(nextLayout);
-    setPickerTarget(null);
+    layoutRef.current = nextLayout;
+    setLayout(nextLayout);
+    onChange(serializeActionData(editorLayoutToStored(nextLayout, nextMeta)));
   };
+
+  const fitImageInFrame = async (target: ActionImagePickerTarget) => {
+    const filename =
+      target === 'before' ? metaRef.current.image_before.trim() : metaRef.current.image_after.trim();
+    if (!filename) return;
+
+    const src = project.imageUrls.get(filename);
+    if (!src) return;
+
+    try {
+      const { width, height } = await loadImageNaturalSize(src);
+      const nextLayout = fitEditorLayoutLayerInFrame(layoutRef.current, target, width, height);
+      layoutRef.current = nextLayout;
+      setLayout(nextLayout);
+      onChange(serializeActionData(editorLayoutToStored(nextLayout, metaRef.current)));
+    } catch {
+      // Keep layout if dimensions unavailable.
+    }
+  };
+
+  const selectAfterImage = async (filename: string, imageSrc?: string) => {
+    const nextMeta = { ...metaRef.current, image_after: filename };
+    metaRef.current = nextMeta;
+    onChange(serializeActionData(editorLayoutToStored(layoutRef.current, nextMeta)));
+
+    let nextLayout = layoutRef.current;
+    const src = imageSrc ?? project.imageUrls.get(filename.trim());
+    if (src) {
+      try {
+        const { width, height } = await loadImageNaturalSize(src);
+        nextLayout = fitEditorLayoutToAfterImage(layoutRef.current, width, height);
+      } catch {
+        // Keep layout if dimensions unavailable.
+      }
+    }
+    layoutRef.current = nextLayout;
+    setLayout(nextLayout);
+    onChange(serializeActionData(editorLayoutToStored(nextLayout, nextMeta)));
+  };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      applyImagePick: (target, filename, previewSrc) => {
+        if (target === 'before') {
+          void selectBeforeImage(filename, previewSrc);
+          return;
+        }
+        void selectAfterImage(filename, previewSrc);
+      },
+    }),
+    [onChange, project.imageUrls],
+  );
 
   return (
     <div className="action-editor">
@@ -567,40 +674,110 @@ export function ActionEditor({
 
         <div className="action-editor-field">
           <span className="action-editor-field-label">Before image (required)</span>
-          <button
-            type="button"
-            className="action-editor-picker-btn"
-            onClick={() => setPickerTarget('before')}
-          >
-            {metaRef.current.image_before.trim() || 'Select image'}
-          </button>
+          <div className="action-editor-image-field-row">
+            <button
+              type="button"
+              className="action-editor-picker-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRequestImagePicker?.('before', metaRef.current.image_before);
+              }}
+            >
+              {metaRef.current.image_before.trim() || 'Select image'}
+            </button>
+            <button
+              type="button"
+              className="action-editor-fit-btn"
+              disabled={!metaRef.current.image_before.trim()}
+              title="Fit image inside frame"
+              onClick={(event) => {
+                event.stopPropagation();
+                void fitImageInFrame('before');
+              }}
+            >
+              Fit
+            </button>
+          </div>
         </div>
 
         <div className="action-editor-field">
           <span className="action-editor-field-label">After image (optional)</span>
-          <button
-            type="button"
-            className="action-editor-picker-btn"
-            onClick={() => setPickerTarget('after')}
-          >
-            {metaRef.current.image_after.trim() || 'Select image'}
-          </button>
+          <div className="action-editor-image-field-row">
+            <button
+              type="button"
+              className="action-editor-picker-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRequestImagePicker?.('after', metaRef.current.image_after);
+              }}
+            >
+              {metaRef.current.image_after.trim() || 'Select image'}
+            </button>
+            <button
+              type="button"
+              className="action-editor-fit-btn"
+              disabled={!metaRef.current.image_after.trim()}
+              title="Fit image inside frame"
+              onClick={(event) => {
+                event.stopPropagation();
+                void fitImageInFrame('after');
+              }}
+            >
+              Fit
+            </button>
+          </div>
         </div>
 
         <div className="action-editor-field">
           <span className="action-editor-field-label">Edit layer</span>
           <div className="action-editor-layer-tabs">
-            {EDIT_TARGETS.map((target) => (
-              <button
-                key={target.id}
-                type="button"
-                className={`action-editor-layer-tab${activeTarget === target.id ? ' action-editor-layer-tab-active' : ''}`}
-                style={{ '--action-layer-color': target.color } as React.CSSProperties}
-                onClick={() => selectTarget(target.id)}
-              >
-                {target.label}
-              </button>
-            ))}
+            {EDIT_TARGETS.map((target) => {
+              const tab = (
+                <button
+                  type="button"
+                  className={`action-editor-layer-tab${activeTarget === target.id ? ' action-editor-layer-tab-active' : ''}`}
+                  style={{ '--action-layer-color': target.color } as React.CSSProperties}
+                  onClick={() => selectTarget(target.id)}
+                >
+                  {target.label}
+                </button>
+              );
+
+              if (target.id === 'frame') {
+                return (
+                  <button
+                    key={target.id}
+                    type="button"
+                    className={`action-editor-layer-tab${activeTarget === target.id ? ' action-editor-layer-tab-active' : ''}`}
+                    style={{ '--action-layer-color': target.color } as React.CSSProperties}
+                    onClick={() => selectTarget(target.id)}
+                  >
+                    {target.label}
+                  </button>
+                );
+              }
+
+              const layer = target.id;
+              const visible = layerVisibility[layer];
+              return (
+                <div key={target.id} className="action-editor-layer-row">
+                  {tab}
+                  <button
+                    type="button"
+                    className={`action-editor-layer-visibility-btn${visible ? '' : ' action-editor-layer-visibility-btn-off'}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleLayerVisibility(layer);
+                    }}
+                    title={visible ? 'Hide in editor' : 'Show in editor'}
+                    aria-pressed={visible}
+                    aria-label={`${visible ? 'Hide' : 'Show'} ${target.label} in editor`}
+                  >
+                    <EditorLayerEyeIcon visible={visible} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -627,7 +804,7 @@ export function ActionEditor({
             >
               <div className="action-frame-viewport">
                 {stackEditLayers(['before', 'after'] as const, activeTarget, (layer) =>
-                  layer === 'before' || Boolean(afterFilename),
+                  (layer === 'before' || Boolean(afterFilename)) && isEditorLayerVisible(layer),
                 ).map((layer) => renderFrameLayerImage(layer))}
               </div>
               {frameOutlineLayers.map((layer) => renderFrameLayerOutline(layer))}
@@ -651,24 +828,6 @@ export function ActionEditor({
         </div>
       </div>
 
-      {pickerTarget && (
-        <ImagePickerDialog
-          elevated
-          project={project}
-          selectedFilename={pickerTarget === 'before' ? metaRef.current.image_before : metaRef.current.image_after}
-          onSelect={(filename, previewSrc) => {
-            if (pickerTarget === 'before') {
-              void selectBeforeImage(filename, previewSrc);
-              return;
-            }
-            updateMeta({ image_after: filename });
-            setPickerTarget(null);
-          }}
-          onClose={() => setPickerTarget(null)}
-          onImport={onImportImage}
-          onImportFromClipboard={onImportImageFromClipboard}
-        />
-      )}
     </div>
   );
-}
+});

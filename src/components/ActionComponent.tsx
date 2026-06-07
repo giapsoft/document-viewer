@@ -162,7 +162,6 @@ export function ActionComponent({ content, project, pendingImageNames }: ActionC
   useEffect(() => () => clearTimers(), [clearTimers]);
 
   const isRunning = phase !== 'idle';
-  const statusLabel = isRunning ? 'running' : 'idle';
 
   const frameRatioCss = formatRatioForCss(data.frame_ratio);
 
@@ -184,23 +183,35 @@ export function ActionComponent({ content, project, pendingImageNames }: ActionC
       </div>
       <div className="action-frame-footer">
         <div className="action-frame-footer-start">
-          <button
-            type="button"
-            className="action-replay-btn"
-            onClick={(event) => {
-              event.stopPropagation();
-              startRunning();
-            }}
-            title="Replay animation"
-            aria-label="Replay animation"
-          >
-            ↻
-          </button>
+          {isRunning ? (
+            <span
+              className="action-play-indicator"
+              role="status"
+              aria-label="Running"
+              title="Running"
+            >
+              <span className="action-play-spinner" aria-hidden />
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="action-play-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                startRunning();
+              }}
+              title="Play animation"
+              aria-label="Play animation"
+            >
+              <span className="action-play-icon" aria-hidden>
+                ▶
+              </span>
+            </button>
+          )}
           {data.title.trim() && (
             <span className="action-frame-title">{data.title}</span>
           )}
         </div>
-        <span className={`action-status action-status-${statusLabel}`}>{statusLabel}</span>
       </div>
     </div>
   );
