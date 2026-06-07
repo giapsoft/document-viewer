@@ -4,7 +4,6 @@ import { EditBar } from './EditBar';
 import { WorkspaceTopBar } from './WorkspaceTopBar';
 import { ProjectToolbar } from './ProjectToolbar';
 import { SaveDestinationDialog, type SaveDestination } from './SaveDestinationDialog';
-import { SaveDocDialog } from './SaveDocDialog';
 import { RemoteConflictDialog } from './RemoteConflictDialog';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
@@ -227,7 +226,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const [toolbarLoading, setToolbarLoading] = useState(false);
   const [toolbarError, setToolbarError] = useState(null as string | null);
   const [saveDestinationOpen, setSaveDestinationOpen] = useState(false);
-  const [remoteTitleOpen, setRemoteTitleOpen] = useState(false);
   const [remoteConflictOpen, setRemoteConflictOpen] = useState(false);
   const [pendingRemoteTitle, setPendingRemoteTitle] = useState<string | undefined>();
 
@@ -277,7 +275,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     setSaveDestinationOpen(true);
   };
 
-  const handleChooseDestination = (destination: SaveDestination) => {
+  const handleChooseDestination = (destination: SaveDestination, remoteTitle?: string) => {
     setSaveDestinationOpen(false);
 
     if (destination === 'local') {
@@ -289,14 +287,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
       return;
     }
 
-    if (!dirty) return;
-
-    if (project.remoteDocId) {
-      void runToolbarAction(async () => runRemoteSave());
-      return;
-    }
-
-    setRemoteTitleOpen(true);
+    void runToolbarAction(async () => runRemoteSave(remoteTitle));
   };
 
   const handleClose = () => {
@@ -468,17 +459,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
           onDeleteRemote={() => {
             setSaveDestinationOpen(false);
             void runToolbarAction(deleteRemoteLink);
-          }}
-        />
-      )}
-
-      {remoteTitleOpen && (
-        <SaveDocDialog
-          project={project}
-          onClose={() => setRemoteTitleOpen(false)}
-          onConfirm={(title) => {
-            setRemoteTitleOpen(false);
-            void runToolbarAction(async () => runRemoteSave(title));
           }}
         />
       )}

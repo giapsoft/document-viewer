@@ -59,11 +59,7 @@ export function ProjectToolbar({
         className="project-folder-btn project-folder-btn-primary"
         onClick={onSave}
         disabled={!canSave || loading || saveStatus === 'saving'}
-        title={
-          dirty
-            ? 'Export document (local folder or remote storage)'
-            : 'Export document to local folder'
-        }
+        title="Export document (local folder or remote storage)"
       >
         Export
       </button>

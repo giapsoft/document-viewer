@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { LoadedProject } from '../types';
 import { buildDocShareUrl } from '../lib/docUrl';
-import { defaultRemoteTitle } from '../lib/projectBundle';
+import { defaultRemoteTitle, normalizeDocumentTitle } from '../lib/projectBundle';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 
 export type SaveDestination = 'local' | 'remote';
@@ -10,7 +10,7 @@ interface SaveDestinationDialogProps {
   project: LoadedProject;
   dirty: boolean;
   onClose: () => void;
-  onChoose: (destination: SaveDestination) => void;
+  onChoose: (destination: SaveDestination, remoteTitle?: string) => void;
   onDeleteRemote?: () => void;
 }
 
@@ -27,6 +27,9 @@ export function SaveDestinationDialog({
   const canPickLocal = Boolean(window.showDirectoryPicker);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [remoteTitleDraft, setRemoteTitleDraft] = useState(
+    () => project.remoteTitle ?? defaultRemoteTitle(project),
+  );
 
   const handleCopyLink = async () => {
     if (!project.remoteDocId) return;
@@ -55,15 +58,29 @@ export function SaveDestinationDialog({
       ? 'Choose a folder on your computer.'
       : 'Folder saving requires Chrome or Edge.';
 
-  const remoteHint = !dirty
-    ? 'No unsaved changes — remote save is only needed after you edit.'
-    : hasRemoteDoc
-      ? `Update “${project.remoteTitle ?? defaultRemoteTitle(project)}” in remote storage.`
-      : remoteStorageReady
-        ? 'Create a new document in remote storage (you will name it).'
-        : 'Remote storage is not available on this site.';
-
   const remoteTitle = project.remoteTitle ?? defaultRemoteTitle(project);
+  const normalizedDraft = normalizeDocumentTitle(remoteTitleDraft);
+  const normalizedCurrent = normalizeDocumentTitle(remoteTitle);
+  const titleChanged = hasRemoteDoc && normalizedDraft !== normalizedCurrent;
+  const canPublishRemote = !hasRemoteDoc;
+  const canChooseRemote =
+    remoteStorageReady &&
+    normalizedDraft.length > 0 &&
+    (dirty || canPublishRemote || titleChanged);
+
+  const remoteHint = !remoteStorageReady
+    ? 'Remote storage is not available on this site.'
+    : normalizedDraft.length === 0
+      ? 'Enter a document title above.'
+      : canPublishRemote
+        ? dirty
+          ? 'Publish your changes to remote storage for the first time.'
+          : 'Publish this document to remote storage for the first time.'
+        : titleChanged && !dirty
+          ? 'Rename the remote document (no other unsaved changes).'
+          : dirty
+            ? `Update “${normalizedDraft}” in remote storage.`
+            : 'No unsaved changes — remote update is not needed.';
   const shareUrl = hasRemoteDoc ? buildDocShareUrl(project.remoteDocId!) : '';
 
   const selectLinkInput = (event: { currentTarget: HTMLInputElement }) => {
@@ -118,29 +135,45 @@ export function SaveDestinationDialog({
             </>
           ) : (
             <>
-              <p className="save-destination-intro">Choose where to export your changes.</p>
+              <p className="save-destination-intro">
+                {canPublishRemote
+                  ? 'Publish to remote storage or export to a local folder.'
+                  : 'Choose where to export your changes.'}
+              </p>
 
-              {hasRemoteDoc && (
-                <section className="save-destination-section save-destination-link-section">
-                  <h3 className="save-destination-section-title">Remote link</h3>
-                  <div className="save-destination-link-field">
+              {remoteStorageReady && (
+                <section className="save-destination-section save-destination-remote-section">
+                  <h3 className="save-destination-section-title">Remote document</h3>
+                  <label className="save-destination-title-field">
+                    <span className="save-destination-title-label">Document title</span>
                     <input
                       type="text"
-                      readOnly
-                      className="save-destination-link-input"
-                      value={shareUrl}
-                      aria-label="Remote document link"
-                      onFocus={selectLinkInput}
-                      onClick={selectLinkInput}
+                      className="save-destination-title-input"
+                      value={remoteTitleDraft}
+                      onChange={(e) => setRemoteTitleDraft(e.target.value)}
+                      placeholder="Document title"
                     />
-                    <button
-                      type="button"
-                      className="save-destination-link-copy"
-                      onClick={() => void handleCopyLink()}
-                    >
-                      {copyFeedback ?? 'Copy'}
-                    </button>
-                  </div>
+                  </label>
+                  {hasRemoteDoc && (
+                    <div className="save-destination-link-field">
+                      <input
+                        type="text"
+                        readOnly
+                        className="save-destination-link-input"
+                        value={shareUrl}
+                        aria-label="Remote document link"
+                        onFocus={selectLinkInput}
+                        onClick={selectLinkInput}
+                      />
+                      <button
+                        type="button"
+                        className="save-destination-link-copy"
+                        onClick={() => void handleCopyLink()}
+                      >
+                        {copyFeedback ?? 'Copy'}
+                      </button>
+                    </div>
+                  )}
                 </section>
               )}
 
@@ -159,8 +192,8 @@ export function SaveDestinationDialog({
                   <button
                     type="button"
                     className="save-destination-option"
-                    disabled={!remoteStorageReady || !dirty}
-                    onClick={() => onChoose('remote')}
+                    disabled={!canChooseRemote}
+                    onClick={() => onChoose('remote', normalizedDraft)}
                   >
                     <span className="save-destination-option-title">Remote storage</span>
                     <span className="save-destination-option-hint">{remoteHint}</span>
