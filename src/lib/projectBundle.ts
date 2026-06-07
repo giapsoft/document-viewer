@@ -1,28 +1,12 @@
-import JSZip from 'jszip';
-import type { LoadedProject, RelationsFile, RemoteSyncState } from '../types';
-import { commentsForPersistence } from './comments';
+import type { LoadedProject, RelationsFile } from '../types';
 import { serializePageComponents } from './pageIds';
-import { mdSidecarFileName, componentIdFromMdFileName, MD_FILE_EXT } from './mdFiles';
+import { mdSidecarFileName } from './mdFiles';
 import { assembleProject, type RawProjectInput } from './loadProject';
-import { fingerprintBlob } from './fileFingerprint';
 
 const PAGE_EXT = /\.p$/i;
 const IMAGE_EXT = /\.(jpg|jpeg|png|gif)$/i;
 
 export const STORAGE_BUCKET = 'docs';
-export const BUNDLE_FILE_NAME = 'bundle.zip';
-const RELATIONS_ZIP_PATH = 'relations.json';
-const GROUPS_ZIP_PATH = 'groups.json';
-const COMMENTS_ZIP_PATH = 'comments.json';
-const DOCS_ZIP_PREFIX = 'docs/';
-
-export function storagePrefix(docId: string): string {
-  return docId;
-}
-
-export function bundleStoragePath(docId: string): string {
-  return `${docId}/${BUNDLE_FILE_NAME}`;
-}
 
 export function relationsStoragePath(docId: string): string {
   return `${docId}/relations.json`;
@@ -76,105 +60,6 @@ export function projectToRawInput(project: LoadedProject): RawProjectInput {
   };
 }
 
-/** Strip groups and comments — those go in their own ZIP entries. */
-function relationsMetaOnly(relations: RelationsFile): Omit<RelationsFile, 'groups' | 'comments'> {
-  const { groups: _g, comments: _c, ...meta } = relations;
-  return meta;
-}
-
-export async function packProjectBundle(project: LoadedProject): Promise<Blob> {
-  const raw = projectToRawInput(project);
-  const zip = new JSZip();
-
-  // relations.json — page metadata only (names, order, pins)
-  zip.file(RELATIONS_ZIP_PATH, `${JSON.stringify(relationsMetaOnly(raw.relations), null, 2)}\n`);
-  // groups.json and comments.json as separate entries
-  zip.file(GROUPS_ZIP_PATH, `${JSON.stringify(raw.relations.groups ?? [], null, 2)}\n`);
-  zip.file(
-    COMMENTS_ZIP_PATH,
-    `${JSON.stringify(commentsForPersistence(raw.relations.comments ?? []), null, 2)}\n`,
-  );
-
-  for (const page of raw.pageFiles) {
-    zip.file(`${DOCS_ZIP_PREFIX}${page.name}`, `${JSON.stringify(page.content, null, 2)}\n`);
-  }
-
-  const referencedMd = collectReferencedMdFiles(project);
-  for (const [componentId, content] of referencedMd.entries()) {
-    zip.file(`${DOCS_ZIP_PREFIX}${mdSidecarFileName(componentId)}`, content);
-  }
-
-  for (const { name, blob } of raw.imageFiles) {
-    zip.file(`${DOCS_ZIP_PREFIX}${name}`, blob);
-  }
-
-  return zip.generateAsync({
-    type: 'blob',
-    compression: 'DEFLATE',
-    compressionOptions: { level: 6 },
-  });
-}
-
-export async function unpackProjectBundle(bundle: Blob): Promise<RawProjectInput> {
-  const zip = await JSZip.loadAsync(bundle);
-  const relationsEntry = zip.file(RELATIONS_ZIP_PATH);
-  if (!relationsEntry) {
-    throw new Error('Bundle is missing relations.json');
-  }
-
-  const relationsMeta = relationsFromRaw(JSON.parse(await relationsEntry.async('text')));
-
-  // New bundles have separate group/comment files; fall back to reading from relations.json
-  const groupsEntry = zip.file(GROUPS_ZIP_PATH);
-  const groups: string[][] = groupsEntry
-    ? (JSON.parse(await groupsEntry.async('text')) as string[][])
-    : ((relationsMeta as RelationsFile).groups ?? []);
-
-  const commentsEntry = zip.file(COMMENTS_ZIP_PATH);
-  const comments = commentsEntry
-    ? (JSON.parse(await commentsEntry.async('text')) as unknown[])
-    : ((relationsMeta as RelationsFile).comments ?? []);
-
-  const relations: RelationsFile = { ...relationsMeta, groups, comments: comments as RelationsFile['comments'] };
-
-  const pageFiles: { name: string; content: unknown }[] = [];
-  const imageFiles: { name: string; blob: Blob }[] = [];
-  const mdFiles: { componentId: string; content: string }[] = [];
-
-  const skipPaths = new Set([RELATIONS_ZIP_PATH, GROUPS_ZIP_PATH, COMMENTS_ZIP_PATH]);
-  for (const [path, entry] of Object.entries(zip.files)) {
-    if (entry.dir || skipPaths.has(path)) continue;
-    if (!path.startsWith(DOCS_ZIP_PREFIX)) continue;
-
-    const fileName = path.slice(DOCS_ZIP_PREFIX.length);
-    if (!fileName) continue;
-
-    if (isPageFileName(fileName)) {
-      pageFiles.push({ name: fileName, content: JSON.parse(await entry.async('text')) });
-    } else if (isImageFileName(fileName)) {
-      imageFiles.push({ name: fileName, blob: await entry.async('blob') });
-    } else if (MD_FILE_EXT.test(fileName)) {
-      const componentId = componentIdFromMdFileName(fileName);
-      if (componentId) {
-        mdFiles.push({ componentId, content: await entry.async('text') });
-      }
-    }
-  }
-
-  if (pageFiles.length === 0) {
-    throw new Error('Bundle has no page files');
-  }
-
-  return { pageFiles, relations, stylesPartial: null, imageFiles, mdFiles };
-}
-
-export async function createBundleSyncState(bundle: Blob): Promise<RemoteSyncState> {
-  return {
-    format: 'bundle',
-    bundleHash: await fingerprintBlob(bundle),
-  };
-}
-
 export function assembleLoadedProject(
   input: RawProjectInput,
   meta: {
@@ -182,7 +67,7 @@ export function assembleLoadedProject(
     remoteDocId?: string | null;
     remoteTitle?: string | null;
     folderHandle?: FileSystemDirectoryHandle | null;
-    remoteSync?: RemoteSyncState | null;
+    remoteSync?: LoadedProject['remoteSync'];
     remoteUpdatedAt?: string | null;
   },
 ): LoadedProject {
@@ -239,9 +124,7 @@ export function isRelationsPath(path: string, docId: string): boolean {
   return path === relationsStoragePath(docId);
 }
 
-export function isBundlePath(path: string, docId: string): boolean {
-  return path === bundleStoragePath(docId);
-}
+export type RemoteImageHandler = (name: string, blob: Blob) => void;
 
 export { mdSidecarFileName, PAGE_EXT, IMAGE_EXT };
 

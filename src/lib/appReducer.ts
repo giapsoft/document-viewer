@@ -648,7 +648,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
-    case 'ADD_IMAGE': {
+    case 'ADD_IMAGE':
+    case 'HYDRATE_IMAGE': {
       if (!state.project) return state;
       const imageUrls = new Map(state.project.imageUrls);
       const imageBlobs = new Map(state.project.imageBlobs);

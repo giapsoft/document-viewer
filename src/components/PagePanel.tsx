@@ -171,6 +171,7 @@ interface ComponentBlockProps {
   pageFile: string;
   selection: SelectionState | null;
   highlightedIds: Set<string> | null;
+  pendingImageNames?: ReadonlySet<string>;
   linkMode?: boolean;
   linkGroupMembers?: Set<string>;
   commentLinkMode?: boolean;
@@ -257,6 +258,7 @@ export function ComponentBlock({
   highlightedIds,
   linkMode = false,
   linkGroupMembers,
+  pendingImageNames,
   commentLinkMode = false,
   commentLinkPreviewAnchor = null,
   mdHighlightRanges = [],
@@ -349,6 +351,7 @@ export function ComponentBlock({
 
   if (resolved.type === 'img') {
     const src = project.imageUrls.get(resolved.content);
+    const isPending = pendingImageNames?.has(resolved.content) ?? false;
     return (
       <ComponentShell
         {...shellProps}
@@ -357,6 +360,8 @@ export function ComponentBlock({
       >
         {src ? (
           <img src={src} alt={resolved.content} className="component-img" />
+        ) : isPending ? (
+          <span className="loading-image">Loading image…</span>
         ) : (
           <span className="broken-image">🖼 {resolved.content} (not found)</span>
         )}
@@ -479,6 +484,7 @@ interface PagePanelProps {
   selection: SelectionState | null;
   linkMode?: boolean;
   linkGroupMembers?: Set<string>;
+  pendingImageNames?: ReadonlySet<string>;
   onToggle: () => void;
   onSelect: (componentId: string, pageFile: string) => void;
   onClearSelection: () => void;
@@ -506,6 +512,7 @@ export function PagePanel({
   selection,
   linkMode = false,
   linkGroupMembers,
+  pendingImageNames,
   onToggle,
   onSelect,
   onClearSelection,
@@ -846,6 +853,7 @@ export function PagePanel({
                   highlightedIds={highlightedOnPage}
                   linkMode={linkMode}
                   linkGroupMembers={linkGroupMembers}
+                  pendingImageNames={pendingImageNames}
                   commentLinkMode={commentLinkMode}
                   commentLinkPreviewAnchor={commentLinkPreviewAnchor}
                   mdHighlightRanges={

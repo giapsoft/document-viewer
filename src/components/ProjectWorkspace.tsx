@@ -29,6 +29,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     dirty,
     saveStatus,
     saveError,
+    pendingRemoteImages,
     toggleSidebar,
     expandSidebar,
     openPage,
@@ -400,6 +401,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 selection={state.selection}
                 linkMode={state.linkMode}
                 linkGroupMembers={linkGroupMembers}
+                pendingImageNames={pendingRemoteImages}
                 onToggle={() => togglePanel(panel.pageFile)}
                 onSelect={handleComponentClick}
                 onClearSelection={clearSelection}

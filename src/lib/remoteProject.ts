@@ -5,10 +5,10 @@ import { mapWithConcurrency, runWithConcurrency, DEFAULT_CONCURRENCY } from './c
 import { fingerprintBlob } from './fileFingerprint';
 import {
   assembleLoadedProject,
-  BUNDLE_FILE_NAME,
-  bundleStoragePath,
+  collectReferencedImageNames,
   commentsStoragePath,
   defaultRemoteTitle,
+  docsStoragePath,
   groupsStoragePath,
   isCommentsPath,
   isGroupsPath,
@@ -20,7 +20,7 @@ import {
   relationsFromRaw,
   relationsStoragePath,
   STORAGE_BUCKET,
-  unpackProjectBundle,
+  type RemoteImageHandler,
   type RemoteDocumentMeta,
 } from './projectBundle';
 import {
@@ -37,8 +37,27 @@ import {
   mergeCommentsFromServer,
 } from './comments';
 import { pickNewerRemoteUpdatedAt } from './remoteConflict';
+import {
+  clearRemoteDocCache,
+  deleteRemoteCachedPaths,
+  getRemoteCachedFile,
+  putRemoteCachedFile,
+} from './remoteFileCache';
 
 export type { RemoteDocumentMeta };
+
+export type RemoteStorageEntry = {
+  path: string;
+  updatedAt: string | null;
+};
+
+function emptyRemoteSync(): RemoteSyncState {
+  return { fileHashes: new Map() };
+}
+
+function legacyBundlePath(docId: string): string {
+  return `${docId}/bundle.zip`;
+}
 
 function remoteSyncEqual(
   a: LoadedProject['remoteSync'],
@@ -46,9 +65,8 @@ function remoteSyncEqual(
 ): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  if (a.format !== b.format || a.bundleHash !== b.bundleHash) return false;
-  const aHashes = a.fileHashes ?? new Map();
-  const bHashes = b.fileHashes ?? new Map();
+  const aHashes = a.fileHashes;
+  const bHashes = b.fileHashes;
   if (aHashes.size !== bHashes.size) return false;
   for (const [path, hash] of aHashes) {
     if (bHashes.get(path) !== hash) return false;
@@ -97,7 +115,7 @@ export type SaveRemoteResult = {
 };
 
 export type LoadRemoteOptions = {
-  /** Reserved for future per-file conditional fetch. */
+  /** @deprecated Cache is handled automatically via IndexedDB. */
   cached?: LoadedProject;
 };
 
@@ -113,58 +131,54 @@ export async function fetchRemoteDocumentUpdatedAt(docId: string): Promise<strin
   return data?.updated_at ?? null;
 }
 
-async function remoteStoragePathSet(docId: string): Promise<Set<string>> {
-  return new Set(await listAllStoragePaths(docId));
+async function remoteStorageEntryMap(docId: string): Promise<Map<string, RemoteStorageEntry>> {
+  const entries = await listRemoteDocEntries(docId);
+  return new Map(entries.map((entry) => [entry.path, entry]));
 }
 
 async function downloadKnownStorageFile(
-  existingPaths: Set<string>,
+  entriesByPath: Map<string, RemoteStorageEntry>,
   path: string,
 ): Promise<Blob | null> {
-  if (!existingPaths.has(path)) return null;
-  return downloadStorageFile(path);
+  const entry = entriesByPath.get(path);
+  if (!entry) return null;
+  const { blob } = await fetchRemoteStorageBlob(path, entry.updatedAt);
+  return blob;
 }
 
 export async function fetchRemoteRelations(docId: string): Promise<RelationsFile> {
-  const existingPaths = await remoteStoragePathSet(docId);
-  if (existingPaths.size === 0) return EMPTY_RELATIONS;
+  const entriesByPath = await remoteStorageEntryMap(docId);
+  if (entriesByPath.size === 0) return EMPTY_RELATIONS;
 
   const relPath = relationsStoragePath(docId);
   const groupsPath = groupsStoragePath(docId);
   const commentsPath = commentsStoragePath(docId);
-  const bundlePath = bundleStoragePath(docId);
 
   const [relBlob, groupsBlob, commentsBlob] = await Promise.all([
-    downloadKnownStorageFile(existingPaths, relPath),
-    downloadKnownStorageFile(existingPaths, groupsPath),
-    downloadKnownStorageFile(existingPaths, commentsPath),
+    downloadKnownStorageFile(entriesByPath, relPath),
+    downloadKnownStorageFile(entriesByPath, groupsPath),
+    downloadKnownStorageFile(entriesByPath, commentsPath),
   ]);
 
-  if (relBlob || groupsBlob || commentsBlob) {
-    const meta = relBlob
-      ? relationsFromRaw(JSON.parse(await relBlob.text()))
-      : { groups: [] as string[][] };
-
-    // New format: groups and comments are in separate files
-    // Old format: groups and comments are embedded in relations.json (backward compat)
-    const groups: string[][] = groupsBlob
-      ? (JSON.parse(await groupsBlob.text()) as string[][])
-      : ((meta as RelationsFile).groups ?? []);
-
-    const comments = commentsBlob
-      ? (JSON.parse(await commentsBlob.text()) as RelationsFile['comments'])
-      : ((meta as RelationsFile).comments ?? []);
-
-    return normalizeRelations({ ...meta, groups, comments });
+  if (!relBlob && !groupsBlob && !commentsBlob) {
+    return EMPTY_RELATIONS;
   }
 
-  const bundle = await downloadKnownStorageFile(existingPaths, bundlePath);
-  if (bundle) {
-    const input = await unpackProjectBundle(bundle);
-    return normalizeRelations(input.relations);
-  }
+  const meta = relBlob
+    ? relationsFromRaw(JSON.parse(await relBlob.text()))
+    : { groups: [] as string[][] };
 
-  return EMPTY_RELATIONS;
+  // New format: groups and comments are in separate files
+  // Old format: groups and comments are embedded in relations.json (backward compat)
+  const groups: string[][] = groupsBlob
+    ? (JSON.parse(await groupsBlob.text()) as string[][])
+    : ((meta as RelationsFile).groups ?? []);
+
+  const comments = commentsBlob
+    ? (JSON.parse(await commentsBlob.text()) as RelationsFile['comments'])
+    : ((meta as RelationsFile).comments ?? []);
+
+  return normalizeRelations({ ...meta, groups, comments });
 }
 
 export async function listRemoteDocuments(): Promise<RemoteDocumentMeta[]> {
@@ -178,31 +192,90 @@ export async function listRemoteDocuments(): Promise<RemoteDocumentMeta[]> {
   return (data ?? []) as RemoteDocumentMeta[];
 }
 
-async function listAllStoragePaths(docId: string): Promise<string[]> {
+async function listRemoteDocEntries(docId: string): Promise<RemoteStorageEntry[]> {
   const supabase = getSupabaseClient();
-  const paths: string[] = [];
+  const entries: RemoteStorageEntry[] = [];
 
-  const listFolder = async (folder: string) => {
-    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).list(folder, {
-      limit: 1000,
-    });
-    if (error) {
-      // First save: document folder may not exist yet
-      if (error.message.toLowerCase().includes('not found')) return;
-      throw new Error(error.message);
+  const { data: rootData, error: rootError } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .list(docId, { limit: 1000 });
+  if (rootError) {
+    if (!rootError.message.toLowerCase().includes('not found')) {
+      throw new Error(rootError.message);
     }
-    for (const entry of data ?? []) {
-      const path = folder ? `${folder}/${entry.name}` : entry.name;
-      if (entry.id === null) {
-        await listFolder(path);
-      } else {
-        paths.push(path);
-      }
+  } else {
+    for (const entry of rootData ?? []) {
+      if (entry.id === null) continue;
+      if (entry.name === 'bundle.zip') continue;
+      entries.push({
+        path: `${docId}/${entry.name}`,
+        updatedAt: entry.updated_at ?? null,
+      });
     }
-  };
+  }
 
-  await listFolder(docId);
-  return paths;
+  const docsPrefix = `${docId}/docs`;
+  const { data: docsData, error: docsError } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .list(docsPrefix, { limit: 1000 });
+  if (docsError) {
+    if (!docsError.message.toLowerCase().includes('not found')) {
+      throw new Error(docsError.message);
+    }
+  } else {
+    for (const entry of docsData ?? []) {
+      if (entry.id === null) continue;
+      entries.push({
+        path: `${docsPrefix}/${entry.name}`,
+        updatedAt: entry.updated_at ?? null,
+      });
+    }
+  }
+
+  return entries.filter((entry) => entry.path !== legacyBundlePath(docId));
+}
+
+async function fetchRemoteStorageBlob(
+  path: string,
+  storageUpdatedAt: string | null,
+): Promise<{ blob: Blob; hash: string }> {
+  if (storageUpdatedAt) {
+    const cached = await getRemoteCachedFile(path);
+    if (cached && cached.storageUpdatedAt === storageUpdatedAt) {
+      return { blob: cached.blob, hash: cached.hash };
+    }
+  }
+
+  const blob = await downloadStorageFile(path);
+  const hash = await fingerprintBlob(blob);
+  await putRemoteCachedFile({ path, blob, hash, storageUpdatedAt });
+  return { blob, hash };
+}
+
+async function refreshRemoteCacheAfterSave(
+  docId: string,
+  uploadPaths: string[],
+  fileMap: Map<string, Blob>,
+  fileHashes: Map<string, string>,
+): Promise<void> {
+  if (uploadPaths.length === 0) return;
+  const entries = await listRemoteDocEntries(docId);
+  const updatedAtByPath = new Map(entries.map((entry) => [entry.path, entry.updatedAt]));
+  await mapWithConcurrency(
+    uploadPaths,
+    async (path) => {
+      const blob = fileMap.get(path);
+      const hash = fileHashes.get(path);
+      if (!blob || !hash) return;
+      await putRemoteCachedFile({
+        path,
+        blob,
+        hash,
+        storageUpdatedAt: updatedAtByPath.get(path) ?? null,
+      });
+    },
+    DEFAULT_CONCURRENCY,
+  );
 }
 
 async function downloadStorageFile(path: string): Promise<Blob> {
@@ -249,10 +322,15 @@ async function uploadStorageFile(path: string, body: Blob | string): Promise<voi
   if (error) throw new Error(error.message);
 }
 
-function filterDocumentPaths(docId: string, paths: string[]): string[] {
-  return paths.filter(
-    (path) => path !== bundleStoragePath(docId) && !path.endsWith(`/${BUNDLE_FILE_NAME}`),
-  );
+function isRemoteImageStoragePath(path: string, docId: string): boolean {
+  if (!path.startsWith(`${docId}/`)) return false;
+  const baseName = path.slice(path.lastIndexOf('/') + 1);
+  return isImageFileName(baseName);
+}
+
+function imageFileNameFromStoragePath(path: string, docId: string): string | null {
+  const name = parseStorageFileName(path, docId) ?? path.slice(path.lastIndexOf('/') + 1);
+  return name || null;
 }
 
 async function parseRemoteFileBlobs(
@@ -314,19 +392,6 @@ async function parseRemoteFileBlobs(
   return { relations, pageFiles, imageFiles, mdFiles };
 }
 
-async function hashFileBlobs(fileBlobs: Map<string, Blob>): Promise<Map<string, string>> {
-  const fileHashes = new Map<string, string>();
-  const hashEntries = await mapWithConcurrency(
-    [...fileBlobs.entries()],
-    async ([path, blob]) => [path, await fingerprintBlob(blob)] as const,
-    DEFAULT_CONCURRENCY,
-  );
-  for (const [path, hash] of hashEntries) {
-    fileHashes.set(path, hash);
-  }
-  return fileHashes;
-}
-
 function createStarterRemoteProject(
   meta: { id: string; title: string; updated_at?: string | null },
   relations: RelationsFile = EMPTY_RELATIONS,
@@ -351,7 +416,7 @@ function createStarterRemoteProject(
       remoteDocId: meta.id,
       remoteTitle: meta.title,
       folderHandle: null,
-      remoteSync: { format: 'files', fileHashes: new Map(), bundleHash: null },
+      remoteSync: emptyRemoteSync(),
       remoteUpdatedAt: meta.updated_at ?? null,
     },
   );
@@ -359,15 +424,16 @@ function createStarterRemoteProject(
 
 async function loadRemoteDocumentFromFiles(
   meta: { id: string; title: string; updated_at?: string | null },
-  paths: string[],
+  entries: RemoteStorageEntry[],
   fileBlobs: Map<string, Blob>,
+  fileHashes: Map<string, string>,
 ): Promise<LoadedProject> {
   const docId = meta.id;
+  const paths = entries.map((entry) => entry.path);
   const parsed = await parseRemoteFileBlobs(docId, paths, fileBlobs);
   if (parsed.pageFiles.length === 0) {
     return createStarterRemoteProject(meta, parsed.relations);
   }
-  const fileHashes = await hashFileBlobs(fileBlobs);
 
   return assembleLoadedProject(
     {
@@ -382,38 +448,138 @@ async function loadRemoteDocumentFromFiles(
       remoteDocId: docId,
       remoteTitle: meta.title,
       folderHandle: null,
-      remoteSync: { format: 'files', fileHashes, bundleHash: null },
+      remoteSync: { fileHashes },
       remoteUpdatedAt: meta.updated_at ?? null,
     },
   );
 }
 
-async function downloadRemotePaths(paths: string[]): Promise<Map<string, Blob>> {
-  const fileBlobs = new Map<string, Blob>();
+async function downloadRemoteEntries(
+  entries: RemoteStorageEntry[],
+): Promise<{ blobs: Map<string, Blob>; hashes: Map<string, string> }> {
+  const blobs = new Map<string, Blob>();
+  const hashes = new Map<string, string>();
   await mapWithConcurrency(
-    paths,
-    async (path) => {
-      fileBlobs.set(path, await downloadStorageFile(path));
+    entries,
+    async (entry) => {
+      const { blob, hash } = await fetchRemoteStorageBlob(entry.path, entry.updatedAt);
+      blobs.set(entry.path, blob);
+      hashes.set(entry.path, hash);
     },
     DEFAULT_CONCURRENCY,
   );
-  return fileBlobs;
+  return { blobs, hashes };
 }
 
-async function loadRemoteDocumentFromBundle(
+export type DeferredRemoteLoad = {
+  project: LoadedProject;
+  /** Call after the project is in app state — starts referenced-image downloads only. */
+  startImages: (onImage: RemoteImageHandler) => void;
+  whenImagesReady: Promise<void>;
+  cancelImageLoad: () => void;
+};
+
+function emptyDeferredLoad(project: LoadedProject): DeferredRemoteLoad {
+  return {
+    project,
+    startImages: () => {},
+    whenImagesReady: Promise.resolve(),
+    cancelImageLoad: () => {},
+  };
+}
+
+async function loadRemoteDocumentFromFilesDeferred(
   meta: { id: string; title: string; updated_at?: string | null },
-  bundle: Blob,
-): Promise<LoadedProject> {
-  const input = await unpackProjectBundle(bundle);
-  const bundleHash = await fingerprintBlob(bundle);
-  return assembleLoadedProject(input, {
-    source: 'remote',
-    remoteDocId: meta.id,
-    remoteTitle: meta.title,
-    folderHandle: null,
-    remoteSync: { format: 'bundle', bundleHash, fileHashes: undefined },
-    remoteUpdatedAt: meta.updated_at ?? null,
+  entries: RemoteStorageEntry[],
+): Promise<DeferredRemoteLoad> {
+  const docId = meta.id;
+  const textEntries = entries.filter((entry) => !isRemoteImageStoragePath(entry.path, docId));
+  const textPaths = textEntries.map((entry) => entry.path);
+  const { blobs: fileBlobs, hashes: textHashes } = await downloadRemoteEntries(textEntries);
+  const parsed = await parseRemoteFileBlobs(docId, textPaths, fileBlobs);
+
+  if (parsed.pageFiles.length === 0) {
+    return emptyDeferredLoad(createStarterRemoteProject(meta, parsed.relations));
+  }
+
+  const project = assembleLoadedProject(
+    {
+      pageFiles: parsed.pageFiles,
+      relations: parsed.relations,
+      stylesPartial: null,
+      imageFiles: [],
+      mdFiles: parsed.mdFiles,
+    },
+    {
+      source: 'remote',
+      remoteDocId: docId,
+      remoteTitle: meta.title,
+      folderHandle: null,
+      remoteSync: { fileHashes: new Map(textHashes) },
+      remoteUpdatedAt: meta.updated_at ?? null,
+    },
+  );
+
+  const entryByPath = new Map(entries.map((entry) => [entry.path, entry]));
+  const imageEntries = [...collectReferencedImageNames(project)]
+    .map((name) => entryByPath.get(docsStoragePath(docId, name)))
+    .filter((entry): entry is RemoteStorageEntry => entry !== undefined);
+
+  const abortController = new AbortController();
+  let resolveDone!: () => void;
+  const whenImagesReady = new Promise<void>((resolve) => {
+    resolveDone = resolve;
   });
+
+  const startImages = (onImage: RemoteImageHandler) => {
+    if (imageEntries.length === 0 || abortController.signal.aborted) {
+      resolveDone();
+      return;
+    }
+    void mapWithConcurrency(
+      imageEntries,
+      async (entry) => {
+        if (abortController.signal.aborted) return;
+        try {
+          const { blob } = await fetchRemoteStorageBlob(entry.path, entry.updatedAt);
+          const fileName = imageFileNameFromStoragePath(entry.path, docId);
+          if (fileName) onImage(fileName, blob);
+        } catch {
+          // Skip missing or failed images; others can still load.
+        }
+      },
+      DEFAULT_CONCURRENCY,
+    ).finally(() => {
+      resolveDone();
+    });
+  };
+
+  return {
+    project,
+    startImages,
+    whenImagesReady,
+    cancelImageLoad: () => abortController.abort(),
+  };
+}
+
+/** Load remote doc: open after text; call `startImages` once project is in state. */
+export async function loadRemoteDocumentDeferred(docId: string): Promise<DeferredRemoteLoad> {
+  const supabase = getSupabaseClient();
+  const { data: meta, error: metaError } = await supabase
+    .from('documents')
+    .select('id, title, updated_at')
+    .eq('id', docId)
+    .maybeSingle();
+
+  if (metaError) throw new Error(metaError.message);
+  if (!meta) throw new Error('Document not found');
+
+  const entries = await listRemoteDocEntries(docId);
+  if (entries.length === 0) {
+    return emptyDeferredLoad(createStarterRemoteProject(meta));
+  }
+
+  return loadRemoteDocumentFromFilesDeferred(meta, entries);
 }
 
 export async function loadRemoteDocument(
@@ -430,26 +596,13 @@ export async function loadRemoteDocument(
   if (metaError) throw new Error(metaError.message);
   if (!meta) throw new Error('Document not found');
 
-  const allPaths = await listAllStoragePaths(docId);
-  const docPaths = filterDocumentPaths(docId, allPaths);
-  const hasMultiFile = docPaths.some((path) => isRelationsPath(path, docId));
-
-  if (hasMultiFile) {
-    const fileBlobs = await downloadRemotePaths(docPaths);
-    return loadRemoteDocumentFromFiles(meta, docPaths, fileBlobs);
+  const entries = await listRemoteDocEntries(docId);
+  if (entries.length === 0) {
+    return createStarterRemoteProject(meta);
   }
 
-  const bundlePath = bundleStoragePath(docId);
-  try {
-    const bundle = await downloadStorageFile(bundlePath);
-    return loadRemoteDocumentFromBundle(meta, bundle);
-  } catch {
-    if (docPaths.length === 0) {
-      return createStarterRemoteProject(meta);
-    }
-    const fileBlobs = await downloadRemotePaths(docPaths);
-    return loadRemoteDocumentFromFiles(meta, docPaths, fileBlobs);
-  }
+  const { blobs: fileBlobs, hashes: fileHashes } = await downloadRemoteEntries(entries);
+  return loadRemoteDocumentFromFiles(meta, entries, fileBlobs, fileHashes);
 }
 
 async function mergeRemoteCommentsIntoProject(
@@ -501,7 +654,7 @@ export async function saveRemoteRelationsFile(
   if (prevHash === nextHash) {
     return {
       mergedProject: projectForSave,
-      remoteSync: project.remoteSync ?? { format: 'files', fileHashes: new Map() },
+      remoteSync: project.remoteSync ?? emptyRemoteSync(),
       remoteUpdatedAt: project.remoteUpdatedAt ?? null,
       skippedUpload: true,
     };
@@ -522,9 +675,7 @@ export async function saveRemoteRelationsFile(
   return {
     mergedProject: projectForSave,
     remoteSync: {
-      format: 'files',
       fileHashes: nextHashes,
-      bundleHash: null,
     },
     remoteUpdatedAt,
     skippedUpload: false,
@@ -546,13 +697,13 @@ export async function syncRemoteComments(
   if (!docId) return null;
 
   try {
-    const existingPaths = await remoteStoragePathSet(docId);
+    const entriesByPath = await remoteStorageEntryMap(docId);
     const commentsPath = commentsStoragePath(docId);
 
     // Fetch only comments.json; fall back to full relations if it doesn't exist yet
     let remoteComments: RelationsFile['comments'];
     let commentsHash: string;
-    const commentsBlob = await downloadKnownStorageFile(existingPaths, commentsPath);
+    const commentsBlob = await downloadKnownStorageFile(entriesByPath, commentsPath);
     if (commentsBlob) {
       remoteComments = JSON.parse(await commentsBlob.text()) as RelationsFile['comments'];
       commentsHash = await fingerprintBlob(commentsBlob);
@@ -581,10 +732,7 @@ export async function syncRemoteComments(
         ...project,
         remoteUpdatedAt,
         remoteSync: {
-          ...(project.remoteSync ?? { format: 'files' as const }),
-          format: 'files' as const,
           fileHashes: nextHashes,
-          bundleHash: null,
         },
       };
     }
@@ -604,10 +752,7 @@ export async function syncRemoteComments(
       relations: { ...project.relations, comments: mergedComments },
       remoteUpdatedAt,
       remoteSync: {
-        ...(project.remoteSync ?? { format: 'files' as const }),
-        format: 'files' as const,
         fileHashes: nextHashes,
-        bundleHash: null,
       },
     };
   } catch {
@@ -627,8 +772,8 @@ export async function syncRemoteRelations(
 
   try {
     const prevHashes = project.remoteSync?.fileHashes;
-    const existingPaths = await remoteStoragePathSet(docId);
-    if (existingPaths.size === 0) return null;
+    const entriesByPath = await remoteStorageEntryMap(docId);
+    if (entriesByPath.size === 0) return null;
 
     const relPath = relationsStoragePath(docId);
     const groupsPath = groupsStoragePath(docId);
@@ -636,9 +781,9 @@ export async function syncRemoteRelations(
 
     // Fetch only relation files that already exist on the server
     const [relBlob, groupsBlob, commentsBlob] = await Promise.all([
-      downloadKnownStorageFile(existingPaths, relPath),
-      downloadKnownStorageFile(existingPaths, groupsPath),
-      downloadKnownStorageFile(existingPaths, commentsPath),
+      downloadKnownStorageFile(entriesByPath, relPath),
+      downloadKnownStorageFile(entriesByPath, groupsPath),
+      downloadKnownStorageFile(entriesByPath, commentsPath),
     ]);
 
     if (!relBlob && !groupsBlob && !commentsBlob) return null;
@@ -688,7 +833,7 @@ export async function syncRemoteRelations(
     return {
       ...rebuilt,
       remoteUpdatedAt,
-      remoteSync: { format: 'files', fileHashes: nextHashes, bundleHash: null },
+      remoteSync: { fileHashes: nextHashes },
     };
   } catch {
     return null;
@@ -719,9 +864,7 @@ export async function saveRemoteDocument(
 
   const removePaths = [
     ...listRemovedRemotePaths(prevHashes, nextPaths),
-    ...(await listAllStoragePaths(docId)).filter(
-      (path) => path === bundleStoragePath(docId) || path.endsWith(`/${BUNDLE_FILE_NAME}`),
-    ),
+    legacyBundlePath(docId),
   ];
 
   const skippedUpload = uploadPaths.length === 0 && removePaths.length === 0;
@@ -735,10 +878,12 @@ export async function saveRemoteDocument(
       },
       DEFAULT_CONCURRENCY,
     );
+    await refreshRemoteCacheAfterSave(docId, uploadPaths, fileMap, nextHashes);
   }
 
   if (removePaths.length > 0) {
     await removeStoragePaths(removePaths);
+    await deleteRemoteCachedPaths(removePaths);
   }
 
   const titleChanged =
@@ -754,9 +899,7 @@ export async function saveRemoteDocument(
   return {
     skippedUpload,
     remoteSync: {
-      format: 'files',
       fileHashes: nextHashes,
-      bundleHash: null,
     },
     remoteUpdatedAt,
     mergedProject: projectForSave,
@@ -791,8 +934,12 @@ export async function createRemoteDocument(
 
 export async function deleteRemoteDocument(docId: string): Promise<void> {
   const supabase = getSupabaseClient();
-  const paths = await listAllStoragePaths(docId);
+  const paths = (await listRemoteDocEntries(docId)).map((entry) => entry.path);
+  if (!paths.includes(legacyBundlePath(docId))) {
+    paths.push(legacyBundlePath(docId));
+  }
   await removeStoragePaths(paths);
+  await clearRemoteDocCache(docId);
   const { error } = await supabase.from('documents').delete().eq('id', docId);
   if (error) throw new Error(error.message);
 }

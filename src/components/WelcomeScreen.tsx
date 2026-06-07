@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { pickProjectFolder } from '../lib/loadProject';
 import { VersionBadge } from './VersionBadge';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
@@ -41,6 +41,9 @@ export function WelcomeScreen({ onLoaded, onLoadRemoteDoc }: WelcomeScreenProps)
     void refreshRemoteDocs();
   }, [supabaseReady]);
 
+  const onLoadRemoteDocRef = useRef(onLoadRemoteDoc);
+  onLoadRemoteDocRef.current = onLoadRemoteDoc;
+
   useEffect(() => {
     const docId = getDocIdFromUrl();
     if (!docId || !supabaseReady) return;
@@ -48,7 +51,7 @@ export function WelcomeScreen({ onLoaded, onLoadRemoteDoc }: WelcomeScreenProps)
     let cancelled = false;
     setLoading(true);
     setError(null);
-    void onLoadRemoteDoc(docId).then((result) => {
+    void onLoadRemoteDocRef.current(docId).then((result) => {
       if (cancelled) return;
       if (!result.ok) {
         setError(result.error ?? 'Could not open document from URL');
@@ -59,7 +62,7 @@ export function WelcomeScreen({ onLoaded, onLoadRemoteDoc }: WelcomeScreenProps)
     return () => {
       cancelled = true;
     };
-  }, [onLoadRemoteDoc, supabaseReady]);
+  }, [supabaseReady]);
 
   const handlePickFolder = async () => {
     setError(null);

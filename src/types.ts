@@ -103,11 +103,9 @@ export interface ProjectIndex {
 
 export type ProjectSource = 'local' | 'remote';
 
-/** Tracks last saved remote payload to skip unchanged uploads. */
+/** Tracks last-saved remote file hashes to skip unchanged uploads. */
 export interface RemoteSyncState {
-  format: 'files' | 'bundle' | 'legacy';
-  bundleHash?: string | null;
-  fileHashes?: Map<string, string>;
+  fileHashes: Map<string, string>;
 }
 
 export interface LoadedProject {
@@ -220,6 +218,7 @@ export type AppAction =
   | { type: 'GO_BACK_SELECTION' }
   | { type: 'GO_NEXT_SELECTION' }
   | { type: 'ADD_IMAGE'; filename: string; objectUrl: string; blob: Blob }
+  | { type: 'HYDRATE_IMAGE'; filename: string; objectUrl: string; blob: Blob }
   | {
       type: 'APPEND_IMAGE_COMPONENT';
       pageFile: string;

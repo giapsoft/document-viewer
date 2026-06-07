@@ -10,10 +10,7 @@ function App() {
     return (
       <WelcomeScreen
         onLoaded={store.setProject}
-        onLoadRemoteDoc={async (docId) => {
-          const result = await store.loadRemoteDoc(docId);
-          return result.ok ? { ok: true } : { ok: false, error: result.error };
-        }}
+        onLoadRemoteDoc={store.loadRemoteDocForWelcome}
       />
     );
   }

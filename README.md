@@ -27,7 +27,7 @@ Open the URL shown in the terminal (usually `http://localhost:5173`).
 
 Policies in `schema.sql` are fully open (anyone can read/write). Fine for demos; tighten later if needed.
 
-Documents are stored as a single `{docId}/bundle.zip` (text + images inside). Legacy multi-file layouts are still loaded; the next Save migrates them to `bundle.zip`.
+Documents are stored as separate files under `{docId}/` (`relations.json`, `groups.json`, `comments.json`, `docs/*`). Only changed files are uploaded on Save.
 
 ## Usage
 

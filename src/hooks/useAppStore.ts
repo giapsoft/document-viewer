@@ -25,7 +25,7 @@ import {
   createRemoteDocument,
   deleteRemoteDocument,
   fetchRemoteDocumentUpdatedAt,
-  loadRemoteDocument,
+  loadRemoteDocumentDeferred,
   saveRemoteDocument,
   applyRemoteCommentSync,
   syncRemoteComments,
@@ -38,7 +38,7 @@ import {
   isRemoteAutoSaveBusy,
 } from '../lib/remoteAutoSave';
 import { isRemoteVersionStale } from '../lib/remoteConflict';
-import { defaultRemoteTitle } from '../lib/projectBundle';
+import { defaultRemoteTitle, collectReferencedImageNames } from '../lib/projectBundle';
 import { setDocIdInUrl } from '../lib/docUrl';
 
 export type PageActionResult = { ok: true } | { ok: false; error: string };
@@ -79,6 +79,12 @@ export function useAppStore() {
   const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [pendingRemoteImages, setPendingRemoteImages] = useState<Set<string>>(() => new Set());
+
+  const remoteImageLoadRef = useRef<{
+    cancel: () => void;
+    done: Promise<void>;
+  } | null>(null);
 
   projectRef.current = state.project;
   appStateRef.current = state;
@@ -147,8 +153,87 @@ export function useAppStore() {
     }
   }, []);
 
+  const cancelRemoteImageLoad = useCallback(() => {
+    remoteImageLoadRef.current?.cancel();
+    remoteImageLoadRef.current = null;
+    setPendingRemoteImages(new Set());
+  }, []);
+
+  const flushRemoteImageLoad = useCallback(async () => {
+    await remoteImageLoadRef.current?.done;
+  }, []);
+
+  const startRemoteImageLoad = useCallback(
+    (
+      load: Awaited<ReturnType<typeof loadRemoteDocumentDeferred>>,
+      onImage: (filename: string, blob: Blob) => void,
+    ) => {
+      cancelRemoteImageLoad();
+      const pending = collectReferencedImageNames(load.project);
+      setPendingRemoteImages(pending);
+      remoteImageLoadRef.current = {
+        cancel: load.cancelImageLoad,
+        done: load.whenImagesReady.finally(() => {
+          setPendingRemoteImages(new Set());
+          if (remoteImageLoadRef.current?.cancel === load.cancelImageLoad) {
+            remoteImageLoadRef.current = null;
+          }
+        }),
+      };
+      load.startImages(onImage);
+    },
+    [cancelRemoteImageLoad],
+  );
+
+  const dispatchRemoteImage = useCallback(
+    (filename: string, blob: Blob) => {
+      setPendingRemoteImages((prev) => {
+        if (!prev.has(filename)) return prev;
+        const next = new Set(prev);
+        next.delete(filename);
+        return next;
+      });
+      dispatch({
+        type: 'HYDRATE_IMAGE',
+        filename,
+        objectUrl: URL.createObjectURL(blob),
+        blob,
+      });
+    },
+    [dispatch],
+  );
+
+  const beginRemoteDocumentSession = useCallback(() => {
+    cancelRemoteAutoSave();
+    cancelRemoteImageLoad();
+    revokeProjectImageUrls(projectRef.current);
+    clearPageScrollMemory();
+    setDirty(false);
+    setSaveStatus('idle');
+    setSaveError(null);
+  }, [cancelRemoteImageLoad]);
+
+  const loadRemoteDocumentSession = useCallback(
+    async (docId: string) => {
+      return loadRemoteDocumentDeferred(docId);
+    },
+    [],
+  );
+
+  const applyRemoteDocumentLoad = useCallback(
+    (load: Awaited<ReturnType<typeof loadRemoteDocumentDeferred>>) => {
+      dispatch({ type: 'SET_PROJECT', project: load.project });
+      if (load.project.remoteDocId) {
+        setDocIdInUrl(load.project.remoteDocId);
+      }
+      startRemoteImageLoad(load, dispatchRemoteImage);
+    },
+    [dispatch, dispatchRemoteImage, startRemoteImageLoad],
+  );
+
   const setProject = useCallback((project: LoadedProject) => {
     cancelRemoteAutoSave();
+    cancelRemoteImageLoad();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
     setDirty(false);
@@ -160,10 +245,11 @@ export function useAppStore() {
     } else {
       setDocIdInUrl(null);
     }
-  }, [dispatch]);
+  }, [dispatch, cancelRemoteImageLoad]);
 
   const closeProject = useCallback(() => {
     cancelRemoteAutoSave();
+    cancelRemoteImageLoad();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
     setDirty(false);
@@ -171,7 +257,7 @@ export function useAppStore() {
     setSaveError(null);
     setDocIdInUrl(null);
     dispatch({ type: 'CLOSE_PROJECT' });
-  }, [dispatch]);
+  }, [dispatch, cancelRemoteImageLoad]);
 
   const toggleSidebar = useCallback(() => {
     dispatch({ type: 'TOGGLE_SIDEBAR' });
@@ -488,13 +574,10 @@ export function useAppStore() {
         return { ok: false, error: 'Remote document id is missing.' };
       }
       try {
-        revokeProjectImageUrls(project);
-        clearPageScrollMemory();
-        const reloaded = await loadRemoteDocument(project.remoteDocId);
-        setDirty(false);
-        setSaveStatus('idle');
-        setSaveError(null);
-        dispatch({ type: 'RELOAD_PROJECT', project: reloaded });
+        beginRemoteDocumentSession();
+        const load = await loadRemoteDocumentSession(project.remoteDocId);
+        dispatch({ type: 'RELOAD_PROJECT', project: load.project });
+        startRemoteImageLoad(load, dispatchRemoteImage);
         return { ok: true };
       } catch (err) {
         return {
@@ -523,7 +606,7 @@ export function useAppStore() {
         error: err instanceof Error ? err.message : 'Could not reload project from disk.',
       };
     }
-  }, [dispatch]);
+  }, [dispatch, beginRemoteDocumentSession, loadRemoteDocumentSession, startRemoteImageLoad, dispatchRemoteImage]);
 
   const selectProjectFolder = useCallback(async (): Promise<PageActionResult> => {
     if (!window.showDirectoryPicker) {
@@ -618,6 +701,7 @@ export function useAppStore() {
     setSaveError(null);
 
     try {
+      await flushRemoteImageLoad();
       let projectToSave = project;
 
       if (project.remoteDocId && !options?.force) {
@@ -696,7 +780,7 @@ export function useAppStore() {
       return { ok: false, error: message };
     }
   },
-    [dispatch],
+    [dispatch, flushRemoteImageLoad],
   );
 
   const saveProject = saveToRemote;
@@ -749,8 +833,9 @@ export function useAppStore() {
         return { ok: false, error: 'Remote storage is not available on this site.' };
       }
       try {
-        const project = await loadRemoteDocument(docId);
-        setProject(project);
+        beginRemoteDocumentSession();
+        const load = await loadRemoteDocumentSession(docId);
+        applyRemoteDocumentLoad(load);
         return { ok: true };
       } catch (err) {
         return {
@@ -759,7 +844,15 @@ export function useAppStore() {
         };
       }
     },
-    [setProject],
+    [beginRemoteDocumentSession, loadRemoteDocumentSession, applyRemoteDocumentLoad],
+  );
+
+  const loadRemoteDocForWelcome = useCallback(
+    async (docId: string): Promise<{ ok: boolean; error?: string }> => {
+      const result = await loadRemoteDoc(docId);
+      return result.ok ? { ok: true } : { ok: false, error: result.error };
+    },
+    [loadRemoteDoc],
   );
 
   const runRemoteAutoSave = useCallback(async (): Promise<
@@ -768,6 +861,7 @@ export function useAppStore() {
     if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
       return { ok: true, skipped: true };
     }
+    await flushRemoteImageLoad();
     const project = projectRef.current;
     if (!project?.remoteDocId || !isSupabaseConfigured()) {
       return { ok: true, skipped: true };
@@ -775,6 +869,7 @@ export function useAppStore() {
     const docId = project.remoteDocId;
 
     try {
+      await flushRemoteImageLoad();
       // Single save call: merges remote comments then uploads all changed files atomically.
       const saveResult = await saveRemoteDocument(
         docId,
@@ -809,7 +904,7 @@ export function useAppStore() {
         error: err instanceof Error ? err.message : 'Could not save document',
       };
     }
-  }, [dispatch]);
+  }, [dispatch, flushRemoteImageLoad]);
 
   runRemoteAutoSaveRef.current = runRemoteAutoSave;
 
@@ -823,6 +918,7 @@ export function useAppStore() {
     const pullRemoteChanges = async () => {
       const current = projectRef.current;
       if (!current?.remoteDocId || cancelled) return;
+      if (remoteImageLoadRef.current) return;
       if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) return;
       if (dirtyRef.current && isRemoteAutoSaveBusy()) return;
 
@@ -865,9 +961,11 @@ export function useAppStore() {
     dirty,
     saveStatus,
     saveError,
+    pendingRemoteImages,
     setProject,
     closeProject,
     loadRemoteDoc,
+    loadRemoteDocForWelcome,
     saveToLocal,
     saveToRemote,
     checkRemoteDocumentStale,
