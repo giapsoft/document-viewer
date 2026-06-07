@@ -18,6 +18,7 @@ import { getOrphanedPageAssets } from '../lib/pageFileOps';
 import {
   loadFromDirectoryHandle,
   pickProjectFolder,
+  createBlankProject,
   revokeProjectImageUrls,
 } from '../lib/loadProject';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
@@ -317,6 +318,15 @@ export function useAppStore() {
     },
     [dispatch],
   );
+
+  const createNewDocument = useCallback(() => {
+    const project = createBlankProject();
+    setProject(project);
+    const firstPage = project.pages[0]?.fileName;
+    if (firstPage) {
+      dispatch({ type: 'OPEN_PAGE', pageFile: firstPage });
+    }
+  }, [dispatch, setProject]);
 
   const selectComponent = useCallback(
     (componentId: string, pageFile: string) => {
@@ -1008,6 +1018,7 @@ export function useAppStore() {
     pendingRemoteImages,
     pendingRemoteMd,
     setProject,
+    createNewDocument,
     closeProject,
     loadRemoteDoc,
     loadRemoteDocForWelcome,

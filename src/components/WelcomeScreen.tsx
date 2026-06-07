@@ -7,6 +7,7 @@ import { getDocIdFromUrl } from '../lib/docUrl';
 
 interface WelcomeScreenProps {
   onLoaded: (project: import('../types').LoadedProject) => void;
+  onCreateNewDocument: () => void;
   onLoadRemoteDoc: (docId: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
@@ -22,7 +23,7 @@ function formatUpdatedAt(value: string): string {
   });
 }
 
-export function WelcomeScreen({ onLoaded, onLoadRemoteDoc }: WelcomeScreenProps) {
+export function WelcomeScreen({ onLoaded, onCreateNewDocument, onLoadRemoteDoc }: WelcomeScreenProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [remoteDocs, setRemoteDocs] = useState<RemoteDocumentMeta[]>([]);
@@ -107,10 +108,21 @@ export function WelcomeScreen({ onLoaded, onLoadRemoteDoc }: WelcomeScreenProps)
     <div className="welcome">
       <div className="welcome-card welcome-card-wide">
         <h1>Document Viewer</h1>
-        <p>Open a local folder or choose a saved document from remote storage.</p>
+        <p>
+          Create a new document, open a local folder, or choose a saved document from remote
+          storage.
+        </p>
 
         <div className="welcome-actions">
-          <button type="button" onClick={handlePickFolder} disabled={loading}>
+          <button type="button" onClick={onCreateNewDocument} disabled={loading}>
+            New document
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={handlePickFolder}
+            disabled={loading}
+          >
             {loading ? 'Loading…' : 'Select folder'}
           </button>
         </div>
@@ -163,8 +175,8 @@ export function WelcomeScreen({ onLoaded, onLoadRemoteDoc }: WelcomeScreenProps)
 
         {error && <p className="welcome-error">{error}</p>}
         <p className="welcome-hint">
-          Edits stay in memory until you press <strong>Save</strong> and choose local folder or
-          remote storage. Deep link: <code>?doc=DOCUMENT_ID</code> (also accepts{' '}
+          New documents stay in memory until you press <strong>Export</strong> to save to a local
+          folder or remote storage. Deep link: <code>?doc=DOCUMENT_ID</code> (also accepts{' '}
           <code>?page=</code>).
         </p>
         <VersionBadge />

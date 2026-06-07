@@ -5,8 +5,9 @@ import type {
   RelationsFile,
 } from '../types';
 import { buildIndex } from './index';
-import { normalizePageComponents, resolvePageId, resolvePageName } from './pageIds';
+import { normalizePageComponents, resolvePageId, resolvePageName, serializePageComponents } from './pageIds';
 import { EMPTY_RELATIONS, normalizeRelations } from './groupRelations';
+import { createDefaultPageData } from './pageMutations';
 import { getStoredPageOrder } from './pageOrder';
 import { getDocsDirectoryIfPresent } from './docsFolder';
 import { mergeStyles } from './styles';
@@ -235,6 +236,33 @@ export async function loadFromDirectoryHandle(
     remoteTitle: null,
     folderHandle: root,
     remoteSync: null,
+  };
+}
+
+/** In-memory draft with one starter page — export later via Save. */
+export function createBlankProject(): LoadedProject {
+  const relations = normalizeRelations(EMPTY_RELATIONS);
+  const page = createDefaultPageData('page.p', relations.pageNames);
+  const project = assembleProject({
+    pageFiles: [
+      {
+        name: page.fileName,
+        content: serializePageComponents(page.components, page.pageId),
+      },
+    ],
+    relations,
+    stylesPartial: null,
+    imageFiles: [],
+    mdFiles: [],
+  });
+  return {
+    ...project,
+    source: 'local',
+    remoteDocId: null,
+    remoteTitle: null,
+    folderHandle: null,
+    remoteSync: null,
+    remoteUpdatedAt: null,
   };
 }
 

@@ -10,6 +10,7 @@ function App() {
     return (
       <WelcomeScreen
         onLoaded={store.setProject}
+        onCreateNewDocument={store.createNewDocument}
         onLoadRemoteDoc={store.loadRemoteDocForWelcome}
       />
     );
