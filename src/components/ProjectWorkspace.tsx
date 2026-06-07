@@ -88,7 +88,11 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     state.selectionHistoryIndex < state.selectionHistory.length - 1;
 
   useSelectionNavigationShortcuts({
-    enabled: !state.linkMode && !state.commentLinkCtrlActive && !state.contentEditorOpen,
+    enabled:
+      !state.selection &&
+      !state.linkMode &&
+      !state.commentLinkCtrlActive &&
+      !state.contentEditorOpen,
     canGoBack,
     canGoNext,
     onBack: goBackSelection,
@@ -471,6 +475,9 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
           <EditBar
             project={project}
             selection={state.selection}
+            shortcutsEnabled={
+              !state.linkMode && !state.commentLinkCtrlActive && !state.contentEditorOpen
+            }
             onUpdate={updateComponent}
             onUpdateMdContent={updateMdContent}
             onInsertAbove={insertComponentAbove}

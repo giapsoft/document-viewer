@@ -12,7 +12,7 @@ export function isSaveInProgress(status: SaveStatus): boolean {
   return status === 'pending' || status === 'saving';
 }
 
-const SAVE_DEBOUNCE_MS = 600;
+const SAVE_DEBOUNCE_MS = 3000;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let saveInFlight = false;
@@ -163,8 +163,11 @@ export type LocalAutoSaveResult =
   | { ok: false; error?: string };
 
 export function scheduleAutoSave(save: () => Promise<LocalAutoSaveResult>): void {
+  const wasQueued = saveTimer !== null;
   if (saveTimer) clearTimeout(saveTimer);
-  notify('pending');
+  if (!wasQueued && !saveInFlight) {
+    notify('pending');
+  }
 
   saveTimer = setTimeout(() => {
     saveTimer = null;

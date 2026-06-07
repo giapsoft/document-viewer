@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import type {
   Component,
   ComponentStatus,
@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import { findComponent } from '../lib/projectMutations';
 import type { ImportImageResult } from '../lib/importImage';
+import { useEditBarShortcuts } from '../hooks/useEditBarShortcuts';
 import { ContentEditorDialog, type ContentEditorDraft } from './ContentEditorDialog';
 import { ImagePickerDialog } from './ImagePickerDialog';
 import { ConfirmDialog } from './PageFileDialog';
@@ -17,6 +18,37 @@ const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'm
 const STATUSES: ComponentStatus[] = ['undefined', 'pending', 'working', 'done', 'blocked'];
 
 const TOAST_MS = 2000;
+
+function EditBarIconButton({
+  title,
+  shortcut,
+  onClick,
+  disabled,
+  danger,
+  children,
+}: {
+  title: string;
+  shortcut: string;
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`edit-bar-tool-btn${danger ? ' edit-bar-tool-btn-danger' : ''}`}
+      onClick={onClick}
+      disabled={disabled}
+      title={`${title} (${shortcut})`}
+    >
+      <span className="edit-bar-tool-icon" aria-hidden>
+        {children}
+      </span>
+      <kbd className="edit-bar-tool-key">{shortcut}</kbd>
+    </button>
+  );
+}
 
 function ComponentIdHeader({ componentId, listBadge }: { componentId: string; listBadge?: ReactNode }) {
   const [toast, setToast] = useState<string | null>(null);
@@ -35,7 +67,6 @@ function ComponentIdHeader({ componentId, listBadge }: { componentId: string; li
   return (
     <>
       <span className="edit-bar-header-id">
-        <span className="edit-bar-header-id-label">ID</span>
         <button
           type="button"
           className="edit-bar-component-id"
@@ -67,6 +98,7 @@ interface EditBarProps {
   onImportImageFromClipboard?: () => Promise<ImportImageResult>;
   onDeleteProjectImage?: (filename: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   onContentEditorOpenChange: (open: boolean) => void;
+  shortcutsEnabled?: boolean;
 }
 
 export function EditBar({
@@ -81,6 +113,7 @@ export function EditBar({
   onImportImageFromClipboard,
   onDeleteProjectImage,
   onContentEditorOpenChange,
+  shortcutsEnabled = true,
 }: EditBarProps) {
   const [bodyExpanded, setBodyExpanded] = useState(false);
 
@@ -124,6 +157,7 @@ export function EditBar({
       onImportImageFromClipboard={onImportImageFromClipboard}
       onDeleteProjectImage={onDeleteProjectImage}
       onContentEditorOpenChange={onContentEditorOpenChange}
+      shortcutsEnabled={shortcutsEnabled}
     />
   );
 }
@@ -145,6 +179,7 @@ interface EditBarFormProps {
   onImportImageFromClipboard?: EditBarProps['onImportImageFromClipboard'];
   onDeleteProjectImage?: EditBarProps['onDeleteProjectImage'];
   onContentEditorOpenChange: (open: boolean) => void;
+  shortcutsEnabled: boolean;
 }
 
 function EditBarForm({
@@ -164,6 +199,7 @@ function EditBarForm({
   onImportImageFromClipboard,
   onDeleteProjectImage,
   onContentEditorOpenChange,
+  shortcutsEnabled,
 }: EditBarFormProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -216,6 +252,7 @@ function EditBarForm({
     ) : null;
 
   const hasBodyEditor = component.type !== 'img' && !isAction;
+  const statusStyle = project.styles.statuses[component.status];
 
   const handleExpandAreaClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!hasBodyEditor) return;
@@ -224,131 +261,171 @@ function EditBarForm({
     onToggleBodyExpanded();
   };
 
+  useEditBarShortcuts({
+    enabled: shortcutsEnabled && !fullscreenOpen && !confirmDelete && !pickerOpen,
+    status: component.status,
+    canDelete,
+    onOpenFullscreen: openFullscreen,
+    onInsertAbove: () => onInsertAbove(pageFile, component.id),
+    onInsertBelow: () => onInsertBelow(pageFile, component.id),
+    onDelete: () => setConfirmDelete(true),
+    onStatusChange: (status) => patch({ status }),
+  });
+
   return (
-    <footer className={`edit-bar ${bodyExpanded ? 'edit-bar-body-expanded' : ''}`}>
+    <footer
+      className={`edit-bar edit-bar-has-selection edit-bar-status-${component.status}${bodyExpanded ? ' edit-bar-body-expanded' : ''}`}
+      style={{ '--edit-bar-status-bg': statusStyle.backgroundColor } as CSSProperties}
+    >
       <div className="edit-bar-inner">
         <div
-          className={`edit-bar-row${hasBodyEditor ? ' edit-bar-row-expandable' : ''}`}
+          className={`edit-bar-toolbar${hasBodyEditor ? ' edit-bar-toolbar-expandable' : ''}`}
           onClick={handleExpandAreaClick}
         >
-          {hasBodyEditor && (
-            <button
-              type="button"
-              className="edit-bar-toggle"
-              onClick={onToggleBodyExpanded}
-              aria-expanded={bodyExpanded}
-              title={bodyExpanded ? 'Collapse content' : 'Expand content'}
-            >
-              {bodyExpanded ? '▼' : '▶'}
-            </button>
-          )}
-          <span className="edit-bar-icon" title="Edit component" aria-hidden>
-            ✎
-          </span>
-          <span className="edit-bar-meta">
-            <ComponentIdHeader componentId={component.id} listBadge={listBadge} />
-          </span>
-          <div className="edit-bar-actions">
-            <button
-              type="button"
-              className="edit-bar-icon-btn"
-              onClick={openFullscreen}
-              title="Full screen editor"
-            >
+          <div className="edit-bar-identity">
+            {hasBodyEditor && (
+              <button
+                type="button"
+                className="edit-bar-toggle"
+                onClick={onToggleBodyExpanded}
+                aria-expanded={bodyExpanded}
+                title={bodyExpanded ? 'Collapse content' : 'Expand content'}
+              >
+                {bodyExpanded ? '▼' : '▶'}
+              </button>
+            )}
+            <div className="edit-bar-identity-text">
+              <span className="edit-bar-identity-label">Component</span>
+              <ComponentIdHeader componentId={component.id} listBadge={listBadge} />
+            </div>
+          </div>
+
+          <div className="edit-bar-properties">
+            <label className="edit-bar-field">
+              <span className="edit-bar-field-label">Type</span>
+              <select
+                className="edit-bar-select edit-bar-select-type"
+                value={component.type}
+                title="Type"
+                onChange={(e) => patch({ type: e.target.value as ComponentType })}
+              >
+                {TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="edit-bar-field">
+              <span className="edit-bar-field-label">Status</span>
+              <span className="edit-bar-field-row">
+                <select
+                  className={`edit-bar-select edit-bar-select-status edit-bar-select-status-${component.status}`}
+                  value={component.status}
+                  title="Status (← →)"
+                  style={{ backgroundColor: statusStyle.backgroundColor }}
+                  onChange={(e) => patch({ status: e.target.value as ComponentStatus })}
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <kbd className="edit-bar-key-hint" aria-hidden>
+                  ← →
+                </kbd>
+              </span>
+            </label>
+
+            {component.type === 'img' && (
+              <label className="edit-bar-field edit-bar-field-grow">
+                <span className="edit-bar-field-label">Image</span>
+                <button
+                  type="button"
+                  className="edit-bar-aux-btn"
+                  onClick={() => setPickerOpen(true)}
+                  title="Image file"
+                >
+                  {imgLabel}
+                </button>
+              </label>
+            )}
+
+            {isAction && (
+              <label className="edit-bar-field">
+                <span className="edit-bar-field-label">Action</span>
+                <button
+                  type="button"
+                  className="edit-bar-aux-btn edit-bar-aux-btn-primary"
+                  onClick={openFullscreen}
+                  title="Open full editor to configure action (E)"
+                >
+                  <span>Edit action</span>
+                  <kbd className="edit-bar-key-hint">E</kbd>
+                </button>
+              </label>
+            )}
+          </div>
+
+          <div className="edit-bar-actions" role="toolbar" aria-label="Component actions">
+            <EditBarIconButton title="Full screen editor" shortcut="E" onClick={openFullscreen}>
               ⛶
-            </button>
-            <button
-              type="button"
-              className="edit-bar-icon-btn"
-              onClick={() => onInsertAbove(pageFile, component.id)}
+            </EditBarIconButton>
+            <span className="edit-bar-actions-divider" aria-hidden />
+            <EditBarIconButton
               title="Insert above"
+              shortcut="Up"
+              onClick={() => onInsertAbove(pageFile, component.id)}
             >
               ↑
-            </button>
-            <button
-              type="button"
-              className="edit-bar-icon-btn"
-              onClick={() => onInsertBelow(pageFile, component.id)}
+            </EditBarIconButton>
+            <EditBarIconButton
               title="Insert below"
+              shortcut="Down"
+              onClick={() => onInsertBelow(pageFile, component.id)}
             >
               ↓
-            </button>
-            <button
-              type="button"
-              className="edit-bar-icon-btn edit-bar-icon-btn-danger"
-              disabled={!canDelete}
+            </EditBarIconButton>
+            <span className="edit-bar-actions-divider" aria-hidden />
+            <EditBarIconButton
+              title="Delete component"
+              shortcut="Del"
               onClick={() => setConfirmDelete(true)}
-              title={canDelete ? 'Delete component' : 'Cannot delete the only component on this page'}
+              disabled={!canDelete}
+              danger
             >
               ×
-            </button>
-          </div>
-          <div className="edit-bar-fields">
-            <select
-              className="edit-bar-input edit-bar-input-type"
-              value={component.type}
-              title="Type"
-              onChange={(e) => patch({ type: e.target.value as ComponentType })}
-            >
-              {TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-            <select
-              className="edit-bar-input edit-bar-input-status"
-              value={component.status}
-              title="Status"
-              onChange={(e) => patch({ status: e.target.value as ComponentStatus })}
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            {component.type === 'img' && (
-              <button
-                type="button"
-                className="edit-bar-input edit-bar-file-picker"
-                onClick={() => setPickerOpen(true)}
-                title="Image file"
-              >
-                {imgLabel}
-              </button>
-            )}
-            {isAction && (
-              <button
-                type="button"
-                className="edit-bar-input edit-bar-action-open"
-                onClick={openFullscreen}
-                title="Open full editor to configure action"
-              >
-                Edit action…
-              </button>
-            )}
+            </EditBarIconButton>
           </div>
         </div>
+
         {bodyExpanded && hasBodyEditor && component.type !== 'md' && (
-          <textarea
-            className="edit-bar-input edit-bar-input-content"
-            rows={3}
-            value={component.content}
-            title="Content"
-            placeholder="Content…"
-            onChange={(e) => patch({ content: e.target.value })}
-          />
+          <div className="edit-bar-body-pane">
+            <span className="edit-bar-field-label">Content</span>
+            <textarea
+              className="edit-bar-textarea"
+              rows={4}
+              value={component.content}
+              title="Content"
+              placeholder="Content…"
+              onChange={(e) => patch({ content: e.target.value })}
+            />
+          </div>
         )}
         {bodyExpanded && component.type === 'md' && (
-          <textarea
-            className="edit-bar-input edit-bar-input-content edit-bar-input-md"
-            rows={8}
-            value={mdContent}
-            title="Markdown"
-            placeholder="Markdown…"
-            onChange={(e) => onUpdateMdContent(component.id, e.target.value)}
-          />
+          <div className="edit-bar-body-pane">
+            <span className="edit-bar-field-label">Markdown</span>
+            <textarea
+              className="edit-bar-textarea edit-bar-textarea-md"
+              rows={8}
+              value={mdContent}
+              title="Markdown"
+              placeholder="Markdown…"
+              onChange={(e) => onUpdateMdContent(component.id, e.target.value)}
+            />
+          </div>
         )}
       </div>
 

@@ -1,6 +1,6 @@
 import type { SaveStatus } from './saveProject';
 
-const REMOTE_SAVE_DEBOUNCE_MS = 800;
+const REMOTE_SAVE_DEBOUNCE_MS = 3000;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let saveInFlight = false;
@@ -28,8 +28,11 @@ export type RemoteAutoSaveResult =
 export function scheduleRemoteAutoSave(
   save: () => Promise<RemoteAutoSaveResult>,
 ): void {
+  const wasQueued = saveTimer !== null;
   if (saveTimer) clearTimeout(saveTimer);
-  notify('pending');
+  if (!wasQueued && !saveInFlight) {
+    notify('pending');
+  }
 
   saveTimer = setTimeout(() => {
     saveTimer = null;

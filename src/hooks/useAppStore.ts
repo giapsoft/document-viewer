@@ -184,8 +184,10 @@ export function useAppStore() {
     }
 
     setDirty(true);
-    setSaveStatus('idle');
     setSaveError(null);
+    if (saveStatusRef.current === 'saved') {
+      setSaveStatus('idle');
+    }
 
     const project = projectRef.current;
     const editorOpen = appStateRef.current.contentEditorOpen;
@@ -851,7 +853,9 @@ export function useAppStore() {
         folderHandle,
       });
       projectRef.current = nextProject;
-      dispatch({ type: 'PATCH_PROJECT', project: nextProject });
+      if (nextProject.relations !== project.relations || nextProject.folderHandle !== project.folderHandle) {
+        dispatch({ type: 'PATCH_PROJECT', project: nextProject });
+      }
       setDirty(false);
       setSaveStatus('saved');
       window.setTimeout(() => setSaveStatus('idle'), 2000);
@@ -1116,9 +1120,11 @@ export function useAppStore() {
 
     try {
       await saveProjectToFolder(project);
-      const nextProject = stripCommentTombstones({ ...project });
+      const nextProject = stripCommentTombstones(project);
       projectRef.current = nextProject;
-      dispatch({ type: 'PATCH_PROJECT', project: nextProject });
+      if (nextProject !== project) {
+        dispatch({ type: 'PATCH_PROJECT', project: nextProject });
+      }
       setDirty(false);
       return { ok: true };
     } catch (err) {
