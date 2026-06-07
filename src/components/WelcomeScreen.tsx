@@ -13,7 +13,13 @@ interface WelcomeScreenProps {
 function formatUpdatedAt(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return date.toLocaleString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export function WelcomeScreen({ onLoaded, onLoadRemoteDoc }: WelcomeScreenProps) {
