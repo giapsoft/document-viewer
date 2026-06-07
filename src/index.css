@@ -1235,37 +1235,6 @@ code {
   flex-shrink: 0;
 }
 
-.page-panel-highlight-nav {
-  display: flex;
-  align-items: center;
-  gap: 0.2rem;
-  flex-shrink: 0;
-}
-
-.page-panel-highlight-nav-btn {
-  border: 1px solid #ccc;
-  background: #fff;
-  border-radius: 4px;
-  padding: 0.1rem 0.35rem;
-  font-size: 0.75rem;
-  line-height: 1.2;
-  cursor: pointer;
-  color: #333;
-}
-
-.page-panel-highlight-nav-btn:hover {
-  background: #f0f0f0;
-  border-color: #999;
-}
-
-.page-panel-highlight-nav-label {
-  font-size: 0.7rem;
-  color: #666;
-  min-width: 2.2rem;
-  text-align: center;
-  user-select: none;
-}
-
 .page-panel.shrunk .page-panel-header {
   flex: 1;
   flex-direction: column;
@@ -1555,6 +1524,16 @@ code {
   background-color: rgb(153 194 255 / 20%);
   border-radius: 2px;
   min-height: 6px;
+}
+
+.scrollbar-marker-clickable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.scrollbar-marker-clickable:hover {
+  background-color: rgb(153 194 255 / 45%);
+  border-color: #0a58ca;
 }
 
 /* Edit bar */

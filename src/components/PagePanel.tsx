@@ -1,12 +1,4 @@
-import {
-  useRef,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import type {
   AppStyles,
   CommentAnchor,
@@ -27,7 +19,6 @@ import { getPageScrollTop, setPageScrollTop } from '../lib/pageScrollMemory';
 import {
   getFirstHighlightedComponentId,
   getHighlightedIdsForPage,
-  getHighlightNavTargetsForPage,
 } from '../lib/selectionHighlight';
 import { ScrollbarMarkers } from './ScrollbarMarkers';
 import type { MdHighlightRange, MdTextRange } from '../lib/mdSelection';
@@ -552,29 +543,12 @@ export function PagePanel({
       ? getHighlightedIdsForPage(page, selection, isCurrent)
       : new Set<string>();
 
-  const highlightNavTargets = useMemo(() => {
-    if (!page || !selection || linkMode || commentLinkMode) return [];
-    return getHighlightNavTargetsForPage(page, selection);
-  }, [page, selection, linkMode, commentLinkMode]);
-
-  const [highlightNavIndex, setHighlightNavIndex] = useState(0);
-  const highlightNavTargetsKey = highlightNavTargets.join('\0');
-
-  useEffect(() => {
-    setHighlightNavIndex(0);
-  }, [highlightNavTargetsKey]);
-
-  const showHighlightNav = expanded && highlightNavTargets.length > 1;
-
-  const goHighlight = (delta: -1 | 1) => {
-    const len = highlightNavTargets.length;
-    if (len < 2) return;
-    const nextIndex = (highlightNavIndex + delta + len) % len;
-    const id = highlightNavTargets[nextIndex];
-    if (!id) return;
-    setHighlightNavIndex(nextIndex);
-    scheduleScrollToComponent(scrollRef, componentRefs, id, panelRef, () => {});
-  };
+  const scrollToHighlightedComponent = useCallback(
+    (componentId: string) => {
+      scheduleScrollToComponent(scrollRef, componentRefs, componentId, panelRef, () => {});
+    },
+    [],
+  );
 
   const comments = activeComments(project.relations.comments ?? []);
 
@@ -778,31 +752,6 @@ export function PagePanel({
         {expanded ? (
           <>
             <span className="page-panel-title">{panelTitle}</span>
-            {showHighlightNav && (
-              <div className="page-panel-highlight-nav">
-                <button
-                  type="button"
-                  className="page-panel-highlight-nav-btn"
-                  onClick={() => goHighlight(-1)}
-                  title="Scroll to previous linked component group on this page"
-                  aria-label="Scroll to previous linked component group on this page"
-                >
-                  ←
-                </button>
-                <span className="page-panel-highlight-nav-label">
-                  {highlightNavIndex + 1}/{highlightNavTargets.length}
-                </span>
-                <button
-                  type="button"
-                  className="page-panel-highlight-nav-btn"
-                  onClick={() => goHighlight(1)}
-                  title="Scroll to next linked component group on this page"
-                  aria-label="Scroll to next linked component group on this page"
-                >
-                  →
-                </button>
-              </div>
-            )}
             <button
               type="button"
               className="panel-toggle-btn"
@@ -904,6 +853,7 @@ export function PagePanel({
               highlightedIds={highlightedOnPage}
               componentRefs={componentRefs}
               markerStyle={project.styles.linkedScrollMarker}
+              onMarkerClick={scrollToHighlightedComponent}
             />
           )}
           </div>
