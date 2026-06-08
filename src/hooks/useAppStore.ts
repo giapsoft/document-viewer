@@ -373,16 +373,17 @@ export function useAppStore() {
     const project = projectRef.current;
     const username = appStateRef.current.commentUsername;
     if (!project || !username) {
-      dispatch({ type: 'SET_COMPONENT_READ_STATE', readState: {} });
-      dispatch({ type: 'SET_COMMENT_READ_STATE', readState: {} });
+      baseDispatch({ type: 'SET_COMPONENT_READ_STATE', readState: {} });
+      baseDispatch({ type: 'SET_COMMENT_READ_STATE', readState: {} });
       return;
     }
     const [readState, commentReadState] = await Promise.all([
       loadReadStateForUser(project, username),
       loadCommentReadStateForUser(project, username),
     ]);
-    dispatch({ type: 'SET_COMPONENT_READ_STATE', readState });
-    dispatch({ type: 'SET_COMMENT_READ_STATE', readState: commentReadState });
+    // Hydration only — do not persist back to disk/remote (avoids false "Saving" on open).
+    baseDispatch({ type: 'SET_COMPONENT_READ_STATE', readState });
+    baseDispatch({ type: 'SET_COMMENT_READ_STATE', readState: commentReadState });
   };
 
   const applyRemoteDocumentLoad = useCallback(
