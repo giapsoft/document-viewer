@@ -1,13 +1,16 @@
 {
   "name": "document-viewer",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist",
+    "bump": "node scripts/bump-version.mjs",
+    "bump:minor": "node scripts/bump-version.mjs minor",
+    "bump:major": "node scripts/bump-version.mjs major",
     "test:links": "node scripts/test-linked-components.mjs"
   },
   "dependencies": {
