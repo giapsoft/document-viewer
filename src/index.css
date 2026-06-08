@@ -1366,6 +1366,10 @@ code {
   opacity: 1;
 }
 
+.component-block.selected-related-transitive {
+  opacity: 1;
+}
+
 .component-block.link-selected {
   opacity: 1;
   box-shadow:
@@ -1430,6 +1434,7 @@ code {
 
 .component-block.component-sticky.selected-primary,
 .component-block.component-sticky.selected-related,
+.component-block.component-sticky.selected-related-transitive,
 .component-block.component-sticky.link-selected,
 .component-block.component-sticky.comment-link-preview {
   z-index: 6;

@@ -15,12 +15,18 @@ import { createMarkdownComponentLinkResolver } from '../lib/mdComponentLinks';
 import { PageLabel } from './PageLabel';
 import { MarkdownPreview } from './MarkdownPreview';
 import { ActionComponent } from './ActionComponent';
-import { COMMENT_LINK_PREVIEW_HIGHLIGHT, LINK_MODE_HIGHLIGHT } from '../lib/styles';
+import {
+  COMMENT_LINK_PREVIEW_HIGHLIGHT,
+  LINK_MODE_HIGHLIGHT,
+  TRANSITIVE_LINKED_COMPONENT,
+  TRANSITIVE_LINKED_SCROLL_MARKER,
+} from '../lib/styles';
 import { scheduleScrollToComponent, scheduleScrollToMdCommentHighlight } from '../lib/scrollIntoContainer';
 import { getPageScrollTop, setPageScrollTop } from '../lib/pageScrollMemory';
 import {
   getFirstHighlightedComponentId,
   getHighlightedIdsForPage,
+  getMainGroupMemberIds,
 } from '../lib/selectionHighlight';
 import { ScrollbarMarkers } from './ScrollbarMarkers';
 import type { MdHighlightRange, MdTextRange } from '../lib/mdSelection';
@@ -164,6 +170,7 @@ interface ComponentBlockProps {
   pageFile: string;
   selection: SelectionState | null;
   highlightedIds: Set<string> | null;
+  mainGroupMemberIds?: Set<string>;
   pendingImageNames?: ReadonlySet<string>;
   pendingMdComponentIds?: ReadonlySet<string>;
   linkMode?: boolean;
@@ -188,7 +195,7 @@ interface ComponentBlockProps {
 
 interface ComponentShellProps {
   component: Component;
-  highlightKind: 'none' | 'primary' | 'related' | 'link' | 'comment-link';
+  highlightKind: 'none' | 'primary' | 'related' | 'related-transitive' | 'link' | 'comment-link';
   isDimmed: boolean;
   linkFlashActive: boolean;
   linkFlashNonce: number;
@@ -237,7 +244,7 @@ function ComponentShell({
         shellRef.current = el;
         registerRef(component.id, el);
       }}
-      className={`component-block ${className} ${highlightKind !== 'none' ? 'selected' : ''} ${highlightKind === 'primary' ? 'selected-primary' : ''} ${highlightKind === 'related' ? 'selected-related' : ''} ${highlightKind === 'link' ? 'link-selected' : ''} ${highlightKind === 'comment-link' ? 'comment-link-preview' : ''} ${isDimmed ? 'dimmed' : ''}`}
+      className={`component-block ${className} ${highlightKind !== 'none' ? 'selected' : ''} ${highlightKind === 'primary' ? 'selected-primary' : ''} ${highlightKind === 'related' ? 'selected-related' : ''} ${highlightKind === 'related-transitive' ? 'selected-related-transitive' : ''} ${highlightKind === 'link' ? 'link-selected' : ''} ${highlightKind === 'comment-link' ? 'comment-link-preview' : ''} ${isDimmed ? 'dimmed' : ''}`}
       style={style}
       onClick={(e) => {
         e.stopPropagation();
@@ -274,6 +281,7 @@ export function ComponentBlock({
   pageFile,
   selection,
   highlightedIds,
+  mainGroupMemberIds,
   linkMode = false,
   linkGroupMembers,
   pendingImageNames,
@@ -326,7 +334,9 @@ export function ComponentBlock({
       : isPrimarySelected
         ? 'primary'
         : isRelatedSelected
-          ? 'related'
+          ? mainGroupMemberIds?.has(component.id)
+            ? 'related'
+            : 'related-transitive'
           : 'none';
 
   const highlightStyle =
@@ -334,7 +344,9 @@ export function ComponentBlock({
       ? styles.selectedComponent
       : highlightKind === 'related'
         ? styles.linkedComponent
-        : highlightKind === 'link'
+        : highlightKind === 'related-transitive'
+          ? TRANSITIVE_LINKED_COMPONENT
+          : highlightKind === 'link'
           ? LINK_MODE_HIGHLIGHT
           : highlightKind === 'comment-link'
             ? COMMENT_LINK_PREVIEW_HIGHLIGHT
@@ -606,6 +618,11 @@ export function PagePanel({
       ? getHighlightedIdsForPage(page, selection, isCurrent)
       : new Set<string>();
 
+  const mainGroupMemberIds = useMemo(() => {
+    if (!selection || linkMode) return new Set<string>();
+    return getMainGroupMemberIds(project.relations.groups, selection);
+  }, [project.relations.groups, selection, linkMode]);
+
   const scrollToHighlightedComponent = useCallback(
     (componentId: string) => {
       scheduleScrollToComponent(scrollRef, componentRefs, componentId, panelRef, () => {});
@@ -873,6 +890,7 @@ export function PagePanel({
                   pageFile={pageFile}
                   selection={selection}
                   highlightedIds={highlightedOnPage}
+                  mainGroupMemberIds={mainGroupMemberIds}
                   linkMode={linkMode}
                   linkGroupMembers={linkGroupMembers}
                   pendingImageNames={pendingImageNames}
@@ -922,6 +940,8 @@ export function PagePanel({
               highlightedIds={highlightedOnPage}
               componentRefs={componentRefs}
               markerStyle={project.styles.linkedScrollMarker}
+              secondaryMarkerStyle={TRANSITIVE_LINKED_SCROLL_MARKER}
+              mainGroupMemberIds={mainGroupMemberIds}
               onMarkerClick={scrollToHighlightedComponent}
             />
           )}

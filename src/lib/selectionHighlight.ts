@@ -116,3 +116,19 @@ export function getMainGroupPageFiles(
   }
   return files;
 }
+
+/** Component ids in groups that contain the selected component. */
+export function getMainGroupMemberIds(
+  groups: string[][],
+  selection: SelectionState,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const groupIndex of selection.matchingGroupIndices) {
+    const group = groups[groupIndex];
+    if (!group) continue;
+    for (const memberId of group) {
+      ids.add(memberId);
+    }
+  }
+  return ids;
+}

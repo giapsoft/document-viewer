@@ -12,6 +12,8 @@ interface ScrollbarMarkersProps {
   highlightedIds: Set<string>;
   componentRefs: React.RefObject<Map<string, HTMLElement>>;
   markerStyle: ScrollMarkerStyle;
+  secondaryMarkerStyle?: ScrollMarkerStyle;
+  mainGroupMemberIds?: Set<string>;
   onMarkerClick?: (componentId: string) => void;
 }
 
@@ -105,6 +107,8 @@ export function ScrollbarMarkers({
   highlightedIds,
   componentRefs,
   markerStyle,
+  secondaryMarkerStyle,
+  mainGroupMemberIds,
   onMarkerClick,
 }: ScrollbarMarkersProps) {
   const [markers, setMarkers] = useState<Marker[]>([]);
@@ -155,15 +159,21 @@ export function ScrollbarMarkers({
       style={{ width: trackWidth }}
       aria-hidden={clickable ? undefined : true}
     >
-      {markers.map((marker) => (
+      {markers.map((marker) => {
+        const isMainGroupMember = mainGroupMemberIds?.has(marker.componentId) ?? true;
+        const style = isMainGroupMember
+          ? markerStyle
+          : (secondaryMarkerStyle ?? markerStyle);
+
+        return (
         <div
           key={marker.componentId}
           className={`scrollbar-marker${clickable ? ' scrollbar-marker-clickable' : ''}`}
           style={{
             top: `${marker.top}px`,
             height: `${marker.height}px`,
-            backgroundColor: markerStyle.backgroundColor,
-            borderColor: markerStyle.borderColor,
+            backgroundColor: style.backgroundColor,
+            borderColor: style.borderColor,
             borderWidth: 1,
             borderStyle: 'solid',
           }}
@@ -190,7 +200,8 @@ export function ScrollbarMarkers({
               : undefined
           }
         />
-      ))}
+        );
+      })}
     </div>
   );
 }

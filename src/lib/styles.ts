@@ -31,6 +31,18 @@ export const DEFAULT_STYLES: AppStyles = {
   },
 };
 
+/** Transitive linked components (related via algorithm, not in main group). */
+export const TRANSITIVE_LINKED_COMPONENT = {
+  borderColor: '#E8590C',
+  borderWidth: '2px',
+  borderStyle: 'dashed',
+} as const;
+
+export const TRANSITIVE_LINKED_SCROLL_MARKER = {
+  backgroundColor: 'rgb(255 192 120 / 20%)',
+  borderColor: '#E8590C',
+} as const;
+
 function normalizeLinkedScrollMarker(
   partial?: Partial<ScrollMarkerStyle> & { width?: string },
 ): ScrollMarkerStyle {
