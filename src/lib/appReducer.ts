@@ -38,6 +38,7 @@ import {
 import { reorderPanelsBySidebar } from './pageOrder';
 import { addPageToPanels, applyOpenPage, getSidebarOrder } from './pagePanels';
 import { getFirstHighlightedComponentId } from './selectionHighlight';
+import { applyWorkspaceRestore } from './workspaceUrl';
 import {
   activeComments,
   addReplyComment,
@@ -278,6 +279,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'EXPAND_SIDEBAR':
       return { ...state, sidebarExpanded: true };
+
+    case 'RESTORE_WORKSPACE_FROM_URL':
+      return applyWorkspaceRestore(
+        state,
+        action.pageFiles,
+        action.primaryComponentId,
+      );
 
     case 'OPEN_PAGE': {
       const opened = applyOpenPage(state, action.pageFile);

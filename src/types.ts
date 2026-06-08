@@ -287,7 +287,12 @@ export type AppAction =
   | { type: 'CLEAR_FLASHED_COMPONENT' }
   | { type: 'OUTSTANDING_COMMENT'; commentId: string | null }
   | { type: 'SET_CONTENT_EDITOR_OPEN'; open: boolean }
-  | { type: 'CLEAR_APP_TOAST'; id?: number };
+  | { type: 'CLEAR_APP_TOAST'; id?: number }
+  | {
+      type: 'RESTORE_WORKSPACE_FROM_URL';
+      pageFiles: string[];
+      primaryComponentId: string | null;
+    };
 
 declare global {
   interface Window {

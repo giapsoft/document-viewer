@@ -4,9 +4,14 @@ export function getDocIdFromUrl(): string | null {
 }
 
 export function buildDocShareUrl(docId: string): string {
+  const current = new URL(window.location.href);
   const url = new URL(window.location.href);
   url.search = '';
   url.searchParams.set('doc', docId);
+  const c = current.searchParams.get('c');
+  const pages = current.searchParams.get('pages');
+  if (c) url.searchParams.set('c', c);
+  if (pages) url.searchParams.set('pages', pages);
   return url.toString();
 }
 

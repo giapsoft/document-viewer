@@ -73,6 +73,12 @@ import {
 import { setDocIdInUrl } from '../lib/docUrl';
 import { loadBundledHelpProject } from '../lib/bundledHelp';
 import {
+  clearWorkspaceFromUrl,
+  getWorkspaceStateFromUrl,
+  resolveWorkspaceUrlState,
+  syncWorkspaceUrl,
+} from '../lib/workspaceUrl';
+import {
   clearHelpFromUrl,
   HELP_ABOUT_PAGE,
   setHelpInUrl,
@@ -139,6 +145,7 @@ export function useAppStore() {
     () => Promise<import('../lib/saveProject').LocalAutoSaveResult>
   >(async () => ({ ok: true, skipped: true }));
   const jumpFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipWorkspaceUrlSyncRef = useRef(true);
 
   const FLASH_HIGHLIGHT_MS = 5000;
 
@@ -255,6 +262,28 @@ export function useAppStore() {
       scheduleRemoteAutoSave(() => runRemoteAutoSaveRef.current());
     }
   }, []);
+
+  const restoreWorkspaceFromUrl = useCallback(
+    (project: LoadedProject) => {
+      const resolved = resolveWorkspaceUrlState(project, getWorkspaceStateFromUrl());
+      if (!resolved) return;
+      dispatch({
+        type: 'RESTORE_WORKSPACE_FROM_URL',
+        pageFiles: resolved.pageFiles,
+        primaryComponentId: resolved.primaryComponentId,
+      });
+    },
+    [dispatch],
+  );
+
+  useEffect(() => {
+    if (skipWorkspaceUrlSyncRef.current) return;
+    if (!state.project) {
+      clearWorkspaceFromUrl();
+      return;
+    }
+    syncWorkspaceUrl(state);
+  }, [state.project, state.panels, state.selection]);
 
   const cancelRemoteBackgroundLoad = useCallback(() => {
     remoteBackgroundLoadRef.current?.cancel();
@@ -388,14 +417,18 @@ export function useAppStore() {
 
   const applyRemoteDocumentLoad = useCallback(
     (load: Awaited<ReturnType<typeof loadRemoteDocumentDeferred>>) => {
+      skipWorkspaceUrlSyncRef.current = true;
       dispatch({ type: 'SET_PROJECT', project: load.project });
       if (load.project.remoteDocId) {
         setDocIdInUrl(load.project.remoteDocId);
       }
+      restoreWorkspaceFromUrl(load.project);
+      skipWorkspaceUrlSyncRef.current = false;
+      syncWorkspaceUrl(appStateRef.current);
       startRemoteBackgroundLoad(load, dispatchRemoteMd, dispatchRemoteImage);
       void hydrateReadStateRef.current();
     },
-    [dispatch, dispatchRemoteMd, dispatchRemoteImage, startRemoteBackgroundLoad],
+    [dispatch, dispatchRemoteMd, dispatchRemoteImage, startRemoteBackgroundLoad, restoreWorkspaceFromUrl],
   );
 
   const setProject = useCallback((project: LoadedProject) => {
@@ -408,6 +441,7 @@ export function useAppStore() {
     setDirty(false);
     setSaveStatus('idle');
     setSaveError(null);
+    skipWorkspaceUrlSyncRef.current = true;
     dispatch({ type: 'SET_PROJECT', project });
     if (project.bundledHelp) {
       setDocIdInUrl(null);
@@ -419,8 +453,11 @@ export function useAppStore() {
       setDocIdInUrl(null);
       clearHelpFromUrl();
     }
+    restoreWorkspaceFromUrl(project);
+    skipWorkspaceUrlSyncRef.current = false;
+    syncWorkspaceUrl(appStateRef.current);
     void hydrateReadStateRef.current();
-  }, [dispatch, cancelRemoteBackgroundLoad]);
+  }, [dispatch, cancelRemoteBackgroundLoad, restoreWorkspaceFromUrl]);
 
   const closeProject = useCallback(() => {
     cancelRemoteAutoSave();
@@ -432,8 +469,10 @@ export function useAppStore() {
     setDirty(false);
     setSaveStatus('idle');
     setSaveError(null);
+    skipWorkspaceUrlSyncRef.current = true;
     setDocIdInUrl(null);
     clearHelpFromUrl();
+    clearWorkspaceFromUrl();
     dispatch({ type: 'CLOSE_PROJECT' });
   }, [dispatch, cancelRemoteBackgroundLoad]);
 
@@ -453,6 +492,7 @@ export function useAppStore() {
   );
 
   const createNewDocument = useCallback(() => {
+    clearWorkspaceFromUrl();
     const project = createBlankProject();
     setProject(project);
     const firstPage = project.pages[0]?.fileName;
