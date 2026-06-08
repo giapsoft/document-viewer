@@ -50,18 +50,38 @@ export function WorkspaceTopBar({
             className="selection-nav-btn"
             onClick={onSelectionBack}
             disabled={!canGoBack}
+            aria-label="Previous selection"
             title="Previous selection (←)"
           >
-            ← Back
+            <svg className="selection-nav-icon" viewBox="0 0 24 24" aria-hidden>
+              <path
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 18l-6-6 6-6"
+              />
+            </svg>
           </button>
           <button
             type="button"
             className="selection-nav-btn"
             onClick={onSelectionNext}
             disabled={!canGoNext}
+            aria-label="Next selection"
             title="Next selection (→)"
           >
-            Next →
+            <svg className="selection-nav-icon" viewBox="0 0 24 24" aria-hidden>
+              <path
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 18l6-6-6-6"
+              />
+            </svg>
           </button>
         </div>
       )}

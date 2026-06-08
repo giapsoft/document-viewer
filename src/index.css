@@ -1115,25 +1115,42 @@ code {
 .selection-nav-group {
   display: inline-flex;
   flex-shrink: 0;
-  gap: 0.35rem;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f8f9fa;
 }
 
 .selection-nav-btn {
-  padding: 0.35rem 0.75rem;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
-  background: #f8f9fa;
-  font-size: 0.85rem;
-  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #343a40;
+}
+
+.selection-nav-btn + .selection-nav-btn {
+  border-left: 1px solid #ced4da;
+}
+
+.selection-nav-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  display: block;
 }
 
 .selection-nav-btn:hover:not(:disabled) {
   background: #e9ecef;
-  border-color: #adb5bd;
+  color: #212529;
 }
 
 .selection-nav-btn:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
