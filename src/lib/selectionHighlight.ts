@@ -98,3 +98,21 @@ export function getHighlightNavTargetsForPage(
   const ordered = getOrderedHighlightedIdsForPage(page, selection);
   return groupConsecutiveHighlightedIds(page, ordered).map((group) => group[0]!);
 }
+
+/** Page files with members in groups that contain the selected component. */
+export function getMainGroupPageFiles(
+  groups: string[][],
+  selection: SelectionState,
+  componentToPage: Map<string, string>,
+): Set<string> {
+  const files = new Set<string>();
+  for (const groupIndex of selection.matchingGroupIndices) {
+    const group = groups[groupIndex];
+    if (!group) continue;
+    for (const memberId of group) {
+      const pageFile = componentToPage.get(memberId);
+      if (pageFile) files.add(pageFile);
+    }
+  }
+  return files;
+}

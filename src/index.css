@@ -389,6 +389,14 @@ code {
   line-height: 1;
 }
 
+.sidebar-status-key-name-demo-main-group {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #228be6;
+  line-height: 1;
+}
+
 .sidebar-status-key-dot-demo {
   flex-shrink: 0;
   width: 6px;
@@ -412,6 +420,16 @@ code {
 
 .page-label-name-highlighted .page-label-count {
   color: #f76707;
+  font-weight: 500;
+}
+
+.page-label-name-main-group {
+  color: #228be6;
+  font-weight: 600;
+}
+
+.page-label-name-main-group .page-label-count {
+  color: #1c7ed6;
   font-weight: 500;
 }
 

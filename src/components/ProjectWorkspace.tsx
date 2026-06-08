@@ -16,7 +16,7 @@ import { activeComments, canOwnComment, resolveCommentAnchorHighlightId } from '
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { isSaveInProgress } from '../lib/saveProject';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { pageHasHighlightedComponents } from '../lib/selectionHighlight';
+import { pageHasHighlightedComponents, getMainGroupPageFiles } from '../lib/selectionHighlight';
 
 const APP_TOAST_MS = 2000;
 
@@ -224,6 +224,15 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     return files;
   }, [project.pages, state.selection, state.currentPage]);
 
+  const mainGroupPageFiles = useMemo(() => {
+    if (!state.selection) return new Set<string>();
+    return getMainGroupPageFiles(
+      project.relations.groups,
+      state.selection,
+      project.index.componentToPage,
+    );
+  }, [project.relations.groups, project.index.componentToPage, state.selection]);
+
   const mainSelectionPageFile = useMemo(() => {
     if (!state.selection) return null;
     return (
@@ -362,6 +371,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
           onDeletePage={deletePage}
           panelPageFiles={panelPageFiles}
           highlightedPageFiles={highlightedPageFiles}
+          mainGroupPageFiles={mainGroupPageFiles}
           mainSelectionPageFile={mainSelectionPageFile}
           suggestNewPageName={suggestNewPageName}
           normalizePageName={normalizePageName}

@@ -16,6 +16,7 @@ interface SidebarProps {
   pages: SidebarPageEntry[];
   panelPageFiles: Set<string>;
   highlightedPageFiles: Set<string>;
+  mainGroupPageFiles: Set<string>;
   mainSelectionPageFile: string | null;
   canManagePages: boolean;
   onSelectPage: (pageFile: string) => void;
@@ -36,6 +37,7 @@ export function Sidebar({
   pages,
   panelPageFiles,
   highlightedPageFiles,
+  mainGroupPageFiles,
   mainSelectionPageFile,
   canManagePages,
   onSelectPage,
@@ -131,6 +133,15 @@ export function Sidebar({
           <span className="sidebar-status-key-text">Linked selection</span>
         </div>
         <div className="sidebar-status-key-row">
+          <span
+            className="sidebar-status-key-name-demo sidebar-status-key-name-demo-main-group"
+            aria-hidden
+          >
+            Page
+          </span>
+          <span className="sidebar-status-key-text">Main group</span>
+        </div>
+        <div className="sidebar-status-key-row">
           <span className="sidebar-status-key-dot-demo" aria-hidden />
           <span className="sidebar-status-key-text">Main selected component</span>
         </div>
@@ -145,7 +156,13 @@ export function Sidebar({
       <ul className="page-list">
         {pages.map((page, index) => {
           const inPanel = panelPageFiles.has(page.fileName);
+          const inMainGroup = mainGroupPageFiles.has(page.fileName);
           const hasHighlight = highlightedPageFiles.has(page.fileName);
+          const nameHighlight = inMainGroup
+            ? 'main-group'
+            : hasHighlight
+              ? 'related'
+              : undefined;
           const hasMainSelection = mainSelectionPageFile === page.fileName;
           const isDragging = dragIndex === index;
           const isDropTarget = dropIndex === index && dragIndex !== null && dragIndex !== index;
@@ -154,7 +171,7 @@ export function Sidebar({
             <li
               key={page.fileName}
               className={`page-list-row${inPanel ? ' page-list-row-in-panel' : ''}${hasMainSelection ? ' page-list-row-main-selected' : ''} ${isDragging ? 'page-list-row-dragging' : ''} ${isDropTarget ? 'page-list-row-drop-target' : ''}`}
-              aria-label={`${page.pageName}: ${inPanel ? 'in panel area' : 'not in panel area'}, ${hasHighlight ? 'has linked selection' : 'no linked selection'}, ${hasMainSelection ? 'contains main selected component' : 'no main selected component'}`}
+              aria-label={`${page.pageName}: ${inPanel ? 'in panel area' : 'not in panel area'}, ${nameHighlight === 'main-group' ? 'in main group' : hasHighlight ? 'has linked selection' : 'no linked selection'}, ${hasMainSelection ? 'contains main selected component' : 'no main selected component'}`}
               onDragOver={(event) => handleDragOver(event, index)}
               onDrop={(event) => handleDrop(event, index)}
               onDragLeave={() => {
@@ -185,7 +202,7 @@ export function Sidebar({
                   pageId={page.pageId}
                   fileName={page.fileName}
                   componentCount={page.componentCount}
-                  nameHighlighted={hasHighlight}
+                  nameHighlight={nameHighlight}
                 />
               </button>
               <div className="page-list-actions">
