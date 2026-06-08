@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import type {
   AppStyles,
   CommentAnchor,
@@ -203,6 +203,7 @@ interface ComponentBlockProps {
   onToggleComponentRead?: (componentId: string) => void;
   showReadBars?: boolean;
   onOpenGroupDialog?: () => void;
+  linkedListPanelOpen?: boolean;
 }
 
 interface ComponentShellProps {
@@ -211,6 +212,7 @@ interface ComponentShellProps {
   isDimmed: boolean;
   isPrimarySelected: boolean;
   showGroupLink?: boolean;
+  linkedListPanelOpen?: boolean;
   linkFlashActive: boolean;
   linkFlashNonce: number;
   className: string;
@@ -241,6 +243,7 @@ function ComponentShell({
   isDimmed,
   isPrimarySelected,
   showGroupLink = false,
+  linkedListPanelOpen = false,
   linkFlashActive,
   linkFlashNonce,
   className,
@@ -303,9 +306,10 @@ function ComponentShell({
       {showGroupLink && onOpenGroupDialog ? (
         <button
           type="button"
-          className="component-group-link-btn"
-          title="View linked lists"
-          aria-label="View linked lists"
+          className={`component-group-link-btn${linkedListPanelOpen ? ' is-active' : ''}`}
+          title={linkedListPanelOpen ? 'Close linked lists' : 'View linked lists'}
+          aria-label={linkedListPanelOpen ? 'Close linked lists' : 'View linked lists'}
+          aria-pressed={linkedListPanelOpen}
           onClick={(event) => {
             event.stopPropagation();
             onOpenGroupDialog();
@@ -348,6 +352,7 @@ export function ComponentBlock({
   onToggleComponentRead,
   showReadBars = true,
   onOpenGroupDialog,
+  linkedListPanelOpen = false,
 }: ComponentBlockProps) {
   const resolved = resolveComponentForDisplay(component, project.mdFiles);
   const mdSelectionHandledRef = useRef(false);
@@ -437,6 +442,7 @@ export function ComponentBlock({
     isDimmed,
     isPrimarySelected,
     showGroupLink,
+    linkedListPanelOpen: showGroupLink ? linkedListPanelOpen : false,
     linkFlashActive: flashedComponentId === component.id,
     linkFlashNonce: flashNonce,
     onSelect,
@@ -621,6 +627,7 @@ interface PagePanelProps {
   pendingImageNames?: ReadonlySet<string>;
   pendingMdComponentIds?: ReadonlySet<string>;
   onToggle: () => void;
+  onClose: () => void;
   onSelect: (componentId: string, pageFile: string) => void;
   onClearSelection: () => void;
   scrollToComponentId?: string | null;
@@ -645,6 +652,7 @@ interface PagePanelProps {
   onToggleComponentRead?: (componentId: string) => void;
   onTogglePageReadAll?: (pageFile: string) => void;
   onOpenGroupDialog?: () => void;
+  linkedListPanelOpen?: boolean;
 }
 
 export function PagePanel({
@@ -658,6 +666,7 @@ export function PagePanel({
   pendingImageNames,
   pendingMdComponentIds,
   onToggle,
+  onClose,
   onSelect,
   onClearSelection,
   commentLinkMode = false,
@@ -678,6 +687,7 @@ export function PagePanel({
   onToggleComponentRead,
   onTogglePageReadAll,
   onOpenGroupDialog,
+  linkedListPanelOpen = false,
 }: PagePanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -901,6 +911,23 @@ export function PagePanel({
     if (!expanded) onToggle();
   };
 
+  const handleClose = (event: MouseEvent) => {
+    event.stopPropagation();
+    onClose();
+  };
+
+  const closePageButton = (
+    <button
+      type="button"
+      className="panel-close-btn"
+      onClick={handleClose}
+      title="Close page"
+      aria-label={`Close page: ${page.pageName}`}
+    >
+      ×
+    </button>
+  );
+
   return (
     <div
       ref={panelRef}
@@ -926,7 +953,10 @@ export function PagePanel({
       <div className="page-panel-header">
         {expanded ? (
           <>
-            <span className="page-panel-title">{panelTitle}</span>
+            <div className="page-panel-header-leading">
+              {closePageButton}
+              <span className="page-panel-title">{panelTitle}</span>
+            </div>
             <div className="page-panel-header-actions">
               {commentUsername && onTogglePageReadAll ? (
                 <button
@@ -944,8 +974,12 @@ export function PagePanel({
               <button
                 type="button"
                 className="panel-toggle-btn"
-                onClick={onToggle}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggle();
+                }}
                 title="Shrink"
+                aria-label={`Shrink page panel: ${page.pageName}`}
               >
                 ◀
               </button>
@@ -970,6 +1004,7 @@ export function PagePanel({
                 ({pageCountLabel})
               </span>
             </span>
+            {closePageButton}
           </>
         )}
       </div>
@@ -1048,6 +1083,7 @@ export function PagePanel({
                   onToggleComponentRead={onToggleComponentRead}
                   showReadBars={pageHasUnread}
                   onOpenGroupDialog={onOpenGroupDialog}
+                  linkedListPanelOpen={linkedListPanelOpen}
                 />
                 );
               })}

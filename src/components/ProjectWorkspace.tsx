@@ -116,6 +116,14 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     setGroupPanelOpen(true);
   }, [state.selection?.matchingGroupIndices]);
 
+  const toggleGroupPanel = useCallback(() => {
+    if (groupPanelOpen) {
+      closeGroupPanel();
+      return;
+    }
+    openGroupPanel();
+  }, [groupPanelOpen, closeGroupPanel, openGroupPanel]);
+
   const handleSelectGroupInPanel = useCallback(
     (groupIndex: number) => {
       setGroupPanelActiveIndex(groupIndex);
@@ -626,6 +634,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 pendingImageNames={pendingRemoteImages}
                 pendingMdComponentIds={pendingRemoteMd}
                 onToggle={() => togglePanel(panel.pageFile)}
+                onClose={() => openPage(panel.pageFile)}
                 onSelect={handleComponentClick}
                 onClearSelection={clearSelection}
                 scrollToComponentId={state.scrollToComponent?.componentId ?? null}
@@ -645,7 +654,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 componentReadState={state.componentReadState}
                 onToggleComponentRead={toggleComponentRead}
                 onTogglePageReadAll={togglePageReadAll}
-                onOpenGroupDialog={openGroupPanel}
+                onOpenGroupDialog={toggleGroupPanel}
+                linkedListPanelOpen={groupPanelOpen}
               />
             ))}
             <CommentPanel
