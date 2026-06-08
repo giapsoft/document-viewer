@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { pickProjectFolder } from '../lib/loadProject';
 import { VersionBadge } from './VersionBadge';
+import { HelpLinks } from './HelpLinks';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { listRemoteDocuments, type RemoteDocumentMeta } from '../lib/remoteProject';
 import { getDocIdFromUrl } from '../lib/docUrl';
+import { getHelpRequestFromUrl, HELP_ABOUT_PAGE, HELP_GUIDE_PAGE } from '../lib/helpUrl';
 
 interface WelcomeScreenProps {
   onLoaded: (project: import('../types').LoadedProject) => void;
   onCreateNewDocument: () => void;
   onLoadRemoteDoc: (docId: string) => Promise<{ ok: boolean; error?: string }>;
+  onLoadBundledHelp: (pageFile?: string | null) => Promise<{ ok: boolean; error?: string }>;
 }
 
 function formatUpdatedAt(value: string): string {
@@ -23,7 +26,12 @@ function formatUpdatedAt(value: string): string {
   });
 }
 
-export function WelcomeScreen({ onLoaded, onCreateNewDocument, onLoadRemoteDoc }: WelcomeScreenProps) {
+export function WelcomeScreen({
+  onLoaded,
+  onCreateNewDocument,
+  onLoadRemoteDoc,
+  onLoadBundledHelp,
+}: WelcomeScreenProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [remoteDocs, setRemoteDocs] = useState<RemoteDocumentMeta[]>([]);
@@ -51,17 +59,40 @@ export function WelcomeScreen({ onLoaded, onCreateNewDocument, onLoadRemoteDoc }
   const onLoadRemoteDocRef = useRef(onLoadRemoteDoc);
   onLoadRemoteDocRef.current = onLoadRemoteDoc;
 
+  const onLoadBundledHelpRef = useRef(onLoadBundledHelp);
+  onLoadBundledHelpRef.current = onLoadBundledHelp;
+
   useEffect(() => {
     const docId = getDocIdFromUrl();
-    if (!docId || !supabaseReady) return;
+    if (docId) {
+      if (!supabaseReady) return;
+
+      let cancelled = false;
+      setLoading(true);
+      setError(null);
+      void onLoadRemoteDocRef.current(docId).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setError(result.error ?? 'Could not open document from URL');
+        }
+        setLoading(false);
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const { requested, pageFile } = getHelpRequestFromUrl();
+    if (!requested) return;
 
     let cancelled = false;
     setLoading(true);
     setError(null);
-    void onLoadRemoteDocRef.current(docId).then((result) => {
+    void onLoadBundledHelpRef.current(pageFile).then((result) => {
       if (cancelled) return;
       if (!result.ok) {
-        setError(result.error ?? 'Could not open document from URL');
+        setError(result.error ?? 'Could not open built-in help');
       }
       setLoading(false);
     });
@@ -104,14 +135,41 @@ export function WelcomeScreen({ onLoaded, onCreateNewDocument, onLoadRemoteDoc }
     }
   };
 
+  const handleOpenHelp = async (pageFile: string) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await onLoadBundledHelp(pageFile);
+      if (!result.ok) {
+        setError(result.error ?? 'Could not open built-in help');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="welcome">
       <div className="welcome-card welcome-card-wide">
         <h1>Document Viewer</h1>
-        <p>
-          Create a new document, open a local folder, or choose a saved document from remote
-          storage.
+        <p className="welcome-lead">
+          Multi-page documentation with component trace/highlight linking, in-browser editing,
+          comments, and read tracking. Save to a local folder or Supabase remote storage.
         </p>
+
+        <section className="welcome-intro" aria-labelledby="welcome-intro-heading">
+          <h2 id="welcome-intro-heading">Learn the app</h2>
+          <p>
+            New here? Read a short introduction or the full user guide — keyboard shortcuts, linking,
+            comments, and save/sync behaviour.
+          </p>
+          <HelpLinks
+            variant="welcome"
+            disabled={loading}
+            onOpenAbout={() => void handleOpenHelp(HELP_ABOUT_PAGE)}
+            onOpenGuide={() => void handleOpenHelp(HELP_GUIDE_PAGE)}
+          />
+        </section>
 
         <div className="welcome-actions">
           <button type="button" onClick={onCreateNewDocument} disabled={loading}>

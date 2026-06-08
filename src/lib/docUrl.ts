@@ -13,6 +13,8 @@ export function buildDocShareUrl(docId: string): string {
 export function setDocIdInUrl(docId: string | null): void {
   const url = new URL(window.location.href);
   url.searchParams.delete('page');
+  url.searchParams.delete('help');
+  url.searchParams.delete('helpPage');
   if (docId) {
     url.searchParams.set('doc', docId);
   } else {

@@ -1,0 +1,7 @@
+{
+  "pageNames": {
+    "about.p": "About",
+    "guide.p": "User guide"
+  },
+  "pageOrder": ["about.p", "guide.p"]
+}

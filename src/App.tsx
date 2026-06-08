@@ -12,6 +12,7 @@ function App() {
         onLoaded={store.setProject}
         onCreateNewDocument={store.createNewDocument}
         onLoadRemoteDoc={store.loadRemoteDocForWelcome}
+        onLoadBundledHelp={store.loadBundledHelpForWelcome}
       />
     );
   }

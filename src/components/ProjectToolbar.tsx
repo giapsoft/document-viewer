@@ -1,4 +1,5 @@
 import type { SaveStatus } from '../lib/saveProject';
+import { HelpLinks } from './HelpLinks';
 
 interface ProjectToolbarProps {
   dirty: boolean;
@@ -9,9 +10,12 @@ interface ProjectToolbarProps {
   saveStatus: SaveStatus;
   saveError: string | null;
   sourceLabel: string | null;
+  bundledHelp?: boolean;
   onSave: () => void;
   onReload?: () => void;
   onClose: () => void;
+  onOpenHelpAbout?: () => void;
+  onOpenHelpGuide?: () => void;
 }
 
 function saveStatusLabel(status: SaveStatus, dirty: boolean): string | null {
@@ -37,9 +41,12 @@ export function ProjectToolbar({
   saveStatus,
   saveError,
   sourceLabel,
+  bundledHelp = false,
   onSave,
   onReload,
   onClose,
+  onOpenHelpAbout,
+  onOpenHelpGuide,
 }: ProjectToolbarProps) {
   const saveLabel =
     canSave || saveStatus === 'pending' || saveStatus === 'saving' || saveStatus === 'saved' || saveStatus === 'error'
@@ -73,6 +80,13 @@ export function ProjectToolbar({
           Reload
         </button>
       )}
+      <HelpLinks
+        variant="toolbar"
+        disabled={loading}
+        inBundledHelp={bundledHelp}
+        onOpenAbout={onOpenHelpAbout}
+        onOpenGuide={onOpenHelpGuide}
+      />
       <button
         type="button"
         className="project-folder-btn project-folder-btn-primary"

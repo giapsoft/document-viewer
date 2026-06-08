@@ -66,6 +66,12 @@ import {
   formatImageDeleteBlockedMessage,
 } from '../lib/projectBundle';
 import { setDocIdInUrl } from '../lib/docUrl';
+import { loadBundledHelpProject } from '../lib/bundledHelp';
+import {
+  clearHelpFromUrl,
+  HELP_ABOUT_PAGE,
+  setHelpInUrl,
+} from '../lib/helpUrl';
 
 export type PageActionResult = { ok: true } | { ok: false; error: string };
 export type SaveResult =
@@ -371,10 +377,15 @@ export function useAppStore() {
     setSaveStatus('idle');
     setSaveError(null);
     dispatch({ type: 'SET_PROJECT', project });
-    if (project.remoteDocId) {
+    if (project.bundledHelp) {
+      setDocIdInUrl(null);
+      setHelpInUrl(project.pages[0]?.fileName ?? HELP_ABOUT_PAGE);
+    } else if (project.remoteDocId) {
       setDocIdInUrl(project.remoteDocId);
+      clearHelpFromUrl();
     } else {
       setDocIdInUrl(null);
+      clearHelpFromUrl();
     }
     void hydrateReadStateRef.current();
   }, [dispatch, cancelRemoteBackgroundLoad]);
@@ -390,6 +401,7 @@ export function useAppStore() {
     setSaveStatus('idle');
     setSaveError(null);
     setDocIdInUrl(null);
+    clearHelpFromUrl();
     dispatch({ type: 'CLOSE_PROJECT' });
   }, [dispatch, cancelRemoteBackgroundLoad]);
 
@@ -1181,6 +1193,40 @@ export function useAppStore() {
     [loadRemoteDoc],
   );
 
+  const loadBundledHelp = useCallback(
+    async (pageFile?: string | null): Promise<{ ok: boolean; error?: string }> => {
+      try {
+        const project = loadBundledHelpProject();
+        setProject(project);
+        const page = pageFile ?? project.pages[0]?.fileName ?? HELP_ABOUT_PAGE;
+        dispatch({ type: 'OPEN_PAGE', pageFile: page });
+        setHelpInUrl(page);
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : 'Could not load built-in help.',
+        };
+      }
+    },
+    [dispatch, setProject],
+  );
+
+  const loadBundledHelpForWelcome = useCallback(
+    async (pageFile?: string | null): Promise<{ ok: boolean; error?: string }> => {
+      return loadBundledHelp(pageFile);
+    },
+    [loadBundledHelp],
+  );
+
+  const openBundledHelpPage = useCallback(
+    (pageFile: string) => {
+      setHelpInUrl(pageFile);
+      dispatch({ type: 'OPEN_PAGE', pageFile });
+    },
+    [dispatch],
+  );
+
   const runRemoteAutoSave = useCallback(async (): Promise<
     import('../lib/remoteAutoSave').RemoteAutoSaveResult
   > => {
@@ -1333,6 +1379,9 @@ export function useAppStore() {
     closeProject,
     loadRemoteDoc,
     loadRemoteDocForWelcome,
+    loadBundledHelp,
+    loadBundledHelpForWelcome,
+    openBundledHelpPage,
     saveToLocal,
     saveToRemote,
     checkRemoteDocumentStale,

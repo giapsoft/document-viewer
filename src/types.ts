@@ -130,6 +130,8 @@ export interface LoadedProject {
   remoteSync?: RemoteSyncState | null;
   /** Server `documents.updated_at` when this copy was loaded or last saved. */
   remoteUpdatedAt?: string | null;
+  /** Built-in help doc-tree loaded from public/help (not persisted). */
+  bundledHelp?: boolean;
 }
 
 export interface PanelState {
