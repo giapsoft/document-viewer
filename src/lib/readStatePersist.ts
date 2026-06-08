@@ -1,4 +1,9 @@
 import type { LoadedProject } from '../types';
+import type { CommentReadState } from './commentReadState';
+import {
+  saveCommentReadStateForUser,
+  uploadRemoteCommentReadState,
+} from './commentReadStateStorage';
 import type { SaveStatus } from './saveProject';
 import { isSupabaseConfigured } from './supabaseClient';
 import type { ComponentReadState } from './readState';
@@ -11,7 +16,8 @@ let remoteSaveInFlight = false;
 let pendingRemoteSave: {
   docId: string;
   username: string;
-  readState: ComponentReadState;
+  componentReadState: ComponentReadState;
+  commentReadState: CommentReadState;
 } | null = null;
 let statusListener: ((status: SaveStatus, message?: string) => void) | null = null;
 
@@ -45,7 +51,10 @@ function flushRemoteReadStateSave(): void {
 
   remoteSaveInFlight = true;
   notify('saving');
-  void uploadRemoteReadState(pending.docId, pending.username, pending.readState)
+  void Promise.all([
+    uploadRemoteReadState(pending.docId, pending.username, pending.componentReadState),
+    uploadRemoteCommentReadState(pending.docId, pending.username, pending.commentReadState),
+  ])
     .then(() => {
       notify('saved');
       window.setTimeout(() => notify('idle'), 2000);
@@ -62,10 +71,11 @@ function flushRemoteReadStateSave(): void {
 function scheduleRemoteReadStateSave(
   docId: string,
   username: string,
-  readState: ComponentReadState,
+  componentReadState: ComponentReadState,
+  commentReadState: CommentReadState,
 ): void {
   const wasQueued = remoteSaveTimer !== null;
-  pendingRemoteSave = { docId, username, readState };
+  pendingRemoteSave = { docId, username, componentReadState, commentReadState };
   if (remoteSaveTimer) clearTimeout(remoteSaveTimer);
   if (!wasQueued && !remoteSaveInFlight) {
     notify('pending');
@@ -73,14 +83,25 @@ function scheduleRemoteReadStateSave(
   remoteSaveTimer = setTimeout(flushRemoteReadStateSave, REMOTE_READ_SAVE_DEBOUNCE_MS);
 }
 
-/** Persist read state locally immediately; debounce remote upload when applicable. */
+/** Persist component + comment read state locally immediately; debounce remote upload when applicable. */
+export function persistUserReadStates(
+  project: LoadedProject,
+  username: string,
+  componentReadState: ComponentReadState,
+  commentReadState: CommentReadState,
+): void {
+  void saveReadStateForUser(project, username, componentReadState).catch(() => {});
+  void saveCommentReadStateForUser(project, username, commentReadState).catch(() => {});
+  if (project.remoteDocId && isSupabaseConfigured()) {
+    scheduleRemoteReadStateSave(project.remoteDocId, username, componentReadState, commentReadState);
+  }
+}
+
+/** @deprecated Use persistUserReadStates */
 export function persistReadState(
   project: LoadedProject,
   username: string,
   readState: ComponentReadState,
 ): void {
-  void saveReadStateForUser(project, username, readState).catch(() => {});
-  if (project.remoteDocId && isSupabaseConfigured()) {
-    scheduleRemoteReadStateSave(project.remoteDocId, username, readState);
-  }
+  persistUserReadStates(project, username, readState, {});
 }

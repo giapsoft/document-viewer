@@ -12,7 +12,14 @@ import { UsernamePrompt } from './UsernamePrompt';
 import { isTypingTarget } from '../lib/keyboard';
 import { setStoredCommentUsername } from '../lib/commentSession';
 import { normalizeReadUsername } from '../lib/readState';
+import {
+  countForeignComments,
+  countUnreadForeignComments,
+  isCommentReadForUser,
+  type CommentReadState,
+} from '../lib/commentReadState';
 import { authorAvatarColors, authorInitial } from '../lib/commentAvatar';
+import { Eye, EyeOff } from 'lucide-react';
 
 interface CommentPanelProps {
   expanded: boolean;
@@ -32,6 +39,9 @@ interface CommentPanelProps {
   onFocusComment: (commentId: string) => void;
   onUpdateComment: (commentId: string, body: string) => void;
   onDeleteComment: (commentId: string) => void;
+  commentReadState?: CommentReadState;
+  onToggleCommentRead?: (commentId: string) => void;
+  onToggleAllCommentsRead?: () => void;
 }
 
 function AuthorAvatar({ name, small = false }: { name: string; small?: boolean }) {
@@ -78,6 +88,8 @@ function CommentTreeItem({
   onUpdateComment,
   onDeleteComment,
   hasUsername,
+  commentReadState = {},
+  onToggleCommentRead,
   isReply = false,
 }: {
   node: CommentTreeNode;
@@ -95,6 +107,8 @@ function CommentTreeItem({
   onUpdateComment: (commentId: string, body: string) => void;
   onDeleteComment: (commentId: string) => void;
   hasUsername: boolean;
+  commentReadState?: CommentReadState;
+  onToggleCommentRead?: (commentId: string) => void;
   isReply?: boolean;
 }) {
   const { comment } = node;
@@ -118,6 +132,10 @@ function CommentTreeItem({
       )
     : null;
   const authorColors = authorAvatarColors(comment.author);
+  const showReadToggle = hasUsername && !isOwner && Boolean(onToggleCommentRead);
+  const isRead = showReadToggle
+    ? isCommentReadForUser(comment, username, commentReadState)
+    : true;
 
   const handleToggleSelect = () => {
     if (!isOwner || editOpen) return;
@@ -135,7 +153,7 @@ function CommentTreeItem({
       <div className="comment-thread-item-head">
         <article
           id={`comment-${comment.id}`}
-          className={`comment-card${isOwner ? ' comment-card-selectable' : ''}${isSelected ? ' comment-card-selected' : ''}${isOutstanding ? ' comment-card-outstanding' : ''}`}
+          className={`comment-card${isOwner ? ' comment-card-selectable' : ''}${isSelected ? ' comment-card-selected' : ''}${isOutstanding ? ' comment-card-outstanding' : ''}${showReadToggle ? (isRead ? ' comment-card-read' : ' comment-card-unread') : ''}`}
           style={selectionStyle}
           onClick={isOwner ? handleToggleSelect : undefined}
         onKeyDown={
@@ -235,6 +253,17 @@ function CommentTreeItem({
             <footer className="comment-card-actions" onClick={stopCardClick}>
               {!editOpen && (
                 <>
+                  {showReadToggle && (
+                    <button
+                      type="button"
+                      className={`comment-read-icon-btn${isRead ? ' is-read' : ' is-unread'}`}
+                      onClick={() => onToggleCommentRead!(comment.id)}
+                      title={isRead ? 'Mark as unread' : 'Mark as read'}
+                      aria-label={isRead ? 'Mark as unread' : 'Mark as read'}
+                    >
+                      {isRead ? <Eye size={14} aria-hidden /> : <EyeOff size={14} aria-hidden />}
+                    </button>
+                  )}
                   {hasUsername && (
                     <button
                       type="button"
@@ -340,6 +369,8 @@ function CommentTreeItem({
               onUpdateComment={onUpdateComment}
               onDeleteComment={onDeleteComment}
               hasUsername={hasUsername}
+              commentReadState={commentReadState}
+              onToggleCommentRead={onToggleCommentRead}
             />
           ))}
         </ul>
@@ -366,6 +397,9 @@ export function CommentPanel({
   onFocusComment,
   onUpdateComment,
   onDeleteComment,
+  commentReadState = {},
+  onToggleCommentRead,
+  onToggleAllCommentsRead,
 }: CommentPanelProps) {
   const [composeBody, setComposeBody] = useState('');
   const [editingUsername, setEditingUsername] = useState(false);
@@ -375,6 +409,16 @@ export function CommentPanel({
   const comments = activeComments(project.relations.comments ?? []);
   const tree = buildCommentTree(comments);
   const commentCount = comments.length;
+  const foreignCommentCount = username ? countForeignComments(comments, username) : 0;
+  const unreadForeignCount = username
+    ? countUnreadForeignComments(comments, username, commentReadState)
+    : null;
+  const hasUnreadForeign = unreadForeignCount != null && unreadForeignCount > 0;
+  const readAllLabel = hasUnreadForeign ? 'All read' : 'All unread';
+  const commentCountLabel =
+    foreignCommentCount > 0 && unreadForeignCount != null
+      ? `${unreadForeignCount}/${foreignCommentCount}`
+      : String(commentCount);
 
   const componentLabels = new Map<string, string>();
   for (const page of project.pages) {
@@ -435,19 +479,54 @@ export function CommentPanel({
             <span className="page-panel-title comment-panel-title">
               Comments
               {commentCount > 0 && (
-                <span className="comment-count-badge">{commentCount}</span>
+                <span
+                  className="comment-count-badge"
+                  title={
+                    foreignCommentCount > 0 && unreadForeignCount != null
+                      ? `${unreadForeignCount} unread of ${foreignCommentCount} from others`
+                      : undefined
+                  }
+                >
+                  {commentCountLabel}
+                </span>
               )}
             </span>
-            <button type="button" className="panel-toggle-btn" onClick={onToggle} title="Shrink">
-              ◀
-            </button>
+            <div className="page-panel-header-actions">
+              {username && onToggleAllCommentsRead && foreignCommentCount > 0 ? (
+                <button
+                  type="button"
+                  className={`page-read-all-btn${hasUnreadForeign ? ' has-unread' : ''}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggleAllCommentsRead();
+                  }}
+                  title={
+                    hasUnreadForeign
+                      ? 'Mark all comments from others as read'
+                      : 'Mark all comments from others as unread'
+                  }
+                >
+                  {readAllLabel}
+                </button>
+              ) : null}
+              <button type="button" className="panel-toggle-btn" onClick={onToggle} title="Shrink">
+                ◀
+              </button>
+            </div>
           </>
         ) : (
           <>
             <span className="panel-toggle-btn panel-toggle-btn-hint" aria-hidden="true">
               ▶
             </span>
-            <span className="page-panel-vertical-title" title={`Comments (${commentCount})`}>
+            <span
+              className="page-panel-vertical-title"
+              title={
+                foreignCommentCount > 0 && unreadForeignCount != null
+                  ? `Comments (${unreadForeignCount}/${foreignCommentCount} unread from others)`
+                  : `Comments (${commentCount})`
+              }
+            >
               Comments
             </span>
           </>
@@ -585,6 +664,8 @@ export function CommentPanel({
                     onUpdateComment={onUpdateComment}
                     onDeleteComment={onDeleteComment}
                     hasUsername={Boolean(username)}
+                    commentReadState={commentReadState}
+                    onToggleCommentRead={onToggleCommentRead}
                   />
                 ))}
               </ul>

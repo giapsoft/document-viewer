@@ -1800,6 +1800,38 @@ code {
   text-decoration-color: rgba(36, 41, 47, 0.45);
 }
 
+.comment-card-unread {
+  box-shadow: inset 3px 0 0 #bf8700;
+}
+
+.comment-card-read {
+  box-shadow: inset 3px 0 0 #2da44e;
+}
+
+.comment-read-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.comment-read-icon-btn.is-unread {
+  color: #9a6700;
+}
+
+.comment-read-icon-btn.is-read {
+  color: #1a7f37;
+}
+
+.comment-read-icon-btn:hover {
+  background: rgba(27, 31, 36, 0.06);
+}
+
 .username-validation-error {
   margin: 0.35rem 0 0;
   font-size: 0.78rem;

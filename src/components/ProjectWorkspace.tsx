@@ -62,6 +62,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     toggleCommentPanel,
     setCommentUsername,
     toggleComponentRead,
+    toggleCommentRead,
+    toggleAllCommentsRead,
     togglePageReadAll,
     toggleSelectedComponentRead,
     navigateToUnread,
@@ -664,6 +666,9 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               onFocusComment={focusComment}
               onUpdateComment={updateComment}
               onDeleteComment={deleteComment}
+              commentReadState={state.commentReadState}
+              onToggleCommentRead={toggleCommentRead}
+              onToggleAllCommentsRead={toggleAllCommentsRead}
             />
           </div>
 

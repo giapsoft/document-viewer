@@ -5,6 +5,8 @@ import { mdSidecarFileName } from './mdFiles';
 import { ensureDocsDirectory } from './docsFolder';
 import { removeOrphanedDocsOnSave } from './pageFileOps';
 import { collectReferencedImageNames } from './projectBundle';
+import type { CommentReadState } from './commentReadState';
+import { saveCommentReadStatesToFolder } from './commentReadStateStorage';
 import type { ComponentReadState } from './readState';
 import { saveReadStatesToFolder } from './readStateStorage';
 
@@ -120,6 +122,7 @@ export async function pickSaveFolder(): Promise<FileSystemDirectoryHandle | null
 export async function saveProjectToFolder(
   project: LoadedProject,
   readStatesByUsername?: Record<string, ComponentReadState>,
+  commentReadStatesByUsername?: Record<string, CommentReadState>,
 ): Promise<void> {
   const root = project.folderHandle;
   if (!root) {
@@ -164,6 +167,9 @@ export async function saveProjectToFolder(
 
   if (readStatesByUsername && Object.keys(readStatesByUsername).length > 0) {
     await saveReadStatesToFolder(root, readStatesByUsername);
+  }
+  if (commentReadStatesByUsername && Object.keys(commentReadStatesByUsername).length > 0) {
+    await saveCommentReadStatesToFolder(root, commentReadStatesByUsername);
   }
 }
 

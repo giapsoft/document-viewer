@@ -1,4 +1,4 @@
-import type { AppAction, AppState, PanelState } from '../types';
+import type { AppAction, AppState, DocComment, PanelState } from '../types';
 import { shrinkFarthestExpanded, MAX_EXPANDED_PANELS } from '../lib/index';
 import {
   updateComponentInProject,
@@ -39,6 +39,7 @@ import { reorderPanelsBySidebar } from './pageOrder';
 import { addPageToPanels, applyOpenPage, getSidebarOrder } from './pagePanels';
 import { getFirstHighlightedComponentId } from './selectionHighlight';
 import {
+  activeComments,
   addReplyComment,
   addRootComment,
   canOwnComment,
@@ -49,6 +50,15 @@ import {
   setCommentAnchor,
   updateCommentBody,
 } from './comments';
+import {
+  getCommentRevision,
+  isCommentRead,
+  isOwnComment,
+  markCommentRead,
+  markCommentUnread,
+  pruneCommentReadState,
+  type CommentReadState,
+} from './commentReadState';
 import { getOrCreateCommentAuthorId, getStoredCommentUsername } from './commentSession';
 import { bumpComponentVersion, getComponentVersion } from './componentVersion';
 import {
@@ -67,6 +77,23 @@ function authorReadStateForComponent(
 ): ComponentReadState {
   if (!username) return readState;
   return markComponentRead(readState, componentId, version);
+}
+
+function authorReadStateForComment(
+  readState: CommentReadState,
+  username: string | null,
+  commentId: string,
+  revision: number,
+): CommentReadState {
+  if (!username) return readState;
+  return markCommentRead(readState, commentId, revision);
+}
+
+function findActiveComment(
+  comments: DocComment[] | undefined,
+  commentId: string,
+): DocComment | undefined {
+  return activeComments(comments ?? []).find((comment) => comment.id === commentId);
 }
 
 function showAppToast(state: AppState, message: string): Pick<AppState, 'appToast'> {
@@ -176,6 +203,7 @@ export const initialAppState: AppState = {
   commentPanelExpanded: false,
   commentUsername: null,
   componentReadState: {},
+  commentReadState: {},
   commentAuthorId: getOrCreateCommentAuthorId(),
   selectedCommentId: null,
   outstandingCommentId: null,
@@ -195,6 +223,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         sidebarExpanded: true,
         commentUsername: getStoredCommentUsername(),
         componentReadState: {},
+        commentReadState: {},
         commentAuthorId: getOrCreateCommentAuthorId(),
       };
       return nextState;
@@ -941,11 +970,37 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const username = normalizeReadUsername(action.username);
       if (!username) return state;
       if (state.commentUsername === username) return state;
-      return { ...state, commentUsername: username, componentReadState: {} };
+      return {
+        ...state,
+        commentUsername: username,
+        componentReadState: {},
+        commentReadState: {},
+      };
     }
 
     case 'SET_COMPONENT_READ_STATE':
       return { ...state, componentReadState: action.readState };
+
+    case 'SET_COMMENT_READ_STATE':
+      return { ...state, commentReadState: action.readState };
+
+    case 'TOGGLE_COMMENT_READ': {
+      if (!state.project || !state.commentUsername) return state;
+      const comment = findActiveComment(state.project.relations.comments, action.commentId);
+      if (!comment || isOwnComment(comment, state.commentUsername)) return state;
+
+      const revision = getCommentRevision(comment);
+      const currentlyRead = isCommentRead(
+        action.commentId,
+        revision,
+        state.commentReadState,
+      );
+      const commentReadState = currentlyRead
+        ? markCommentUnread(state.commentReadState, action.commentId)
+        : markCommentRead(state.commentReadState, action.commentId, revision);
+
+      return { ...state, commentReadState };
+    }
 
     case 'FOCUS_UNREAD_COMPONENT': {
       if (!state.project || !state.commentUsername) return state;
@@ -1223,31 +1278,56 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         action.body,
       );
       const project = updateProjectComments(state.project, comments);
-      const newId = comments[comments.length - 1]?.id ?? null;
+      const newComment = comments[comments.length - 1];
+      const newId = newComment?.id ?? null;
+      const commentReadState =
+        newComment != null
+          ? authorReadStateForComment(
+              state.commentReadState,
+              state.commentUsername,
+              newComment.id,
+              getCommentRevision(newComment),
+            )
+          : state.commentReadState;
       return {
         ...state,
         project,
         selectedCommentId: newId,
         commentLinkPreviewAnchor: null,
         commentLinkCtrlActive: false,
+        commentReadState,
       };
     }
 
     case 'ADD_REPLY_COMMENT': {
       if (!state.project || !state.commentUsername) return state;
+      const before = state.project.relations.comments ?? [];
+      const beforeIds = new Set(before.map((comment) => comment.id));
       const comments = addReplyComment(
-        state.project.relations.comments ?? [],
+        before,
         action.parentId,
         state.commentUsername,
         state.commentAuthorId,
         action.body,
       );
       const project = updateProjectComments(state.project, comments);
-      return { ...state, project };
+      const added = comments.find((comment) => !beforeIds.has(comment.id));
+      const commentReadState =
+        added != null
+          ? authorReadStateForComment(
+              state.commentReadState,
+              state.commentUsername,
+              added.id,
+              getCommentRevision(added),
+            )
+          : state.commentReadState;
+      return { ...state, project, commentReadState };
     }
 
     case 'SET_COMMENT_ANCHOR': {
       if (state.commentLinkCtrlActive || !state.project) return state;
+      const before = findActiveComment(state.project.relations.comments, action.commentId);
+      const oldRevision = before ? getCommentRevision(before) : -1;
       const comments = setCommentAnchor(
         state.project.relations.comments ?? [],
         action.commentId,
@@ -1256,11 +1336,24 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         state.commentUsername,
       );
       const project = updateProjectComments(state.project, comments);
-      return { ...state, project };
+      const after = findActiveComment(comments, action.commentId);
+      const newRevision = after ? getCommentRevision(after) : oldRevision;
+      const commentReadState =
+        after != null && newRevision > oldRevision
+          ? authorReadStateForComment(
+              state.commentReadState,
+              state.commentUsername,
+              action.commentId,
+              newRevision,
+            )
+          : state.commentReadState;
+      return { ...state, project, commentReadState };
     }
 
     case 'CLEAR_COMMENT_ANCHOR': {
       if (state.commentLinkCtrlActive || !state.project) return state;
+      const before = findActiveComment(state.project.relations.comments, action.commentId);
+      const oldRevision = before ? getCommentRevision(before) : -1;
       const comments = clearCommentAnchor(
         state.project.relations.comments ?? [],
         action.commentId,
@@ -1268,11 +1361,24 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         state.commentUsername,
       );
       const project = updateProjectComments(state.project, comments);
-      return { ...state, project };
+      const after = findActiveComment(comments, action.commentId);
+      const newRevision = after ? getCommentRevision(after) : oldRevision;
+      const commentReadState =
+        after != null && newRevision > oldRevision
+          ? authorReadStateForComment(
+              state.commentReadState,
+              state.commentUsername,
+              action.commentId,
+              newRevision,
+            )
+          : state.commentReadState;
+      return { ...state, project, commentReadState };
     }
 
     case 'UPDATE_COMMENT': {
       if (!state.project) return state;
+      const before = findActiveComment(state.project.relations.comments, action.commentId);
+      const oldRevision = before ? getCommentRevision(before) : -1;
       const comments = updateCommentBody(
         state.project.relations.comments ?? [],
         action.commentId,
@@ -1281,7 +1387,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         action.body,
       );
       const project = updateProjectComments(state.project, comments);
-      return { ...state, project };
+      const after = findActiveComment(comments, action.commentId);
+      const newRevision = after ? getCommentRevision(after) : oldRevision;
+      const commentReadState =
+        after != null && newRevision > oldRevision
+          ? authorReadStateForComment(
+              state.commentReadState,
+              state.commentUsername,
+              action.commentId,
+              newRevision,
+            )
+          : state.commentReadState;
+      return { ...state, project, commentReadState };
     }
 
     case 'DELETE_COMMENT': {
@@ -1304,9 +1421,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           .map((comment) => comment.id),
       );
       const project = updateProjectComments(state.project, comments);
+      const commentReadState = pruneCommentReadState(state.commentReadState, removedIds);
       return {
         ...state,
         project,
+        commentReadState,
         selectedCommentId:
           state.selectedCommentId && removedIds.has(state.selectedCommentId)
             ? null

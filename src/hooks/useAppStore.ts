@@ -1,15 +1,24 @@
 import { useReducer, useCallback, useRef, useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { AppAction, CommentAnchor, Component, LoadedProject } from '../types';
-import { stripCommentTombstones } from '../lib/comments';
+import { activeComments, stripCommentTombstones } from '../lib/comments';
 import { setStoredCommentUsername } from '../lib/commentSession';
 import { queueFocusComponentBlock } from '../lib/keyboard';
 import {
   normalizeReadUsername,
   toggleAllComponentsReadOnPage,
 } from '../lib/readState';
+import { toggleAllForeignCommentsRead } from '../lib/commentReadState';
+import {
+  collectCommentReadStatesForExport,
+  loadCommentReadStateForUser,
+} from '../lib/commentReadStateStorage';
 import { loadReadStateForUser, collectReadStatesForExport } from '../lib/readStateStorage';
-import { persistReadState, cancelReadStateRemoteSave, setReadStateSaveStatusListener } from '../lib/readStatePersist';
+import {
+  persistUserReadStates,
+  cancelReadStateRemoteSave,
+  setReadStateSaveStatusListener,
+} from '../lib/readStatePersist';
 import { findComponent } from '../lib/projectMutations';
 import { findUnreadComponentGlobally } from '../lib/componentNavigation';
 import { getStoredPageOrder } from '../lib/pageOrder';
@@ -193,17 +202,27 @@ export function useAppStore() {
     }
 
     const prevProject = projectRef.current;
-    const prevReadState = appStateRef.current.componentReadState;
+    const prevComponentReadState = appStateRef.current.componentReadState;
+    const prevCommentReadState = appStateRef.current.commentReadState;
     const isDirtyAction = DIRTY_ACTIONS.has(action.type);
 
     flushSync(() => baseDispatch(action));
 
-    const nextReadState = appStateRef.current.componentReadState;
-    if (nextReadState !== prevReadState) {
+    const nextComponentReadState = appStateRef.current.componentReadState;
+    const nextCommentReadState = appStateRef.current.commentReadState;
+    if (
+      nextComponentReadState !== prevComponentReadState ||
+      nextCommentReadState !== prevCommentReadState
+    ) {
       const project = projectRef.current;
       const username = appStateRef.current.commentUsername;
       if (project && username) {
-        persistReadState(project, username, nextReadState);
+        persistUserReadStates(
+          project,
+          username,
+          nextComponentReadState,
+          nextCommentReadState,
+        );
       }
     }
 
@@ -355,10 +374,15 @@ export function useAppStore() {
     const username = appStateRef.current.commentUsername;
     if (!project || !username) {
       dispatch({ type: 'SET_COMPONENT_READ_STATE', readState: {} });
+      dispatch({ type: 'SET_COMMENT_READ_STATE', readState: {} });
       return;
     }
-    const readState = await loadReadStateForUser(project, username);
+    const [readState, commentReadState] = await Promise.all([
+      loadReadStateForUser(project, username),
+      loadCommentReadStateForUser(project, username),
+    ]);
     dispatch({ type: 'SET_COMPONENT_READ_STATE', readState });
+    dispatch({ type: 'SET_COMMENT_READ_STATE', readState: commentReadState });
   };
 
   const applyRemoteDocumentLoad = useCallback(
@@ -710,6 +734,33 @@ export function useAppStore() {
     return true;
   }, [dispatch]);
 
+  const toggleAllCommentsRead = useCallback(() => {
+    const project = projectRef.current;
+    const username = appStateRef.current.commentUsername;
+    if (!project || !username) return;
+
+    const comments = activeComments(project.relations.comments ?? []);
+    const next = toggleAllForeignCommentsRead(
+      comments,
+      username,
+      appStateRef.current.commentReadState,
+    );
+    dispatch({ type: 'SET_COMMENT_READ_STATE', readState: next });
+  }, [dispatch]);
+
+  const toggleCommentRead = useCallback((commentId: string) => {
+    const project = projectRef.current;
+    const username = appStateRef.current.commentUsername;
+    if (!project || !username) return;
+
+    const exists = (project.relations.comments ?? []).some(
+      (comment) => comment.id === commentId && comment.deletedAt == null,
+    );
+    if (!exists) return;
+
+    dispatch({ type: 'TOGGLE_COMMENT_READ', commentId });
+  }, [dispatch]);
+
   const toggleComponentRead = useCallback((componentId: string) => {
     const project = projectRef.current;
     const username = appStateRef.current.commentUsername;
@@ -1000,7 +1051,12 @@ export function useAppStore() {
         appStateRef.current.commentUsername,
         appStateRef.current.componentReadState,
       );
-      await saveProjectToFolder(projectForSave, readStates);
+      const commentReadStates = collectCommentReadStatesForExport(
+        project,
+        appStateRef.current.commentUsername,
+        appStateRef.current.commentReadState,
+      );
+      await saveProjectToFolder(projectForSave, readStates, commentReadStates);
 
       const nextProject = stripCommentTombstones({
         ...project,
@@ -1304,7 +1360,12 @@ export function useAppStore() {
         appStateRef.current.commentUsername,
         appStateRef.current.componentReadState,
       );
-      await saveProjectToFolder(project, readStates);
+      const commentReadStates = collectCommentReadStatesForExport(
+        project,
+        appStateRef.current.commentUsername,
+        appStateRef.current.commentReadState,
+      );
+      await saveProjectToFolder(project, readStates, commentReadStates);
       const nextProject = stripCommentTombstones(project);
       projectRef.current = nextProject;
       if (nextProject !== project) {
@@ -1413,6 +1474,8 @@ export function useAppStore() {
     toggleCommentPanel,
     setCommentUsername,
     toggleComponentRead,
+    toggleCommentRead,
+    toggleAllCommentsRead,
     toggleSelectedComponentRead,
     togglePageReadAll,
     navigateToUnread,

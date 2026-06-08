@@ -174,6 +174,8 @@ export interface AppState {
   commentUsername: string | null;
   /** Per-component read version for the active comment username */
   componentReadState: Record<string, number>;
+  /** Per-comment read revision (updatedAt) for the active comment username */
+  commentReadState: Record<string, number>;
   commentAuthorId: string;
   /** Comment selected in the panel (click to toggle). */
   selectedCommentId: string | null;
@@ -263,7 +265,9 @@ export type AppAction =
   | { type: 'SET_COMMENT_USERNAME'; username: string }
   | { type: 'FOCUS_UNREAD_COMPONENT'; componentId: string; pageFile: string }
   | { type: 'SET_COMPONENT_READ_STATE'; readState: Record<string, number> }
+  | { type: 'SET_COMMENT_READ_STATE'; readState: Record<string, number> }
   | { type: 'TOGGLE_COMPONENT_READ'; componentId: string }
+  | { type: 'TOGGLE_COMMENT_READ'; commentId: string }
   | { type: 'SELECT_COMMENT'; commentId: string }
   | { type: 'SET_COMMENT_LINK_PREVIEW'; anchor: CommentAnchor | null }
   | { type: 'SET_COMMENT_LINK_CTRL_ACTIVE'; active: boolean }
