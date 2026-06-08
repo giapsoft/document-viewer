@@ -3,12 +3,8 @@ import { flushSync } from 'react-dom';
 import type { AppAction, CommentAnchor, Component, LoadedProject } from '../types';
 import { stripCommentTombstones } from '../lib/comments';
 import { setStoredCommentUsername } from '../lib/commentSession';
-import { getComponentVersion } from '../lib/componentVersion';
 import { queueFocusComponentBlock } from '../lib/keyboard';
 import {
-  isComponentRead,
-  markComponentRead,
-  markComponentUnread,
   normalizeReadUsername,
   toggleAllComponentsReadOnPage,
 } from '../lib/readState';
@@ -197,9 +193,19 @@ export function useAppStore() {
     }
 
     const prevProject = projectRef.current;
+    const prevReadState = appStateRef.current.componentReadState;
     const isDirtyAction = DIRTY_ACTIONS.has(action.type);
 
     flushSync(() => baseDispatch(action));
+
+    const nextReadState = appStateRef.current.componentReadState;
+    if (nextReadState !== prevReadState) {
+      const project = projectRef.current;
+      const username = appStateRef.current.commentUsername;
+      if (project && username) {
+        persistReadState(project, username, nextReadState);
+      }
+    }
 
     if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
       return;
@@ -712,15 +718,7 @@ export function useAppStore() {
     const found = findComponent(project, componentId);
     if (!found) return;
 
-    const version = getComponentVersion(found.component);
-    const current = appStateRef.current.componentReadState;
-    const currentlyRead = isComponentRead(componentId, version, current);
-    const next = currentlyRead
-      ? markComponentUnread(current, componentId)
-      : markComponentRead(current, componentId, version);
-
     dispatch({ type: 'TOGGLE_COMPONENT_READ', componentId });
-    persistReadState(project, username, next);
   }, [dispatch]);
 
   const toggleSelectedComponentRead = useCallback(() => {
@@ -744,7 +742,6 @@ export function useAppStore() {
       appStateRef.current.componentReadState,
     );
     dispatch({ type: 'SET_COMPONENT_READ_STATE', readState: next });
-    persistReadState(project, username, next);
   }, [dispatch]);
 
   const navigateToUnread = useCallback((direction: 'forward' | 'backward') => {

@@ -392,11 +392,19 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const showShortcutsHint =
     !workspaceShortcutsBlocked && (Boolean(state.selection) || readShortcutsEnabled);
 
+  const autoPullRemoteDocument = useCallback(async () => {
+    if (dirty || state.contentEditorOpen) return;
+    await reloadProject();
+  }, [dirty, state.contentEditorOpen, reloadProject]);
+
   const remoteStaleOnServer = useRemoteStalePoll(
-    Boolean(project.remoteDocId && project.remoteUpdatedAt) && !isSaveInProgress(saveStatus),
+    Boolean(project.remoteDocId && project.remoteUpdatedAt) &&
+      !dirty &&
+      !isSaveInProgress(saveStatus),
     checkRemoteDocumentStale,
     undefined,
     project.remoteUpdatedAt,
+    autoPullRemoteDocument,
   );
 
   const runRemoteSave = useCallback(
@@ -547,7 +555,9 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
           {remoteStaleOnServer && !dirty && project.remoteDocId && (
             <div className="remote-stale-banner" role="status">
-              <span>A newer version of this document is on the server.</span>
+              <span>
+                A newer version is on the server but could not be loaded automatically.
+              </span>
               <button
                 type="button"
                 className="remote-stale-banner-btn"

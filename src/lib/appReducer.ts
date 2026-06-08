@@ -56,7 +56,18 @@ import {
   markComponentRead,
   markComponentUnread,
   normalizeReadUsername,
+  type ComponentReadState,
 } from './readState';
+
+function authorReadStateForComponent(
+  readState: ComponentReadState,
+  username: string | null,
+  componentId: string,
+  version: number,
+): ComponentReadState {
+  if (!username) return readState;
+  return markComponentRead(readState, componentId, version);
+}
 
 function showAppToast(state: AppState, message: string): Pick<AppState, 'appToast'> {
   return {
@@ -413,6 +424,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'UPDATE_COMPONENT': {
       if (!state.project) return state;
       const { pageFile, componentId, patch } = action;
+      const before = findComponent(state.project, componentId);
+      const oldVersion = before ? getComponentVersion(before.component) : -1;
+
       const { project, newComponentId } = updateComponentInProject(
         state.project,
         pageFile,
@@ -421,6 +435,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       );
 
       const rebuilt = rebuildProject(project);
+      const after = findComponent(rebuilt, newComponentId);
+      const newVersion = after ? getComponentVersion(after.component) : oldVersion;
 
       let selection = state.selection;
       if (selection?.componentId === componentId) {
@@ -438,11 +454,22 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         newComponentId,
       );
 
+      const componentReadState =
+        newVersion > oldVersion
+          ? authorReadStateForComponent(
+              state.componentReadState,
+              state.commentUsername,
+              newComponentId,
+              newVersion,
+            )
+          : state.componentReadState;
+
       return {
         ...state,
         project: rebuilt,
         selection,
         selectionHistory,
+        componentReadState,
       };
     }
 
@@ -454,18 +481,28 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const mdFiles = new Map(state.project.mdFiles);
       mdFiles.set(action.componentId, action.content);
 
+      let bumpedVersion = 0;
       const pages = state.project.pages.map((page) => ({
         ...page,
-        components: page.components.map((component) =>
-          component.id === action.componentId
-            ? bumpComponentVersion(component)
-            : component,
-        ),
+        components: page.components.map((component) => {
+          if (component.id !== action.componentId) return component;
+          const bumped = bumpComponentVersion(component);
+          bumpedVersion = getComponentVersion(bumped);
+          return bumped;
+        }),
       }));
+
+      const componentReadState = authorReadStateForComponent(
+        state.componentReadState,
+        state.commentUsername,
+        action.componentId,
+        bumpedVersion,
+      );
 
       return {
         ...state,
         project: rebuildProject({ ...state.project, pages, mdFiles }),
+        componentReadState,
       };
     }
 
@@ -537,6 +574,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           linkTargetGroupIndex !== null &&
           !(linkPreviewGroups[linkTargetGroupIndex] ?? []).includes(newComponent.id);
 
+        const componentReadState = authorReadStateForComponent(
+          state.componentReadState,
+          state.commentUsername,
+          newComponent.id,
+          getComponentVersion(newComponent),
+        );
+
         const nextState: AppState = {
           ...state,
           project,
@@ -545,6 +589,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           selection: null,
           linkTargetGroupIndex,
           linkFocusComponentId: newComponent.id,
+          componentReadState,
           ...(linkGroupPageLimitExceeded
             ? showAppToast(state, LINK_GROUP_MAX_PAGES_TOAST)
             : null),
@@ -564,10 +609,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         entry,
       );
 
+      const componentReadState = authorReadStateForComponent(
+        state.componentReadState,
+        state.commentUsername,
+        newComponent.id,
+        getComponentVersion(newComponent),
+      );
+
       const baseState: AppState = {
         ...state,
         project,
         currentPage: pageFile,
+        componentReadState,
       };
       const applied = applyComponentSelection(baseState, newComponent.id, pageFile);
       if (!applied) return baseState;
@@ -852,9 +905,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const targetPanel = state.panels.find((p) => p.pageFile === pageFile);
       const shouldScroll = Boolean(targetPanel?.expanded);
 
+      const componentReadState = authorReadStateForComponent(
+        state.componentReadState,
+        state.commentUsername,
+        newComponent.id,
+        getComponentVersion(newComponent),
+      );
+
       return {
         ...state,
         project: withComponent,
+        componentReadState,
         scrollToComponent: shouldScroll
           ? {
               componentId: newComponent.id,

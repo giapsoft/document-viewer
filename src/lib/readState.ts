@@ -16,11 +16,20 @@ export function readStateFileName(username: string): string {
 }
 
 export function parseReadStateFile(raw: unknown): ComponentReadState {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  if (Array.isArray(raw)) {
+    const result: ComponentReadState = {};
+    for (const entry of raw) {
+      if (typeof entry === 'string' && entry.length > 0) {
+        result[entry] = Math.max(result[entry] ?? -1, 0);
+      }
+    }
+    return result;
+  }
+  if (!raw || typeof raw !== 'object') return {};
   const result: ComponentReadState = {};
   for (const [componentId, value] of Object.entries(raw as Record<string, unknown>)) {
     if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
-      result[componentId] = value;
+      result[componentId] = Math.max(result[componentId] ?? -1, value);
     }
   }
   return result;
@@ -40,6 +49,8 @@ export function markComponentRead(
   componentId: string,
   version: number,
 ): ComponentReadState {
+  const current = readState[componentId];
+  if (current !== undefined && current >= version) return readState;
   return { ...readState, [componentId]: version };
 }
 
