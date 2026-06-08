@@ -19,6 +19,8 @@ import {
   withRelationsGroups,
   cloneGroups,
   groupsEqual,
+  canAddComponentToGroupByPageLimit,
+  LINK_GROUP_MAX_PAGES_TOAST,
 } from './groupRelations';
 import {
   appendSelectionHistory,
@@ -48,6 +50,15 @@ import {
   updateCommentBody,
 } from './comments';
 import { getOrCreateCommentAuthorId, getStoredCommentUsername } from './commentSession';
+
+function showAppToast(state: AppState, message: string): Pick<AppState, 'appToast'> {
+  return {
+    appToast: {
+      message,
+      id: (state.appToast?.id ?? 0) + 1,
+    },
+  };
+}
 
 function applyExitLinkMode(state: AppState): AppState {
   if (!state.linkMode) return state;
@@ -147,6 +158,7 @@ export const initialAppState: AppState = {
   commentLinkPreviewAnchor: null,
   commentLinkCtrlActive: false,
   contentEditorOpen: false,
+  appToast: null,
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -472,12 +484,25 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           linkPreviewGroups = createGroup(linkPreviewGroups, [newComponent.id]);
           linkTargetGroupIndex = linkPreviewGroups.length - 1;
         } else {
-          linkPreviewGroups = addComponentToGroup(
-            linkPreviewGroups,
-            linkTargetGroupIndex,
-            newComponent.id,
-          );
+          const group = linkPreviewGroups[linkTargetGroupIndex] ?? [];
+          if (
+            canAddComponentToGroupByPageLimit(
+              group,
+              newComponent.id,
+              project.index.componentToPage,
+            )
+          ) {
+            linkPreviewGroups = addComponentToGroup(
+              linkPreviewGroups,
+              linkTargetGroupIndex,
+              newComponent.id,
+            );
+          }
         }
+
+        const linkGroupPageLimitExceeded =
+          linkTargetGroupIndex !== null &&
+          !(linkPreviewGroups[linkTargetGroupIndex] ?? []).includes(newComponent.id);
 
         const nextState: AppState = {
           ...state,
@@ -487,6 +512,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           selection: null,
           linkTargetGroupIndex,
           linkFocusComponentId: newComponent.id,
+          ...(linkGroupPageLimitExceeded
+            ? showAppToast(state, LINK_GROUP_MAX_PAGES_TOAST)
+            : null),
         };
 
         const sidebarOrder = getSidebarOrder(nextState);
@@ -642,6 +670,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             linkTargetGroupIndex = null;
           }
         } else {
+          if (
+            !canAddComponentToGroupByPageLimit(
+              group,
+              componentId,
+              state.project.index.componentToPage,
+            )
+          ) {
+            return { ...state, ...showAppToast(state, LINK_GROUP_MAX_PAGES_TOAST) };
+          }
           groups = addComponentToGroup(groups, linkTargetGroupIndex, componentId);
         }
       }
@@ -1084,6 +1121,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'SET_CONTENT_EDITOR_OPEN':
       return { ...state, contentEditorOpen: action.open };
+
+    case 'CLEAR_APP_TOAST':
+      if (action.id !== undefined && state.appToast?.id !== action.id) return state;
+      return { ...state, appToast: null };
 
     default:
       return state;

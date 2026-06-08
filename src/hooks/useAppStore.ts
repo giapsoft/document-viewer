@@ -490,6 +490,10 @@ export function useAppStore() {
     dispatch({ type: 'SET_CONTENT_EDITOR_OPEN', open });
   }, [dispatch]);
 
+  const clearAppToast = useCallback((id?: number) => {
+    dispatch({ type: 'CLEAR_APP_TOAST', id });
+  }, [dispatch]);
+
   const finishLinkSession = useCallback(() => {
     dispatch({ type: 'END_LINK_SESSION' });
   }, [dispatch]);
@@ -1220,6 +1224,7 @@ export function useAppStore() {
     setLinkMode,
     setLinkCtrlActive,
     setContentEditorOpen,
+    clearAppToast,
     finishLinkSession,
     toggleCommentPanel,
     setCommentUsername,

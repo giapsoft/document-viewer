@@ -11,11 +11,14 @@ import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
 import { useCtrlCommentLinkHold } from '../hooks/useCtrlCommentLinkHold';
 import { useRemoteStalePoll } from '../hooks/useRemoteStalePoll';
 import { CommentPanel } from './CommentPanel';
+import { Toast } from './Toast';
 import { activeComments, canOwnComment, resolveCommentAnchorHighlightId } from '../lib/comments';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { isSaveInProgress } from '../lib/saveProject';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { pageHasHighlightedComponents } from '../lib/selectionHighlight';
+
+const APP_TOAST_MS = 2000;
 
 type AppStore = ReturnType<typeof useAppStore>;
 
@@ -46,6 +49,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     deleteComponent,
     setLinkCtrlActive,
     setContentEditorOpen,
+    clearAppToast,
     finishLinkSession,
     toggleCommentPanel,
     setCommentUsername,
@@ -81,6 +85,13 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   } = store;
 
   const project = state.project!;
+
+  useEffect(() => {
+    if (!state.appToast) return;
+    const toastId = state.appToast.id;
+    const timer = window.setTimeout(() => clearAppToast(toastId), APP_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [state.appToast, clearAppToast]);
 
   const canGoBack = state.selectionHistoryIndex > 0;
   const canGoNext =
@@ -517,6 +528,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
           }}
         />
       )}
+
+      {state.appToast ? <Toast message={state.appToast.message} /> : null}
     </>
   );
 }

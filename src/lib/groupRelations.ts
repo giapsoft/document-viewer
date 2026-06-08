@@ -128,6 +128,39 @@ export function createGroup(groups: string[][], componentIds: string[]): string[
   return [...cloneGroups(groups), unique];
 }
 
+export const MAX_PAGES_PER_GROUP = 2;
+
+export const LINK_GROUP_MAX_PAGES_TOAST =
+  'A link group can only include components from up to 2 pages.';
+
+export function getGroupMemberPageFiles(
+  group: string[],
+  componentToPage: Map<string, string>,
+): Set<string> {
+  const pages = new Set<string>();
+  for (const id of group) {
+    const pageFile = componentToPage.get(id);
+    if (pageFile) pages.add(pageFile);
+  }
+  return pages;
+}
+
+/** False when adding `componentId` would put members on more than `maxPages` page files. */
+export function canAddComponentToGroupByPageLimit(
+  group: string[],
+  componentId: string,
+  componentToPage: Map<string, string>,
+  maxPages = MAX_PAGES_PER_GROUP,
+): boolean {
+  if (group.includes(componentId)) return true;
+
+  const pages = getGroupMemberPageFiles(group, componentToPage);
+  const pageFile = componentToPage.get(componentId);
+  if (!pageFile) return false;
+  if (pages.has(pageFile)) return true;
+  return pages.size < maxPages;
+}
+
 export function removeGroupAtIndex(groups: string[][], groupIndex: number): string[][] {
   if (groupIndex < 0 || groupIndex >= groups.length) return cloneGroups(groups);
   const next = cloneGroups(groups);

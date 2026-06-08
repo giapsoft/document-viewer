@@ -181,6 +181,8 @@ export interface AppState {
   commentLinkCtrlActive: boolean;
   /** True while the full-screen content editor dialog is open. */
   contentEditorOpen: boolean;
+  /** Transient workspace toast (e.g. link validation). */
+  appToast: { message: string; id: number } | null;
 }
 
 export interface SelectionHistoryEntry {
@@ -264,7 +266,8 @@ export type AppAction =
   | { type: 'JUMP_TO_COMPONENT'; componentId: string }
   | { type: 'CLEAR_FLASHED_COMPONENT' }
   | { type: 'OUTSTANDING_COMMENT'; commentId: string | null }
-  | { type: 'SET_CONTENT_EDITOR_OPEN'; open: boolean };
+  | { type: 'SET_CONTENT_EDITOR_OPEN'; open: boolean }
+  | { type: 'CLEAR_APP_TOAST'; id?: number };
 
 declare global {
   interface Window {
