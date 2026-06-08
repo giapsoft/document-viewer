@@ -15,10 +15,89 @@ interface ScrollbarMarkersProps {
   onMarkerClick?: (componentId: string) => void;
 }
 
+interface TrackMetrics {
+  scrollHeight: number;
+  clientHeight: number;
+  maxScroll: number;
+  arrowInset: number;
+  travelHeight: number;
+}
+
+function getScrollbarGutter(container: HTMLDivElement): number {
+  return Math.max(0, container.offsetWidth - container.clientWidth);
+}
+
+function getTrackMetrics(container: HTMLDivElement): TrackMetrics | null {
+  const scrollHeight = container.scrollHeight;
+  const clientHeight = container.clientHeight;
+  const maxScroll = scrollHeight - clientHeight;
+  if (maxScroll <= 0) return null;
+
+  const gutter = getScrollbarGutter(container);
+  // Classic scrollbars reserve square arrow buttons at top/bottom (≈ gutter width).
+  const arrowInset = gutter >= 12 ? gutter : 0;
+  const usableHeight = clientHeight - 2 * arrowInset;
+  if (usableHeight <= 0) return null;
+
+  const thumbHeight = (clientHeight / scrollHeight) * usableHeight;
+  const travelHeight = usableHeight - thumbHeight;
+  return { scrollHeight, clientHeight, maxScroll, arrowInset, travelHeight };
+}
+
+/** Same linear map as the native thumb, inside the arrow-button inset. */
+function docYToTrackY(
+  docY: number,
+  maxScroll: number,
+  travelHeight: number,
+  arrowInset: number,
+): number {
+  return arrowInset + (docY / maxScroll) * travelHeight;
+}
+
 function getOffsetWithinScroller(el: HTMLElement, scroller: HTMLElement): number {
+  let top = 0;
+  let node: HTMLElement | null = el;
+  while (node && node !== scroller) {
+    top += node.offsetTop;
+    node = node.offsetParent as HTMLElement | null;
+    if (node && !scroller.contains(node)) break;
+  }
+  if (node === scroller) return top;
+
   const elRect = el.getBoundingClientRect();
   const scrollerRect = scroller.getBoundingClientRect();
   return elRect.top - scrollerRect.top + scroller.scrollTop;
+}
+
+function computeMarkers(
+  container: HTMLDivElement,
+  highlightedIds: Set<string>,
+  componentRefs: React.RefObject<Map<string, HTMLElement>>,
+): Marker[] {
+  const metrics = getTrackMetrics(container);
+  if (!metrics) return [];
+
+  const { clientHeight, maxScroll, arrowInset, travelHeight } = metrics;
+  const trackBottom = clientHeight - arrowInset;
+  const next: Marker[] = [];
+
+  for (const id of highlightedIds) {
+    const el = componentRefs.current?.get(id);
+    if (!el) continue;
+
+    const elementTop = getOffsetWithinScroller(el, container);
+    const elementBottom = elementTop + el.offsetHeight;
+    const top = docYToTrackY(elementTop, maxScroll, travelHeight, arrowInset);
+    const bottom = docYToTrackY(elementBottom, maxScroll, travelHeight, arrowInset);
+    const height = Math.max(6, bottom - top);
+    next.push({
+      componentId: id,
+      top: Math.max(arrowInset, Math.min(top, trackBottom - height)),
+      height,
+    });
+  }
+
+  return next;
 }
 
 export function ScrollbarMarkers({
@@ -38,29 +117,14 @@ export function ScrollbarMarkers({
       return;
     }
 
-    const scrollHeight = container.scrollHeight;
-    const clientHeight = container.clientHeight;
-    if (scrollHeight <= clientHeight) {
+    if (!getTrackMetrics(container)) {
       setMarkers([]);
       return;
     }
 
-    const gutter = container.offsetWidth - container.clientWidth;
+    const gutter = getScrollbarGutter(container);
     setTrackWidth(Math.max(gutter, 8));
-
-    const trackHeight = clientHeight;
-    const next: Marker[] = [];
-
-    for (const id of highlightedIds) {
-      const el = componentRefs.current?.get(id);
-      if (!el) continue;
-      const offsetTop = getOffsetWithinScroller(el, container);
-      const top = (offsetTop / scrollHeight) * trackHeight;
-      const height = Math.max(6, (el.offsetHeight / scrollHeight) * trackHeight);
-      next.push({ componentId: id, top, height });
-    }
-
-    setMarkers(next);
+    setMarkers(computeMarkers(container, highlightedIds, componentRefs));
   }, [scrollRef, highlightedIds, componentRefs]);
 
   useEffect(() => {
@@ -73,8 +137,13 @@ export function ScrollbarMarkers({
     const content = container.firstElementChild;
     if (content) ro.observe(content);
 
+    for (const id of highlightedIds) {
+      const el = componentRefs.current?.get(id);
+      if (el) ro.observe(el);
+    }
+
     return () => ro.disconnect();
-  }, [scrollRef, update, highlightedIds]);
+  }, [scrollRef, update, highlightedIds, componentRefs]);
 
   if (markers.length === 0) return null;
 

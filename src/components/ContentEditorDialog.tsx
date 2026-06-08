@@ -105,7 +105,6 @@ export function ContentEditorDialog({
   const [draft, setDraft] = useState<ContentEditorDraft>(() => createEditorDraft(component, mdContent));
   const initialDraftRef = useRef(draft);
   const [toast, setToast] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [actionImagePicker, setActionImagePicker] = useState<{
     target: ActionImagePickerTarget;
     selectedFilename: string;
@@ -142,14 +141,14 @@ export function ContentEditorDialog({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !pickerOpen && !actionImagePicker && !confirmDelete) {
+      if (event.key === 'Escape' && !actionImagePicker && !confirmDelete) {
         event.stopPropagation();
         handleCancel();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [actionImagePicker, confirmDelete, handleCancel, pickerOpen]);
+  }, [actionImagePicker, confirmDelete, handleCancel]);
 
   useEffect(() => {
     if (hasTextEditor) {
@@ -171,9 +170,6 @@ export function ContentEditorDialog({
   const patchDraft = (patch: Partial<ContentEditorDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
   };
-
-  const imgSrc = isImg ? project.imageUrls.get(draft.content.trim()) : undefined;
-  const imgLabel = draft.content.trim() || 'Select image';
 
   return (
     <div className="content-editor-overlay" role="presentation">
@@ -244,7 +240,7 @@ export function ContentEditorDialog({
             />
           </aside>
 
-          <div className={`content-editor-body ${isMd ? 'content-editor-body-split' : ''}${isAction ? ' content-editor-body-action' : ''}`}>
+          <div className={`content-editor-body${isMd ? ' content-editor-body-split' : ''}${isAction ? ' content-editor-body-action' : ''}${isImg ? ' content-editor-body-img' : ''}`}>
             {isAction ? (
               <ActionEditor
                 ref={actionEditorRef}
@@ -256,23 +252,16 @@ export function ContentEditorDialog({
                 }}
               />
             ) : isImg ? (
-              <div className="content-editor-img-pane">
-                <div className="content-editor-pane-label">Image</div>
-                <div className="content-editor-img-body">
-                  {imgSrc ? (
-                    <img src={imgSrc} alt={draft.content} className="content-editor-img-preview" />
-                  ) : (
-                    <p className="content-editor-preview-empty">No image selected</p>
-                  )}
-                  <button
-                    type="button"
-                    className="content-editor-img-picker-btn"
-                    onClick={() => setPickerOpen(true)}
-                  >
-                    {imgLabel}
-                  </button>
-                </div>
-              </div>
+              <ImagePickerDialog
+                embedded
+                project={project}
+                selectedFilename={draft.content}
+                onSelect={(filename) => patchDraft({ content: filename })}
+                onClose={() => {}}
+                onImport={onImportImage}
+                onImportFromClipboard={onImportImageFromClipboard}
+                onDeleteImage={onDeleteProjectImage}
+              />
             ) : isMd ? (
               <>
                 <div className="content-editor-pane content-editor-edit-pane">
@@ -311,22 +300,6 @@ export function ContentEditorDialog({
       </div>
 
       {toast ? <Toast message={toast} /> : null}
-
-      {pickerOpen && isImg && (
-        <ImagePickerDialog
-          elevated
-          project={project}
-          selectedFilename={draft.content}
-          onSelect={(filename) => {
-            patchDraft({ content: filename });
-            setPickerOpen(false);
-          }}
-          onClose={() => setPickerOpen(false)}
-          onImport={onImportImage}
-          onImportFromClipboard={onImportImageFromClipboard}
-          onDeleteImage={onDeleteProjectImage}
-        />
-      )}
 
       {actionImagePicker && isAction && (
         <ImagePickerDialog

@@ -17,6 +17,8 @@ interface ImagePickerDialogProps {
   onImportFromClipboard?: () => Promise<ImportImageResult>;
   onDeleteImage?: (filename: string) => Promise<ImageDeleteResult>;
   elevated?: boolean;
+  /** Render inline (no overlay); selection applies immediately via onSelect. */
+  embedded?: boolean;
 }
 
 function resolveInitialPreview(images: string[], selectedFilename: string): string {
@@ -34,6 +36,7 @@ export function ImagePickerDialog({
   onImportFromClipboard,
   onDeleteImage,
   elevated = false,
+  embedded = false,
 }: ImagePickerDialogProps) {
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -41,6 +44,7 @@ export function ImagePickerDialog({
   const [backdropArmed, setBackdropArmed] = useState(false);
 
   useEffect(() => {
+    if (embedded) return;
     const frame = window.requestAnimationFrame(() => {
       setBackdropArmed(true);
     });
@@ -48,7 +52,7 @@ export function ImagePickerDialog({
       window.cancelAnimationFrame(frame);
       setBackdropArmed(false);
     };
-  }, []);
+  }, [embedded]);
 
   const images = useMemo(
     () => [...project.imageUrls.keys()].sort((a, b) => a.localeCompare(b)),
@@ -60,9 +64,8 @@ export function ImagePickerDialog({
   );
 
   useEffect(() => {
-    if (previewFilename && images.includes(previewFilename)) return;
     setPreviewFilename(resolveInitialPreview(images, selectedFilename));
-  }, [images, previewFilename, selectedFilename]);
+  }, [images, selectedFilename]);
 
   const importAllowed = canImportImages(project) && Boolean(onImport);
   const clipboardAllowed =
@@ -70,18 +73,22 @@ export function ImagePickerDialog({
 
   const previewSrc = previewFilename ? project.imageUrls.get(previewFilename) : undefined;
 
+  const finishSelection = (filename: string, previewSrc?: string) => {
+    onSelect(filename, previewSrc);
+    if (!embedded) onClose();
+  };
+
   useEffect(() => {
+    if (embedded) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       if (e.key === 'Enter' && previewFilename && !importing) {
-        const src = project.imageUrls.get(previewFilename);
-        onSelect(previewFilename, src);
-        onClose();
+        finishSelection(previewFilename, project.imageUrls.get(previewFilename));
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [importing, onClose, onSelect, previewFilename, project.imageUrls]);
+  }, [embedded, importing, onClose, previewFilename, project.imageUrls]);
 
   const runImport = async (importFn: () => Promise<ImportImageResult>) => {
     if (importing) return;
@@ -90,8 +97,7 @@ export function ImagePickerDialog({
     try {
       const result = await importFn();
       if (result.ok) {
-        onSelect(result.filename, result.objectUrl);
-        onClose();
+        finishSelection(result.filename, result.objectUrl);
         return;
       }
       if (!result.cancelled) {
@@ -104,8 +110,14 @@ export function ImagePickerDialog({
 
   const confirmSelection = () => {
     if (!previewFilename) return;
-    onSelect(previewFilename, previewSrc);
-    onClose();
+    finishSelection(previewFilename, previewSrc);
+  };
+
+  const handlePreviewPick = (name: string) => {
+    setPreviewFilename(name);
+    if (embedded) {
+      onSelect(name, project.imageUrls.get(name));
+    }
   };
 
   const runDelete = async () => {
@@ -119,7 +131,13 @@ export function ImagePickerDialog({
         return;
       }
       const remaining = images.filter((name) => name !== previewFilename);
-      setPreviewFilename(remaining[0] ?? '');
+      const next = remaining[0] ?? '';
+      setPreviewFilename(next);
+      if (embedded && next) {
+        onSelect(next, project.imageUrls.get(next));
+      } else if (embedded) {
+        onSelect('');
+      }
     } finally {
       setDeleting(false);
     }
@@ -130,22 +148,16 @@ export function ImagePickerDialog({
     onClose();
   };
 
-  return (
+  const dialog = (
     <div
-      className={`picker-overlay${elevated ? ' picker-overlay-elevated' : ''}`}
-      role="presentation"
-      onClick={(event) => {
-        if (event.target !== event.currentTarget) return;
-        handleBackdropClose();
-      }}
+      className={`picker-dialog picker-dialog-image${embedded ? ' picker-dialog-embedded' : ''}`}
+      role={embedded ? 'region' : 'dialog'}
+      aria-modal={embedded ? undefined : true}
+      aria-label={embedded ? 'Select image' : undefined}
+      aria-labelledby={embedded ? undefined : 'image-picker-dialog-title'}
+      onClick={embedded ? undefined : (e) => e.stopPropagation()}
     >
-      <div
-        className="picker-dialog picker-dialog-image"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="image-picker-dialog-title"
-        onClick={(e) => e.stopPropagation()}
-      >
+      {!embedded && (
         <header className="picker-header">
           <div className="picker-header-start">
             <h2 id="image-picker-dialog-title" className="picker-title">
@@ -161,88 +173,94 @@ export function ImagePickerDialog({
             ×
           </button>
         </header>
+      )}
 
-        <div className="picker-body picker-image-picker-body">
-          {images.length === 0 ? (
-            <p className="picker-empty">No images found in docs/</p>
-          ) : (
-            <div className="picker-image-picker-layout">
-              <div className="picker-image-list-panel">
-                <ul className="picker-image-list-compact" role="listbox" aria-label="Project images">
-                  {images.map((name) => {
-                    const src = project.imageUrls.get(name);
-                    const isActive = previewFilename === name;
-                    return (
-                      <li key={name} role="presentation">
-                        <button
-                          type="button"
-                          role="option"
-                          aria-selected={isActive}
-                          className={`picker-image-list-item${isActive ? ' active' : ''}`}
-                          onClick={() => setPreviewFilename(name)}
-                        >
-                          {src ? (
-                            <img src={src} alt="" className="picker-image-list-thumb" />
-                          ) : (
-                            <span
-                              className="picker-image-list-thumb picker-image-thumb-missing"
-                              aria-hidden
-                            >
-                              🖼
-                            </span>
-                          )}
-                          <span className="picker-image-list-name">{name}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-
-              <div className="picker-image-preview-panel">
-                {previewFilename ? (
-                  <>
-                    <div
-                      className="picker-image-preview-stage"
-                      tabIndex={0}
-                      aria-label={`Preview of ${previewFilename}`}
-                    >
-                      {previewSrc ? (
-                        <img
-                          src={previewSrc}
-                          alt={previewFilename}
-                          className="picker-image-preview-img"
-                          draggable={false}
-                        />
-                      ) : (
-                        <span className="picker-image-preview-missing">Image unavailable</span>
-                      )}
-                    </div>
-                    <p className="picker-image-preview-filename">{previewFilename}</p>
-                  </>
-                ) : (
-                  <div className="picker-image-preview-empty">Select an image to preview</div>
-                )}
-              </div>
+      <div className="picker-body picker-image-picker-body">
+        {images.length === 0 ? (
+          <p className="picker-empty">No images found in docs/</p>
+        ) : (
+          <div className="picker-image-picker-layout">
+            <div className="picker-image-list-panel">
+              <ul className="picker-image-list-compact" role="listbox" aria-label="Project images">
+                {images.map((name) => {
+                  const src = project.imageUrls.get(name);
+                  const isActive = previewFilename === name;
+                  return (
+                    <li key={name} role="presentation">
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        className={`picker-image-list-item${isActive ? ' active' : ''}`}
+                        onClick={() => handlePreviewPick(name)}
+                      >
+                        {src ? (
+                          <img src={src} alt="" className="picker-image-list-thumb" />
+                        ) : (
+                          <span
+                            className="picker-image-list-thumb picker-image-thumb-missing"
+                            aria-hidden
+                          >
+                            🖼
+                          </span>
+                        )}
+                        <span className="picker-image-list-name">{name}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
+
+            <div className="picker-image-preview-panel">
+              {previewFilename ? (
+                <>
+                  <div
+                    className="picker-image-preview-stage"
+                    tabIndex={0}
+                    aria-label={`Preview of ${previewFilename}`}
+                  >
+                    {previewSrc ? (
+                      <img
+                        src={previewSrc}
+                        alt={previewFilename}
+                        className="picker-image-preview-img"
+                        draggable={false}
+                      />
+                    ) : (
+                      <span className="picker-image-preview-missing">Image unavailable</span>
+                    )}
+                  </div>
+                  <p className="picker-image-preview-filename">{previewFilename}</p>
+                </>
+              ) : (
+                <div className="picker-image-preview-empty">Select an image to preview</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <footer className="picker-footer picker-footer-with-actions">
+        <div className="picker-footer-text">
+          <span>
+            {embedded
+              ? 'Click an image to assign it. Confirm with Done when finished.'
+              : 'Preview an image on the right, then confirm your selection.'}
+          </span>
+          {!importAllowed && (
+            <span className="picker-import-hint">
+              Sample mode — open a local project folder to import images.
+            </span>
+          )}
+          {importError && (
+            <span className="picker-import-error" role="alert">
+              {importError}
+            </span>
           )}
         </div>
-
-        <footer className="picker-footer picker-footer-with-actions">
-          <div className="picker-footer-text">
-            <span>Preview an image on the right, then confirm your selection.</span>
-            {!importAllowed && (
-              <span className="picker-import-hint">
-                Sample mode — open a local project folder to import images.
-              </span>
-            )}
-            {importError && (
-              <span className="picker-import-error" role="alert">
-                {importError}
-              </span>
-            )}
-          </div>
-          <div className="picker-footer-actions">
+        <div className="picker-footer-actions">
+          {!embedded && (
             <button
               type="button"
               className="picker-select-btn"
@@ -251,48 +269,63 @@ export function ImagePickerDialog({
             >
               Select image
             </button>
-            {onDeleteImage && (
-              <button
-                type="button"
-                className="picker-delete-btn"
-                disabled={!previewFilename || importing || deleting}
-                onClick={() => void runDelete()}
-                title="Delete image from project docs/"
-              >
-                {deleting ? 'Deleting…' : 'Delete image'}
-              </button>
-            )}
+          )}
+          {onDeleteImage && (
             <button
               type="button"
-              className="picker-import-btn"
-              disabled={!clipboardAllowed || importing}
-              onClick={() => onImportFromClipboard && void runImport(onImportFromClipboard)}
-              title={
-                clipboardAllowed
-                  ? 'Paste an image from the clipboard into docs/'
-                  : importAllowed
-                    ? 'Clipboard image paste is not supported in this browser'
-                    : 'Open a local project folder to import images'
-              }
+              className="picker-delete-btn"
+              disabled={!previewFilename || importing || deleting}
+              onClick={() => void runDelete()}
+              title="Delete image from project docs/"
             >
-              {importing ? 'Importing…' : 'Paste from clipboard…'}
+              {deleting ? 'Deleting…' : 'Delete image'}
             </button>
-            <button
-              type="button"
-              className="picker-import-btn"
-              disabled={!importAllowed || importing}
-              onClick={() => onImport && void runImport(onImport)}
-              title={
-                importAllowed
-                  ? 'Copy an image from your computer into docs/'
+          )}
+          <button
+            type="button"
+            className="picker-import-btn"
+            disabled={!clipboardAllowed || importing}
+            onClick={() => onImportFromClipboard && void runImport(onImportFromClipboard)}
+            title={
+              clipboardAllowed
+                ? 'Paste an image from the clipboard into docs/'
+                : importAllowed
+                  ? 'Clipboard image paste is not supported in this browser'
                   : 'Open a local project folder to import images'
-              }
-            >
-              {importing ? 'Importing…' : 'Import from computer…'}
-            </button>
-          </div>
-        </footer>
-      </div>
+            }
+          >
+            {importing ? 'Importing…' : 'Paste from clipboard…'}
+          </button>
+          <button
+            type="button"
+            className="picker-import-btn"
+            disabled={!importAllowed || importing}
+            onClick={() => onImport && void runImport(onImport)}
+            title={
+              importAllowed
+                ? 'Copy an image from your computer into docs/'
+                : 'Open a local project folder to import images'
+            }
+          >
+            {importing ? 'Importing…' : 'Import from computer…'}
+          </button>
+        </div>
+      </footer>
+    </div>
+  );
+
+  if (embedded) return dialog;
+
+  return (
+    <div
+      className={`picker-overlay${elevated ? ' picker-overlay-elevated' : ''}`}
+      role="presentation"
+      onClick={(event) => {
+        if (event.target !== event.currentTarget) return;
+        handleBackdropClose();
+      }}
+    >
+      {dialog}
     </div>
   );
 }
