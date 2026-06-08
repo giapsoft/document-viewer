@@ -109,7 +109,10 @@ function bumpOutstandingComment(
   };
 }
 
-function applyEnterLinkPreview(state: AppState): AppState {
+function applyEnterLinkPreview(
+  state: AppState,
+  preferredGroupIndex?: number | null,
+): AppState {
   if (state.linkMode || !state.project) return state;
 
   let linkPreviewGroups = cloneGroups(state.project.relations.groups);
@@ -120,7 +123,10 @@ function applyEnterLinkPreview(state: AppState): AppState {
   if (selectedId) {
     const matching = getGroupIndicesForComponent(linkPreviewGroups, selectedId);
     if (matching.length > 0) {
-      linkTargetGroupIndex = matching[0];
+      linkTargetGroupIndex =
+        preferredGroupIndex != null && matching.includes(preferredGroupIndex)
+          ? preferredGroupIndex
+          : matching[0];
     } else {
       linkPreviewGroups = createGroup(linkPreviewGroups, [selectedId]);
       linkTargetGroupIndex = linkPreviewGroups.length - 1;
@@ -587,7 +593,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         return { ...state, linkCtrlActive: false };
       }
       if (state.contentEditorOpen || state.commentLinkCtrlActive || state.linkMode) return state;
-      return applyEnterLinkPreview(state);
+      return applyEnterLinkPreview(state, action.preferredGroupIndex);
+    }
+
+    case 'SET_LINK_TARGET_GROUP_INDEX': {
+      if (!state.linkMode || !state.linkPreviewGroups) return state;
+      const { groupIndex } = action;
+      if (groupIndex < 0 || groupIndex >= state.linkPreviewGroups.length) return state;
+      return { ...state, linkTargetGroupIndex: groupIndex };
     }
 
     case 'END_LINK_SESSION': {
@@ -663,6 +676,52 @@ export function appReducer(state: AppState, action: AppAction): AppState {
                 relatedIds: new Set([componentId]),
                 activeGroupIndex: null,
                 matchingGroupIndices: [],
+              },
+            };
+          }
+        }
+      }
+
+      return nextState;
+    }
+
+    case 'REMOVE_COMPONENT_FROM_GROUP': {
+      if (!state.project) return state;
+
+      const { componentId, groupIndex } = action;
+      const groups = state.project.relations.groups;
+      if (groupIndex < 0 || groupIndex >= groups.length) return state;
+      if (!groups[groupIndex]?.includes(componentId)) return state;
+
+      const result = removeComponentFromGroup(groups, groupIndex, componentId);
+      const project = rebuildProject({
+        ...state.project,
+        relations: withRelationsGroups(state.project.relations, result.groups),
+      });
+
+      let nextState: AppState = { ...state, project };
+
+      if (state.selection) {
+        const selectedId = state.selection.componentId;
+        const pageFile =
+          project.index.componentToPage.get(selectedId) ?? state.currentPage;
+        if (pageFile) {
+          const applied = applyComponentSelection(nextState, selectedId, pageFile);
+          if (applied) {
+            nextState = {
+              ...nextState,
+              currentPage: applied.currentPage,
+              selection: applied.selection,
+              selectionScrollNonce: state.selectionScrollNonce + 1,
+            };
+          } else {
+            nextState = {
+              ...nextState,
+              selection: {
+                ...state.selection,
+                relatedIds: new Set([selectedId]),
+                activeGroupIndex: null,
+                matchingGroupIndices: getGroupIndicesForComponent(result.groups, selectedId),
               },
             };
           }

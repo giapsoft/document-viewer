@@ -86,6 +86,7 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'TOGGLE_LINK_MODE',
   'SET_LINK_MODE',
   'DELETE_ACTIVE_GROUP',
+  'REMOVE_COMPONENT_FROM_GROUP',
   'TOGGLE_LINK_COMPONENT',
   'CREATE_PAGE',
   'RENAME_PAGE',
@@ -540,8 +541,15 @@ export function useAppStore() {
     [dispatch],
   );
 
-  const setLinkCtrlActive = useCallback((active: boolean) => {
-    dispatch({ type: 'SET_LINK_CTRL_ACTIVE', active });
+  const setLinkCtrlActive = useCallback(
+    (active: boolean, preferredGroupIndex?: number | null) => {
+      dispatch({ type: 'SET_LINK_CTRL_ACTIVE', active, preferredGroupIndex });
+    },
+    [dispatch],
+  );
+
+  const setLinkTargetGroupIndex = useCallback((groupIndex: number) => {
+    dispatch({ type: 'SET_LINK_TARGET_GROUP_INDEX', groupIndex });
   }, [dispatch]);
 
   const setContentEditorOpen = useCallback((open: boolean) => {
@@ -559,6 +567,13 @@ export function useAppStore() {
   const deleteActiveGroup = useCallback(() => {
     dispatch({ type: 'DELETE_ACTIVE_GROUP' });
   }, [dispatch]);
+
+  const removeComponentFromGroupAtIndex = useCallback(
+    (componentId: string, groupIndex: number) => {
+      dispatch({ type: 'REMOVE_COMPONENT_FROM_GROUP', componentId, groupIndex });
+    },
+    [dispatch],
+  );
 
   const toggleLinkComponent = useCallback(
     (componentId: string, pageFile: string) => {
@@ -1394,6 +1409,7 @@ export function useAppStore() {
     deleteComponent,
     setLinkMode,
     setLinkCtrlActive,
+    setLinkTargetGroupIndex,
     setContentEditorOpen,
     clearAppToast,
     finishLinkSession,
@@ -1416,6 +1432,7 @@ export function useAppStore() {
     updateComment,
     deleteComment,
     deleteActiveGroup,
+    removeComponentFromGroupAtIndex,
     toggleLinkComponent,
     goBackSelection,
     goNextSelection,

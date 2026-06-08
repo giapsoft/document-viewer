@@ -6,6 +6,7 @@ import { ImagePickerDialog } from './ImagePickerDialog';
 import { ConfirmDialog } from './PageFileDialog';
 import { Toast } from './Toast';
 import { ActionEditor, type ActionEditorHandle, type ActionImagePickerTarget } from './ActionEditor';
+import { ComponentTypeBadge, getComponentTypeLabel } from './ComponentTypeIcon';
 
 const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'md', 'action'];
 const STATUSES: ComponentStatus[] = ['undefined', 'pending', 'working', 'done', 'blocked'];
@@ -40,6 +41,38 @@ function OptionToggleGroup<T extends string>({
               onClick={() => onChange(option)}
             >
               {option}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ComponentTypeToggleGroup({
+  value,
+  onChange,
+}: {
+  value: ComponentType;
+  onChange: (value: ComponentType) => void;
+}) {
+  return (
+    <div className="content-editor-option-group" role="radiogroup" aria-label="Type">
+      <span className="content-editor-sidebar-label">Type</span>
+      <div className="content-editor-option-list">
+        {TYPES.map((type) => {
+          const active = value === type;
+          return (
+            <button
+              key={type}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={getComponentTypeLabel(type)}
+              className={`content-editor-option-btn content-editor-option-btn-type${active ? ' content-editor-option-btn-active' : ''}`}
+              onClick={() => onChange(type)}
+            >
+              <ComponentTypeBadge type={type} showLabel iconSize={15} />
             </button>
           );
         })}
@@ -226,9 +259,7 @@ export function ContentEditorDialog({
 
         <div className="content-editor-main">
           <aside className="content-editor-sidebar" aria-label="Component properties">
-            <OptionToggleGroup
-              label="Type"
-              options={TYPES}
+            <ComponentTypeToggleGroup
               value={draft.type}
               onChange={(type) => patchDraft({ type })}
             />

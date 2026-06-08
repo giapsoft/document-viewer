@@ -8,11 +8,13 @@ import { RemoteConflictDialog } from './RemoteConflictDialog';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
 import { useUnreadNavigationShortcuts } from '../hooks/useUnreadNavigationShortcuts';
+import { useLinkedListPanelShortcuts } from '../hooks/useLinkedListPanelShortcuts';
 import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
 import { useCtrlCommentLinkHold } from '../hooks/useCtrlCommentLinkHold';
 import { useRemoteStalePoll } from '../hooks/useRemoteStalePoll';
 import { CommentPanel } from './CommentPanel';
 import { Toast } from './Toast';
+import { GroupMembershipDialog } from './GroupMembershipDialog';
 import { activeComments, canOwnComment, resolveCommentAnchorHighlightId } from '../lib/comments';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { isSaveInProgress } from '../lib/saveProject';
@@ -21,6 +23,7 @@ import { pageHasHighlightedComponents, getMainGroupPageFiles } from '../lib/sele
 import { countUnreadComponentsOnPage } from '../lib/readState';
 import { getAdjacentComponentId } from '../lib/componentNavigation';
 import { findComponent } from '../lib/projectMutations';
+import { getGroupIndicesForComponent } from '../lib/groupRelations';
 
 const APP_TOAST_MS = 2000;
 
@@ -52,6 +55,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     insertComponentBelow,
     deleteComponent,
     setLinkCtrlActive,
+    setLinkTargetGroupIndex,
     setContentEditorOpen,
     clearAppToast,
     finishLinkSession,
@@ -72,6 +76,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     updateComment,
     deleteComment,
     deleteActiveGroup,
+    removeComponentFromGroupAtIndex,
     toggleLinkComponent,
     goBackSelection,
     goNextSelection,
@@ -94,6 +99,50 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   const project = state.project!;
   const readShortcutsEnabled = Boolean(state.commentUsername);
+  const [groupPanelOpen, setGroupPanelOpen] = useState(false);
+  const [groupPanelActiveIndex, setGroupPanelActiveIndex] = useState<number | null>(null);
+
+  const closeGroupPanel = useCallback(() => {
+    setGroupPanelOpen(false);
+    setGroupPanelActiveIndex(null);
+  }, []);
+
+  const openGroupPanel = useCallback(() => {
+    const indices = state.selection?.matchingGroupIndices;
+    if (!indices?.length) return;
+    setGroupPanelActiveIndex(indices[0] ?? null);
+    setGroupPanelOpen(true);
+  }, [state.selection?.matchingGroupIndices]);
+
+  const handleSelectGroupInPanel = useCallback(
+    (groupIndex: number) => {
+      setGroupPanelActiveIndex(groupIndex);
+      if (state.linkMode) {
+        setLinkTargetGroupIndex(groupIndex);
+      }
+    },
+    [state.linkMode, setLinkTargetGroupIndex],
+  );
+
+  const panelGroups =
+    state.linkMode && state.linkPreviewGroups
+      ? state.linkPreviewGroups
+      : project.relations.groups;
+
+  const panelComponentId =
+    state.linkMode && state.linkFocusComponentId
+      ? state.linkFocusComponentId
+      : state.selection?.componentId ?? null;
+
+  const panelGroupIndices = useMemo(() => {
+    if (!panelComponentId) return [];
+    return getGroupIndicesForComponent(panelGroups, panelComponentId);
+  }, [panelComponentId, panelGroups]);
+
+  const panelActiveGroupIndex =
+    state.linkMode && state.linkTargetGroupIndex !== null
+      ? state.linkTargetGroupIndex
+      : groupPanelActiveIndex;
 
   const handleSelectAdjacent = useCallback(
     (direction: 'up' | 'down') => {
@@ -118,6 +167,26 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     const timer = window.setTimeout(() => clearAppToast(toastId), APP_TOAST_MS);
     return () => window.clearTimeout(timer);
   }, [state.appToast, clearAppToast]);
+
+  useEffect(() => {
+    if (!groupPanelOpen || state.linkMode) return;
+    const indices = state.selection?.matchingGroupIndices ?? [];
+    if (indices.length === 0) {
+      closeGroupPanel();
+      return;
+    }
+    setGroupPanelActiveIndex((prev) =>
+      prev !== null && indices.includes(prev) ? prev : (indices[0] ?? null),
+    );
+  }, [
+    groupPanelOpen,
+    state.linkMode,
+    state.selection?.componentId,
+    state.selection?.matchingGroupIndices,
+    closeGroupPanel,
+  ]);
+
+  const showSidebarColumn = groupPanelOpen || state.sidebarExpanded;
 
   const canGoBack = state.selectionHistoryIndex > 0;
   const canGoNext =
@@ -145,10 +214,16 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
       canOwnComment(selectedComment, state.commentAuthorId, state.commentUsername),
   );
 
+  const activateLinkMode = useCallback(() => {
+    setLinkCtrlActive(true, groupPanelOpen ? groupPanelActiveIndex : undefined);
+  }, [setLinkCtrlActive, groupPanelOpen, groupPanelActiveIndex]);
+
   useCtrlLinkModeHold({
     enabled: !state.contentEditorOpen && !state.commentLinkCtrlActive && !canLinkSelectedComment,
     ctrlActive: state.linkCtrlActive,
-    setCtrlActive: setLinkCtrlActive,
+    setCtrlActive: (active) => {
+      if (active) activateLinkMode();
+    },
     onRelease: finishLinkSession,
   });
 
@@ -304,6 +379,16 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     onNavigateUnread: navigateToUnread,
   });
 
+  const canToggleLinkedList = Boolean(state.selection?.matchingGroupIndices.length);
+
+  useLinkedListPanelShortcuts({
+    enabled: !workspaceShortcutsBlocked,
+    isOpen: groupPanelOpen,
+    canOpen: canToggleLinkedList,
+    onOpen: openGroupPanel,
+    onClose: closeGroupPanel,
+  });
+
   const showShortcutsHint =
     !workspaceShortcutsBlocked && (Boolean(state.selection) || readShortcutsEnabled);
 
@@ -410,24 +495,41 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   return (
     <>
-      <div className={`app ${state.sidebarExpanded ? 'sidebar-open' : 'sidebar-collapsed'}`}>
-        <Sidebar
-          expanded={state.sidebarExpanded}
-          pages={sidebarPages}
-          canManagePages={canManagePages}
-          onSelectPage={openPage}
-          onToggle={toggleSidebar}
-          onCreatePage={createPage}
-          onRenamePage={renamePage}
-          onReorderPages={reorderPages}
-          onDeletePage={deletePage}
-          panelPageFiles={panelPageFiles}
-          highlightedPageFiles={highlightedPageFiles}
-          mainGroupPageFiles={mainGroupPageFiles}
-          mainSelectionPageFile={mainSelectionPageFile}
-          suggestNewPageName={suggestNewPageName}
-          normalizePageName={normalizePageName}
-        />
+      <div className={`app ${showSidebarColumn ? 'sidebar-open' : 'sidebar-collapsed'}`}>
+        {groupPanelOpen && panelComponentId && panelGroupIndices.length > 0 ? (
+          <GroupMembershipDialog
+            project={project}
+            groups={panelGroups}
+            anchorComponentId={panelComponentId}
+            groupIndices={panelGroupIndices}
+            activeGroupIndex={panelActiveGroupIndex}
+            linkMode={state.linkMode}
+            onSelectGroup={handleSelectGroupInPanel}
+            onRemoveMember={(groupIndex, componentId) =>
+              removeComponentFromGroupAtIndex(componentId, groupIndex)
+            }
+            onNavigateToComponent={jumpToComponent}
+            onClose={closeGroupPanel}
+          />
+        ) : (
+          <Sidebar
+            expanded={state.sidebarExpanded}
+            pages={sidebarPages}
+            canManagePages={canManagePages}
+            onSelectPage={openPage}
+            onToggle={toggleSidebar}
+            onCreatePage={createPage}
+            onRenamePage={renamePage}
+            onReorderPages={reorderPages}
+            onDeletePage={deletePage}
+            panelPageFiles={panelPageFiles}
+            highlightedPageFiles={highlightedPageFiles}
+            mainGroupPageFiles={mainGroupPageFiles}
+            mainSelectionPageFile={mainSelectionPageFile}
+            suggestNewPageName={suggestNewPageName}
+            normalizePageName={normalizePageName}
+          />
+        )}
 
         <main
           className="main-area"
@@ -462,7 +564,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               linkMode={state.linkMode}
               canUnlink={canUnlinkGroup}
               onUnlink={deleteActiveGroup}
-              sidebarCollapsed={!state.sidebarExpanded}
+              sidebarCollapsed={!showSidebarColumn}
               onExpandSidebar={expandSidebar}
               canGoBack={canGoBack}
               canGoNext={canGoNext}
@@ -473,6 +575,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               showComponentShortcuts={showShortcutsHint}
               readShortcutsEnabled={readShortcutsEnabled}
               hasComponentSelection={Boolean(state.selection)}
+              linkedListPanelOpen={groupPanelOpen}
+              canToggleLinkedList={canToggleLinkedList}
             />
             <ProjectToolbar
               dirty={dirty}
@@ -529,6 +633,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 componentReadState={state.componentReadState}
                 onToggleComponentRead={toggleComponentRead}
                 onTogglePageReadAll={togglePageReadAll}
+                onOpenGroupDialog={openGroupPanel}
               />
             ))}
             <CommentPanel

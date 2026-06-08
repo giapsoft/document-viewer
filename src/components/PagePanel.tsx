@@ -202,6 +202,7 @@ interface ComponentBlockProps {
   componentReadState?: Record<string, number>;
   onToggleComponentRead?: (componentId: string) => void;
   showReadBars?: boolean;
+  onOpenGroupDialog?: () => void;
 }
 
 interface ComponentShellProps {
@@ -209,11 +210,13 @@ interface ComponentShellProps {
   highlightKind: 'none' | 'primary' | 'related' | 'related-transitive' | 'link' | 'comment-link';
   isDimmed: boolean;
   isPrimarySelected: boolean;
+  showGroupLink?: boolean;
   linkFlashActive: boolean;
   linkFlashNonce: number;
   className: string;
   style: CSSProperties;
   onSelect: (componentId: string, pageFile: string) => void;
+  onOpenGroupDialog?: () => void;
   onCommentLinkComponent?: (componentId: string, pageFile: string) => void;
   commentLinkMode?: boolean;
   pageFile: string;
@@ -221,16 +224,29 @@ interface ComponentShellProps {
   children: ReactNode;
 }
 
+function ComponentGroupLinkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"
+      />
+    </svg>
+  );
+}
+
 function ComponentShell({
   component,
   highlightKind,
   isDimmed,
   isPrimarySelected,
+  showGroupLink = false,
   linkFlashActive,
   linkFlashNonce,
   className,
   style,
   onSelect,
+  onOpenGroupDialog,
   onCommentLinkComponent,
   commentLinkMode = false,
   pageFile,
@@ -284,6 +300,20 @@ function ComponentShell({
         }
       }}
     >
+      {showGroupLink && onOpenGroupDialog ? (
+        <button
+          type="button"
+          className="component-group-link-btn"
+          title="View linked lists"
+          aria-label="View linked lists"
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenGroupDialog();
+          }}
+        >
+          <ComponentGroupLinkIcon />
+        </button>
+      ) : null}
       {children}
     </div>
   );
@@ -317,6 +347,7 @@ export function ComponentBlock({
   componentReadState = {},
   onToggleComponentRead,
   showReadBars = true,
+  onOpenGroupDialog,
 }: ComponentBlockProps) {
   const resolved = resolveComponentForDisplay(component, project.mdFiles);
   const mdSelectionHandledRef = useRef(false);
@@ -349,6 +380,8 @@ export function ComponentBlock({
   const isLinkSelected = linkMode && (linkGroupMembers?.has(component.id) ?? false);
   const isPrimarySelected =
     !linkMode && !commentLinkMode && selection?.componentId === component.id;
+  const showGroupLink =
+    isPrimarySelected && (selection?.matchingGroupIndices.length ?? 0) > 0;
   const isHighlighted = !linkMode && !commentLinkMode && (highlightedIds?.has(component.id) ?? false);
   const isRelatedSelected = isHighlighted && !isPrimarySelected;
   const isDimmed = commentLinkMode
@@ -403,9 +436,11 @@ export function ComponentBlock({
     highlightKind,
     isDimmed,
     isPrimarySelected,
+    showGroupLink,
     linkFlashActive: flashedComponentId === component.id,
     linkFlashNonce: flashNonce,
     onSelect,
+    onOpenGroupDialog: showGroupLink ? onOpenGroupDialog : undefined,
     onCommentLinkComponent:
       resolved.type === 'md' && commentLinkMode
         ? (componentId: string, file: string) => {
@@ -609,6 +644,7 @@ interface PagePanelProps {
   componentReadState?: Record<string, number>;
   onToggleComponentRead?: (componentId: string) => void;
   onTogglePageReadAll?: (pageFile: string) => void;
+  onOpenGroupDialog?: () => void;
 }
 
 export function PagePanel({
@@ -641,6 +677,7 @@ export function PagePanel({
   componentReadState = {},
   onToggleComponentRead,
   onTogglePageReadAll,
+  onOpenGroupDialog,
 }: PagePanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -1010,6 +1047,7 @@ export function PagePanel({
                   componentReadState={componentReadState}
                   onToggleComponentRead={onToggleComponentRead}
                   showReadBars={pageHasUnread}
+                  onOpenGroupDialog={onOpenGroupDialog}
                 />
                 );
               })}

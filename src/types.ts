@@ -228,9 +228,11 @@ export type AppAction =
     }
   | { type: 'TOGGLE_LINK_MODE' }
   | { type: 'SET_LINK_MODE'; enabled: boolean }
-  | { type: 'SET_LINK_CTRL_ACTIVE'; active: boolean }
+  | { type: 'SET_LINK_CTRL_ACTIVE'; active: boolean; preferredGroupIndex?: number | null }
+  | { type: 'SET_LINK_TARGET_GROUP_INDEX'; groupIndex: number }
   | { type: 'END_LINK_SESSION' }
   | { type: 'DELETE_ACTIVE_GROUP' }
+  | { type: 'REMOVE_COMPONENT_FROM_GROUP'; componentId: string; groupIndex: number }
   | { type: 'TOGGLE_LINK_COMPONENT'; componentId: string; pageFile: string }
   | { type: 'GO_BACK_SELECTION' }
   | { type: 'GO_NEXT_SELECTION' }
