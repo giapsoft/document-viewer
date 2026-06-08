@@ -65,12 +65,31 @@ export function countUnreadComponentsOnPage(
   return count;
 }
 
+export function countReadComponentsOnPage(
+  components: PageData['components'],
+  readState: ComponentReadState,
+): number {
+  return components.length - countUnreadComponentsOnPage(components, readState);
+}
+
 export function formatPageComponentCount(
   total: number,
-  unreadCount?: number | null,
+  readCount?: number | null,
 ): string {
-  if (unreadCount != null) return `${unreadCount}/${total}`;
+  if (readCount != null) return `${readCount}/${total}`;
   return String(total);
+}
+
+export function mergeReadStates(
+  ...states: ComponentReadState[]
+): ComponentReadState {
+  const merged: ComponentReadState = {};
+  for (const state of states) {
+    for (const [componentId, version] of Object.entries(state)) {
+      merged[componentId] = Math.max(merged[componentId] ?? -1, version);
+    }
+  }
+  return merged;
 }
 
 export function markAllComponentsReadOnPage(

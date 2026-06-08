@@ -34,7 +34,7 @@ import { resolveMdHighlightSegments } from '../lib/mdSelection';
 import { ComponentReadBar } from './ComponentReadBar';
 import { getComponentVersion } from '../lib/componentVersion';
 import {
-  countUnreadComponentsOnPage,
+  countReadComponentsOnPage,
   formatPageComponentCount,
   isComponentRead,
 } from '../lib/readState';
@@ -838,10 +838,10 @@ export function PagePanel({
 
   if (!page) return null;
 
-  const pageUnreadCount = commentUsername
-    ? countUnreadComponentsOnPage(page.components, componentReadState)
+  const pageReadCount = commentUsername
+    ? countReadComponentsOnPage(page.components, componentReadState)
     : null;
-  const pageCountLabel = formatPageComponentCount(page.components.length, pageUnreadCount);
+  const pageCountLabel = formatPageComponentCount(page.components.length, pageReadCount);
 
   const panelTitle = (
     <PageLabel
@@ -850,12 +850,13 @@ export function PagePanel({
       pageId={page.pageId}
       fileName={page.fileName}
       componentCount={page.components.length}
-      unreadCount={pageUnreadCount}
+      readCount={pageReadCount}
       compact
     />
   );
 
-  const pageHasUnread = pageUnreadCount != null && pageUnreadCount > 0;
+  const pageHasUnread =
+    pageReadCount != null && pageReadCount < page.components.length;
   const readAllLabel = pageHasUnread ? 'All read' : 'All unread';
 
   const openPanel = () => {
@@ -924,9 +925,7 @@ export function PagePanel({
               {page.pageName}
               <span
                 className={`page-label-count${
-                  pageUnreadCount != null && pageUnreadCount > 0
-                    ? ' page-label-count-has-unread'
-                    : ''
+                  pageHasUnread ? ' page-label-count-has-unread' : ''
                 }`}
               >
                 {' '}

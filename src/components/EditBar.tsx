@@ -101,7 +101,6 @@ interface EditBarProps {
   shortcutsEnabled?: boolean;
   readShortcutsEnabled?: boolean;
   onSelectAdjacent?: (direction: 'up' | 'down') => void;
-  onSelectNextUnread?: () => void;
   onToggleRead?: () => void;
 }
 
@@ -120,7 +119,6 @@ export function EditBar({
   shortcutsEnabled = true,
   readShortcutsEnabled = false,
   onSelectAdjacent,
-  onSelectNextUnread,
   onToggleRead,
 }: EditBarProps) {
   const [bodyExpanded, setBodyExpanded] = useState(false);
@@ -168,7 +166,6 @@ export function EditBar({
       shortcutsEnabled={shortcutsEnabled}
       readShortcutsEnabled={readShortcutsEnabled}
       onSelectAdjacent={onSelectAdjacent}
-      onSelectNextUnread={onSelectNextUnread}
       onToggleRead={onToggleRead}
     />
   );
@@ -194,7 +191,6 @@ interface EditBarFormProps {
   shortcutsEnabled: boolean;
   readShortcutsEnabled: boolean;
   onSelectAdjacent?: (direction: 'up' | 'down') => void;
-  onSelectNextUnread?: () => void;
   onToggleRead?: () => void;
 }
 
@@ -218,7 +214,6 @@ function EditBarForm({
   shortcutsEnabled,
   readShortcutsEnabled,
   onSelectAdjacent,
-  onSelectNextUnread,
   onToggleRead,
 }: EditBarFormProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -288,7 +283,6 @@ function EditBarForm({
     readShortcutsEnabled,
     onOpenFullscreen: openFullscreen,
     onSelectAdjacent: (direction) => onSelectAdjacent?.(direction),
-    onSelectNextUnread: () => onSelectNextUnread?.(),
     onToggleRead: () => onToggleRead?.(),
     onInsertAbove: () => onInsertAbove(pageFile, component.id),
     onInsertBelow: () => onInsertBelow(pageFile, component.id),

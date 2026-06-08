@@ -16,6 +16,7 @@ interface ProjectToolbarProps {
 
 function saveStatusLabel(status: SaveStatus, dirty: boolean): string | null {
   switch (status) {
+    case 'pending':
     case 'saving':
       return 'Saving…';
     case 'saved':
@@ -40,7 +41,10 @@ export function ProjectToolbar({
   onReload,
   onClose,
 }: ProjectToolbarProps) {
-  const saveLabel = canSave ? saveStatusLabel(saveStatus, dirty) : null;
+  const saveLabel =
+    canSave || saveStatus === 'pending' || saveStatus === 'saving' || saveStatus === 'saved' || saveStatus === 'error'
+      ? saveStatusLabel(saveStatus, dirty)
+      : null;
 
   return (
     <div className="project-folder-actions">

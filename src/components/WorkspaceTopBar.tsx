@@ -14,6 +14,7 @@ interface WorkspaceTopBarProps {
   onSelectionNext?: () => void;
   showComponentShortcuts?: boolean;
   readShortcutsEnabled?: boolean;
+  hasComponentSelection?: boolean;
 }
 
 export function WorkspaceTopBar({
@@ -30,6 +31,7 @@ export function WorkspaceTopBar({
   onSelectionNext,
   showComponentShortcuts = false,
   readShortcutsEnabled = false,
+  hasComponentSelection = false,
 }: WorkspaceTopBarProps) {
   const creatingNewList = linkMode && linkEditingListIndex === null;
 
@@ -91,7 +93,10 @@ export function WorkspaceTopBar({
       )}
 
       {showComponentShortcuts && !linkMode && (
-        <ComponentShortcutsHint readShortcutsEnabled={readShortcutsEnabled} />
+        <ComponentShortcutsHint
+          readShortcutsEnabled={readShortcutsEnabled}
+          hasSelection={hasComponentSelection}
+        />
       )}
     </>
   );

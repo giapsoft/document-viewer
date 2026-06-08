@@ -9,7 +9,7 @@ export interface SidebarPageEntry {
   pageId: string;
   pageName: string;
   componentCount: number;
-  unreadCount?: number | null;
+  readCount?: number | null;
 }
 
 interface SidebarProps {
@@ -203,7 +203,7 @@ export function Sidebar({
                   pageId={page.pageId}
                   fileName={page.fileName}
                   componentCount={page.componentCount}
-                  unreadCount={page.unreadCount}
+                  readCount={page.readCount}
                   nameHighlight={nameHighlight}
                 />
               </button>

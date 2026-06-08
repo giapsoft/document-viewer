@@ -7,6 +7,7 @@ import { SaveDestinationDialog, type SaveDestination } from './SaveDestinationDi
 import { RemoteConflictDialog } from './RemoteConflictDialog';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
+import { useUnreadNavigationShortcuts } from '../hooks/useUnreadNavigationShortcuts';
 import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
 import { useCtrlCommentLinkHold } from '../hooks/useCtrlCommentLinkHold';
 import { useRemoteStalePoll } from '../hooks/useRemoteStalePoll';
@@ -17,11 +18,8 @@ import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { isSaveInProgress } from '../lib/saveProject';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { pageHasHighlightedComponents, getMainGroupPageFiles } from '../lib/selectionHighlight';
-import { countUnreadComponentsOnPage } from '../lib/readState';
-import {
-  findNextUnreadComponentId,
-  getAdjacentComponentId,
-} from '../lib/componentNavigation';
+import { countReadComponentsOnPage } from '../lib/readState';
+import { getAdjacentComponentId } from '../lib/componentNavigation';
 import { findComponent } from '../lib/projectMutations';
 
 const APP_TOAST_MS = 2000;
@@ -62,6 +60,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     toggleComponentRead,
     togglePageReadAll,
     toggleSelectedComponentRead,
+    navigateToUnread,
     selectComment,
     setCommentLinkPreview,
     setCommentLinkCtrlActive,
@@ -95,11 +94,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   const project = state.project!;
   const readShortcutsEnabled = Boolean(state.commentUsername);
-  const componentShortcutsEnabled =
-    Boolean(state.selection) &&
-    !state.linkMode &&
-    !state.commentLinkCtrlActive &&
-    !state.contentEditorOpen;
 
   const handleSelectAdjacent = useCallback(
     (direction: 'up' | 'down') => {
@@ -113,26 +107,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     },
     [project, selectComponent, state.selection],
   );
-
-  const handleSelectNextUnread = useCallback(() => {
-    if (!readShortcutsEnabled || !state.selection) return;
-    const located = findComponent(project, state.selection.componentId);
-    if (!located) return;
-    const page = project.pages.find((entry) => entry.fileName === located.pageFile);
-    if (!page) return;
-    const nextId = findNextUnreadComponentId(
-      page.components,
-      state.selection.componentId,
-      state.componentReadState,
-    );
-    if (nextId) selectComponent(nextId, located.pageFile, true);
-  }, [
-    project,
-    readShortcutsEnabled,
-    selectComponent,
-    state.componentReadState,
-    state.selection,
-  ]);
 
   const handleToggleReadShortcut = useCallback(() => {
     toggleSelectedComponentRead();
@@ -261,8 +235,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
         pageId: p.pageId,
         pageName: p.pageName,
         componentCount: p.components.length,
-        unreadCount: state.commentUsername
-          ? countUnreadComponentsOnPage(p.components, state.componentReadState)
+        readCount: state.commentUsername
+          ? countReadComponentsOnPage(p.components, state.componentReadState)
           : null,
       })),
     [project.pages, state.commentUsername, state.componentReadState],
@@ -317,6 +291,21 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const [saveDestinationOpen, setSaveDestinationOpen] = useState(false);
   const [remoteConflictOpen, setRemoteConflictOpen] = useState(false);
   const [pendingRemoteTitle, setPendingRemoteTitle] = useState<string | undefined>();
+
+  const workspaceShortcutsBlocked =
+    state.linkMode ||
+    state.commentLinkCtrlActive ||
+    state.contentEditorOpen ||
+    saveDestinationOpen ||
+    remoteConflictOpen;
+
+  useUnreadNavigationShortcuts({
+    enabled: readShortcutsEnabled && !workspaceShortcutsBlocked,
+    onNavigateUnread: navigateToUnread,
+  });
+
+  const showShortcutsHint =
+    !workspaceShortcutsBlocked && (Boolean(state.selection) || readShortcutsEnabled);
 
   const remoteStaleOnServer = useRemoteStalePoll(
     Boolean(project.remoteDocId && project.remoteUpdatedAt) && !isSaveInProgress(saveStatus),
@@ -477,8 +466,9 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               onSelectionNext={goNextSelection}
               linkEditingListIndex={linkEditingListIndex}
               linkTargetMemberCount={linkGroupMembers.size}
-              showComponentShortcuts={componentShortcutsEnabled}
+              showComponentShortcuts={showShortcutsHint}
               readShortcutsEnabled={readShortcutsEnabled}
+              hasComponentSelection={Boolean(state.selection)}
             />
             <ProjectToolbar
               dirty={dirty}
@@ -575,7 +565,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             onContentEditorOpenChange={setContentEditorOpen}
             readShortcutsEnabled={readShortcutsEnabled}
             onSelectAdjacent={handleSelectAdjacent}
-            onSelectNextUnread={handleSelectNextUnread}
             onToggleRead={handleToggleReadShortcut}
           />
         </main>

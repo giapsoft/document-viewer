@@ -17,7 +17,6 @@ interface UseEditBarShortcutsOptions {
   readShortcutsEnabled: boolean;
   onOpenFullscreen: () => void;
   onSelectAdjacent: (direction: 'up' | 'down') => void;
-  onSelectNextUnread: () => void;
   onToggleRead: () => void;
   onInsertAbove: () => void;
   onInsertBelow: () => void;
@@ -32,7 +31,6 @@ export function useEditBarShortcuts({
   readShortcutsEnabled,
   onOpenFullscreen,
   onSelectAdjacent,
-  onSelectNextUnread,
   onToggleRead,
   onInsertAbove,
   onInsertBelow,
@@ -110,12 +108,6 @@ export function useEditBarShortcuts({
         onToggleRead();
         return;
       }
-
-      if ((key === 'u' || key === 'U') && readShortcutsEnabled) {
-        event.preventDefault();
-        releaseComponentReadBarFocus();
-        onSelectNextUnread();
-      }
     };
 
     window.addEventListener('keydown', onKeyDown, true);
@@ -126,7 +118,6 @@ export function useEditBarShortcuts({
     readShortcutsEnabled,
     onOpenFullscreen,
     onSelectAdjacent,
-    onSelectNextUnread,
     onToggleRead,
     onInsertAbove,
     onInsertBelow,

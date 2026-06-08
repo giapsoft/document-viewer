@@ -10,6 +10,15 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return false;
 }
 
+/** True when a modal dialog or full-screen editor covers the main workspace. */
+export function isWorkspaceOverlayOpen(): boolean {
+  return Boolean(
+    document.querySelector(
+      '.content-editor-overlay, .picker-overlay, .page-file-dialog, .save-destination-dialog',
+    ),
+  );
+}
+
 /** Read bars used to be buttons; blur so Enter does not activate a stale bar. */
 export function releaseComponentReadBarFocus(): void {
   const active = document.activeElement;

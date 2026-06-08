@@ -5,6 +5,8 @@ import { mdSidecarFileName } from './mdFiles';
 import { ensureDocsDirectory } from './docsFolder';
 import { removeOrphanedDocsOnSave } from './pageFileOps';
 import { collectReferencedImageNames } from './projectBundle';
+import type { ComponentReadState } from './readState';
+import { saveReadStatesToFolder } from './readStateStorage';
 
 export type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -115,7 +117,10 @@ export async function pickSaveFolder(): Promise<FileSystemDirectoryHandle | null
   return window.showDirectoryPicker({ mode: 'readwrite' });
 }
 
-export async function saveProjectToFolder(project: LoadedProject): Promise<void> {
+export async function saveProjectToFolder(
+  project: LoadedProject,
+  readStatesByUsername?: Record<string, ComponentReadState>,
+): Promise<void> {
   const root = project.folderHandle;
   if (!root) {
     throw new Error('No local folder is linked to this document.');
@@ -156,6 +161,10 @@ export async function saveProjectToFolder(project: LoadedProject): Promise<void>
   await writeJsonFile(root, 'relations.json', relationsMeta);
   await writeJsonFile(root, 'groups.json', groups ?? []);
   await writeJsonFile(root, 'comments.json', comments ?? []);
+
+  if (readStatesByUsername && Object.keys(readStatesByUsername).length > 0) {
+    await saveReadStatesToFolder(root, readStatesByUsername);
+  }
 }
 
 export type LocalAutoSaveResult =

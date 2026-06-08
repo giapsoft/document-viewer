@@ -820,11 +820,50 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_COMMENT_USERNAME': {
       const username = normalizeReadUsername(action.username);
       if (!username) return state;
+      if (state.commentUsername === username) return state;
       return { ...state, commentUsername: username, componentReadState: {} };
     }
 
     case 'SET_COMPONENT_READ_STATE':
       return { ...state, componentReadState: action.readState };
+
+    case 'FOCUS_UNREAD_COMPONENT': {
+      if (!state.project || !state.commentUsername) return state;
+      const { componentId, pageFile } = action;
+      const applied = applyComponentSelection(state, componentId, pageFile);
+      if (!applied) return state;
+
+      const { history, index } = appendSelectionHistory(
+        state.selectionHistory,
+        state.selectionHistoryIndex,
+        { componentId, pageFile },
+      );
+
+      const resolved = findComponent(state.project, componentId);
+      const isMd = resolved?.component.type === 'md';
+      const anchorCommentId = !isMd
+        ? pickComponentAnchorCommentId(state.project.relations.comments ?? [], componentId)
+        : null;
+
+      return {
+        ...state,
+        ...applied,
+        panels: [{ pageFile, expanded: true }],
+        currentPage: pageFile,
+        selectionHistory: history,
+        selectionHistoryIndex: index,
+        scrollToComponent: {
+          componentId,
+          nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+        },
+        linkMode: false,
+        linkTargetGroupIndex: null,
+        linkFocusComponentId: null,
+        linkPreviewGroups: null,
+        linkCtrlActive: false,
+        ...(isMd ? { outstandingCommentId: null } : bumpOutstandingComment(state, anchorCommentId)),
+      };
+    }
 
     case 'TOGGLE_COMPONENT_READ': {
       if (!state.project || !state.commentUsername) return state;

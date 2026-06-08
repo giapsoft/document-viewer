@@ -12,8 +12,11 @@ import {
   normalizeReadUsername,
   toggleAllComponentsReadOnPage,
 } from '../lib/readState';
-import { loadReadStateForUser, saveReadStateForUser } from '../lib/readStateStorage';
+import { loadReadStateForUser, collectReadStatesForExport } from '../lib/readStateStorage';
+import { persistReadState, cancelReadStateRemoteSave, setReadStateSaveStatusListener } from '../lib/readStatePersist';
 import { findComponent } from '../lib/projectMutations';
+import { findUnreadComponentGlobally } from '../lib/componentNavigation';
+import { getStoredPageOrder } from '../lib/pageOrder';
 import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus } from '../lib/saveProject';
 import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave, cancelAutoSave, setSaveStatusListener, isSaveInProgress } from '../lib/saveProject';
@@ -133,6 +136,17 @@ export function useAppStore() {
         window.clearTimeout(jumpFlashTimerRef.current);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    setReadStateSaveStatusListener((status, message) => {
+      const project = projectRef.current;
+      if (!project?.remoteDocId) return;
+      setSaveStatus(status);
+      if (message) setSaveError(message);
+      else if (status !== 'error') setSaveError(null);
+    });
+    return () => setReadStateSaveStatusListener(null);
   }, []);
 
   useEffect(() => {
@@ -305,6 +319,7 @@ export function useAppStore() {
   const beginRemoteDocumentSession = useCallback(() => {
     cancelRemoteAutoSave();
     cancelAutoSave();
+    cancelReadStateRemoteSave();
     cancelRemoteBackgroundLoad();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
@@ -348,6 +363,7 @@ export function useAppStore() {
   const setProject = useCallback((project: LoadedProject) => {
     cancelRemoteAutoSave();
     cancelAutoSave();
+    cancelReadStateRemoteSave();
     cancelRemoteBackgroundLoad();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
@@ -366,6 +382,7 @@ export function useAppStore() {
   const closeProject = useCallback(() => {
     cancelRemoteAutoSave();
     cancelAutoSave();
+    cancelReadStateRemoteSave();
     cancelRemoteBackgroundLoad();
     revokeProjectImageUrls(projectRef.current);
     clearPageScrollMemory();
@@ -676,7 +693,7 @@ export function useAppStore() {
       : markComponentRead(current, componentId, version);
 
     dispatch({ type: 'TOGGLE_COMPONENT_READ', componentId });
-    void saveReadStateForUser(project, username, next).catch(() => {});
+    persistReadState(project, username, next);
   }, [dispatch]);
 
   const toggleSelectedComponentRead = useCallback(() => {
@@ -700,7 +717,33 @@ export function useAppStore() {
       appStateRef.current.componentReadState,
     );
     dispatch({ type: 'SET_COMPONENT_READ_STATE', readState: next });
-    void saveReadStateForUser(project, username, next).catch(() => {});
+    persistReadState(project, username, next);
+  }, [dispatch]);
+
+  const navigateToUnread = useCallback((direction: 'forward' | 'backward') => {
+    const project = projectRef.current;
+    const appState = appStateRef.current;
+    if (!project || !appState.commentUsername) return;
+
+    const pageOrder = getStoredPageOrder(
+      project.relations,
+      project.pages.map((page) => page.fileName),
+    );
+    const target = findUnreadComponentGlobally(
+      project.pages,
+      pageOrder,
+      appState.componentReadState,
+      appState.selection?.componentId ?? null,
+      direction,
+    );
+    if (!target) return;
+
+    dispatch({
+      type: 'FOCUS_UNREAD_COMPONENT',
+      componentId: target.componentId,
+      pageFile: target.pageFile,
+    });
+    queueFocusComponentBlock(target.componentId);
   }, [dispatch]);
 
   const selectComment = useCallback((commentId: string) => {
@@ -928,7 +971,12 @@ export function useAppStore() {
       }
 
       const projectForSave: LoadedProject = { ...project, folderHandle };
-      await saveProjectToFolder(projectForSave);
+      const readStates = collectReadStatesForExport(
+        project,
+        appStateRef.current.commentUsername,
+        appStateRef.current.componentReadState,
+      );
+      await saveProjectToFolder(projectForSave, readStates);
 
       const nextProject = stripCommentTombstones({
         ...project,
@@ -1201,7 +1249,12 @@ export function useAppStore() {
     }
 
     try {
-      await saveProjectToFolder(project);
+      const readStates = collectReadStatesForExport(
+        project,
+        appStateRef.current.commentUsername,
+        appStateRef.current.componentReadState,
+      );
+      await saveProjectToFolder(project, readStates);
       const nextProject = stripCommentTombstones(project);
       projectRef.current = nextProject;
       if (nextProject !== project) {
@@ -1309,6 +1362,7 @@ export function useAppStore() {
     toggleComponentRead,
     toggleSelectedComponentRead,
     togglePageReadAll,
+    navigateToUnread,
     selectComment,
     setCommentLinkPreview,
     setCommentLinkCtrlActive,

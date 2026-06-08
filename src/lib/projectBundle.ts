@@ -21,6 +21,14 @@ export function commentsStoragePath(docId: string): string {
   return `${docId}/comments.json`;
 }
 
+export function readsStoragePath(docId: string, username: string): string {
+  return `${docId}/reads/${username}.reads.json`;
+}
+
+export function isReadsPath(path: string, docId: string, username: string): boolean {
+  return path === readsStoragePath(docId, username);
+}
+
 export function docsStoragePath(docId: string, fileName: string): string {
   return `${docId}/docs/${fileName}`;
 }

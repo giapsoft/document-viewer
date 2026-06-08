@@ -257,6 +257,7 @@ export type AppAction =
   | { type: 'DELETE_COMPONENT'; pageFile: string; componentId: string }
   | { type: 'TOGGLE_COMMENT_PANEL' }
   | { type: 'SET_COMMENT_USERNAME'; username: string }
+  | { type: 'FOCUS_UNREAD_COMPONENT'; componentId: string; pageFile: string }
   | { type: 'SET_COMPONENT_READ_STATE'; readState: Record<string, number> }
   | { type: 'TOGGLE_COMPONENT_READ'; componentId: string }
   | { type: 'SELECT_COMMENT'; commentId: string }
