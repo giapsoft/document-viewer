@@ -21,7 +21,6 @@ import { pageHasHighlightedComponents, getMainGroupPageFiles } from '../lib/sele
 import { countUnreadComponentsOnPage } from '../lib/readState';
 import { getAdjacentComponentId } from '../lib/componentNavigation';
 import { findComponent } from '../lib/projectMutations';
-import { HELP_ABOUT_PAGE, HELP_GUIDE_PAGE } from '../lib/helpUrl';
 
 const APP_TOAST_MS = 2000;
 
@@ -91,7 +90,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     closeProject,
     suggestNewPageName,
     normalizePageName,
-    openBundledHelpPage,
   } = store;
 
   const project = state.project!;
@@ -485,12 +483,9 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               saveStatus={saveStatus}
               saveError={saveError}
               sourceLabel={sourceLabel}
-              bundledHelp={Boolean(project.bundledHelp)}
               onSave={handleSave}
               onReload={handleReloadFromLocal}
               onClose={handleClose}
-              onOpenHelpAbout={() => openBundledHelpPage(HELP_ABOUT_PAGE)}
-              onOpenHelpGuide={() => openBundledHelpPage(HELP_GUIDE_PAGE)}
             />
           </div>
 

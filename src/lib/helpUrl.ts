@@ -13,16 +13,6 @@ export function getHelpRequestFromUrl(): { requested: boolean; pageFile: string 
   };
 }
 
-export function buildHelpUrl(pageFile?: string): string {
-  const url = new URL(window.location.href);
-  url.search = '';
-  url.searchParams.set('help', '1');
-  if (pageFile) {
-    url.searchParams.set('helpPage', pageFile);
-  }
-  return url.toString();
-}
-
 export function setHelpInUrl(pageFile: string | null): void {
   const url = new URL(window.location.href);
   url.searchParams.delete('doc');

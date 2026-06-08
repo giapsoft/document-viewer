@@ -1219,14 +1219,6 @@ export function useAppStore() {
     [loadBundledHelp],
   );
 
-  const openBundledHelpPage = useCallback(
-    (pageFile: string) => {
-      setHelpInUrl(pageFile);
-      dispatch({ type: 'OPEN_PAGE', pageFile });
-    },
-    [dispatch],
-  );
-
   const runRemoteAutoSave = useCallback(async (): Promise<
     import('../lib/remoteAutoSave').RemoteAutoSaveResult
   > => {
@@ -1381,7 +1373,6 @@ export function useAppStore() {
     loadRemoteDocForWelcome,
     loadBundledHelp,
     loadBundledHelpForWelcome,
-    openBundledHelpPage,
     saveToLocal,
     saveToRemote,
     checkRemoteDocumentStale,

@@ -243,8 +243,7 @@ code {
   line-height: 1.45;
 }
 
-.welcome-help-links,
-.project-help-links {
+.welcome-help-links {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -266,20 +265,14 @@ code {
   line-height: 1.2;
 }
 
-.help-link-btn:hover:not(:disabled):not([aria-disabled='true']) {
+.help-link-btn:hover:not(:disabled) {
   background: #e9ecef;
   border-color: #adb5bd;
 }
 
-.help-link-btn:disabled,
-.help-link-btn[aria-disabled='true'] {
+.help-link-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-}
-
-.project-help-links .help-link-btn {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.8125rem;
 }
 
 .welcome-hint {

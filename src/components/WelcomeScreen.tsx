@@ -164,7 +164,6 @@ export function WelcomeScreen({
             comments, and save/sync behaviour.
           </p>
           <HelpLinks
-            variant="welcome"
             disabled={loading}
             onOpenAbout={() => void handleOpenHelp(HELP_ABOUT_PAGE)}
             onOpenGuide={() => void handleOpenHelp(HELP_GUIDE_PAGE)}
