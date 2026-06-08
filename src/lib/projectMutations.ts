@@ -64,7 +64,7 @@ export function updateComponentInProject(
         let next = applyComponentPatchWithVersion(c, patch);
         if (next.type === 'md') {
           next.content = '';
-        } else if (patch.type === 'action' && c.type !== 'action') {
+        } else if (patch.type === 'action' && c.type !== 'action' && patch.content === undefined) {
           next.content = createInitialActionContent();
         } else if (patch.type !== undefined && c.type === 'action' && patch.type !== 'action') {
           next.content = '';
