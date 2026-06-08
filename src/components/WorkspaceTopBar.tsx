@@ -1,3 +1,5 @@
+import { ComponentShortcutsHint } from './ComponentShortcutsHint';
+
 interface WorkspaceTopBarProps {
   linkMode?: boolean;
   linkEditingListIndex?: number | null;
@@ -10,6 +12,8 @@ interface WorkspaceTopBarProps {
   canGoNext?: boolean;
   onSelectionBack?: () => void;
   onSelectionNext?: () => void;
+  showComponentShortcuts?: boolean;
+  readShortcutsEnabled?: boolean;
 }
 
 export function WorkspaceTopBar({
@@ -24,6 +28,8 @@ export function WorkspaceTopBar({
   canGoNext = false,
   onSelectionBack,
   onSelectionNext,
+  showComponentShortcuts = false,
+  readShortcutsEnabled = false,
 }: WorkspaceTopBarProps) {
   const creatingNewList = linkMode && linkEditingListIndex === null;
 
@@ -82,6 +88,10 @@ export function WorkspaceTopBar({
             ? 'Creating a new list — click components to add them to this list. (Hold Ctrl)'
             : `Editing list ${linkEditingListIndex! + 1} (${linkTargetMemberCount} members) — click to add or remove. (Hold Ctrl)`}
         </span>
+      )}
+
+      {showComponentShortcuts && !linkMode && (
+        <ComponentShortcutsHint readShortcutsEnabled={readShortcutsEnabled} />
       )}
     </>
   );

@@ -1,5 +1,6 @@
 import type { Component, DocComment, LoadedProject } from '../types';
 import { createInitialActionContent } from './actionComponent';
+import { applyComponentPatchWithVersion } from './componentVersion';
 import { removeCommentsForComponent } from './comments';
 import { removeMemberIdsFromGroups } from './groupRelations';
 import { buildIndex } from './index';
@@ -60,7 +61,7 @@ export function updateComponentInProject(
       ...page,
       components: page.components.map((c) => {
         if (c.id !== componentId) return c;
-        const next = { ...c, ...patch };
+        let next = applyComponentPatchWithVersion(c, patch);
         if (next.type === 'md') {
           next.content = '';
         } else if (patch.type === 'action' && c.type !== 'action') {

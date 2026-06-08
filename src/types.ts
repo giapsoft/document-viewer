@@ -6,6 +6,8 @@ export interface Component {
   type: ComponentType;
   status: ComponentStatus;
   content: string;
+  /** Monotonic edit counter; missing in files means 0 */
+  version?: number;
 }
 
 export type CommentAnchor =
@@ -168,6 +170,8 @@ export interface AppState {
   selectionScrollNonce: number;
   commentPanelExpanded: boolean;
   commentUsername: string | null;
+  /** Per-component read version for the active comment username */
+  componentReadState: Record<string, number>;
   commentAuthorId: string;
   /** Comment selected in the panel (click to toggle). */
   selectedCommentId: string | null;
@@ -198,7 +202,12 @@ export type AppAction =
   | { type: 'TOGGLE_SIDEBAR' }
   | { type: 'EXPAND_SIDEBAR' }
   | { type: 'OPEN_PAGE'; pageFile: string }
-  | { type: 'SELECT_COMPONENT'; componentId: string; pageFile: string }
+  | {
+      type: 'SELECT_COMPONENT';
+      componentId: string;
+      pageFile: string;
+      scrollIntoView?: boolean;
+    }
   | { type: 'CLEAR_SELECTION' }
   | { type: 'TOGGLE_PANEL'; pageFile: string }
   | { type: 'REORDER_PANELS'; orderedPageFiles: string[] }
@@ -248,6 +257,8 @@ export type AppAction =
   | { type: 'DELETE_COMPONENT'; pageFile: string; componentId: string }
   | { type: 'TOGGLE_COMMENT_PANEL' }
   | { type: 'SET_COMMENT_USERNAME'; username: string }
+  | { type: 'SET_COMPONENT_READ_STATE'; readState: Record<string, number> }
+  | { type: 'TOGGLE_COMPONENT_READ'; componentId: string }
   | { type: 'SELECT_COMMENT'; commentId: string }
   | { type: 'SET_COMMENT_LINK_PREVIEW'; anchor: CommentAnchor | null }
   | { type: 'SET_COMMENT_LINK_CTRL_ACTIVE'; active: boolean }

@@ -99,6 +99,10 @@ interface EditBarProps {
   onDeleteProjectImage?: (filename: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   onContentEditorOpenChange: (open: boolean) => void;
   shortcutsEnabled?: boolean;
+  readShortcutsEnabled?: boolean;
+  onSelectAdjacent?: (direction: 'up' | 'down') => void;
+  onSelectNextUnread?: () => void;
+  onToggleRead?: () => void;
 }
 
 export function EditBar({
@@ -114,6 +118,10 @@ export function EditBar({
   onDeleteProjectImage,
   onContentEditorOpenChange,
   shortcutsEnabled = true,
+  readShortcutsEnabled = false,
+  onSelectAdjacent,
+  onSelectNextUnread,
+  onToggleRead,
 }: EditBarProps) {
   const [bodyExpanded, setBodyExpanded] = useState(false);
 
@@ -158,6 +166,10 @@ export function EditBar({
       onDeleteProjectImage={onDeleteProjectImage}
       onContentEditorOpenChange={onContentEditorOpenChange}
       shortcutsEnabled={shortcutsEnabled}
+      readShortcutsEnabled={readShortcutsEnabled}
+      onSelectAdjacent={onSelectAdjacent}
+      onSelectNextUnread={onSelectNextUnread}
+      onToggleRead={onToggleRead}
     />
   );
 }
@@ -180,6 +192,10 @@ interface EditBarFormProps {
   onDeleteProjectImage?: EditBarProps['onDeleteProjectImage'];
   onContentEditorOpenChange: (open: boolean) => void;
   shortcutsEnabled: boolean;
+  readShortcutsEnabled: boolean;
+  onSelectAdjacent?: (direction: 'up' | 'down') => void;
+  onSelectNextUnread?: () => void;
+  onToggleRead?: () => void;
 }
 
 function EditBarForm({
@@ -200,6 +216,10 @@ function EditBarForm({
   onDeleteProjectImage,
   onContentEditorOpenChange,
   shortcutsEnabled,
+  readShortcutsEnabled,
+  onSelectAdjacent,
+  onSelectNextUnread,
+  onToggleRead,
 }: EditBarFormProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -265,7 +285,11 @@ function EditBarForm({
     enabled: shortcutsEnabled && !fullscreenOpen && !confirmDelete && !pickerOpen,
     status: component.status,
     canDelete,
+    readShortcutsEnabled,
     onOpenFullscreen: openFullscreen,
+    onSelectAdjacent: (direction) => onSelectAdjacent?.(direction),
+    onSelectNextUnread: () => onSelectNextUnread?.(),
+    onToggleRead: () => onToggleRead?.(),
     onInsertAbove: () => onInsertAbove(pageFile, component.id),
     onInsertBelow: () => onInsertBelow(pageFile, component.id),
     onDelete: () => setConfirmDelete(true),
@@ -376,14 +400,14 @@ function EditBarForm({
             <span className="edit-bar-actions-divider" aria-hidden />
             <EditBarIconButton
               title="Insert above"
-              shortcut="Up"
+              shortcut="Alt+↑"
               onClick={() => onInsertAbove(pageFile, component.id)}
             >
               ↑
             </EditBarIconButton>
             <EditBarIconButton
               title="Insert below"
-              shortcut="Down"
+              shortcut="Alt+↓"
               onClick={() => onInsertBelow(pageFile, component.id)}
             >
               ↓

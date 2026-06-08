@@ -50,6 +50,13 @@ import {
   updateCommentBody,
 } from './comments';
 import { getOrCreateCommentAuthorId, getStoredCommentUsername } from './commentSession';
+import { bumpComponentVersion, getComponentVersion } from './componentVersion';
+import {
+  isComponentRead,
+  markComponentRead,
+  markComponentUnread,
+  normalizeReadUsername,
+} from './readState';
 
 function showAppToast(state: AppState, message: string): Pick<AppState, 'appToast'> {
   return {
@@ -151,6 +158,7 @@ export const initialAppState: AppState = {
   selectionScrollNonce: 0,
   commentPanelExpanded: false,
   commentUsername: null,
+  componentReadState: {},
   commentAuthorId: getOrCreateCommentAuthorId(),
   selectedCommentId: null,
   outstandingCommentId: null,
@@ -169,6 +177,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         project: action.project,
         sidebarExpanded: true,
         commentUsername: getStoredCommentUsername(),
+        componentReadState: {},
         commentAuthorId: getOrCreateCommentAuthorId(),
       };
       return nextState;
@@ -275,7 +284,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...applied,
         selectionHistory: history,
         selectionHistoryIndex: index,
-        scrollToComponent: null,
+        scrollToComponent: action.scrollIntoView
+          ? {
+              componentId,
+              nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+            }
+          : null,
         ...(isMd ? { outstandingCommentId: null } : bumpOutstandingComment(state, anchorCommentId)),
         selectionScrollNonce: shouldScrollSecondaryPanels
           ? state.selectionScrollNonce + 1
@@ -428,11 +442,24 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'UPDATE_MD_CONTENT': {
       if (!state.project) return state;
+      const previous = state.project.mdFiles.get(action.componentId) ?? '';
+      if (previous === action.content) return state;
+
       const mdFiles = new Map(state.project.mdFiles);
       mdFiles.set(action.componentId, action.content);
+
+      const pages = state.project.pages.map((page) => ({
+        ...page,
+        components: page.components.map((component) =>
+          component.id === action.componentId
+            ? bumpComponentVersion(component)
+            : component,
+        ),
+      }));
+
       return {
         ...state,
-        project: { ...state.project, mdFiles },
+        project: rebuildProject({ ...state.project, pages, mdFiles }),
       };
     }
 
@@ -791,9 +818,30 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, commentPanelExpanded: !state.commentPanelExpanded };
 
     case 'SET_COMMENT_USERNAME': {
-      const username = action.username.trim();
+      const username = normalizeReadUsername(action.username);
       if (!username) return state;
-      return { ...state, commentUsername: username };
+      return { ...state, commentUsername: username, componentReadState: {} };
+    }
+
+    case 'SET_COMPONENT_READ_STATE':
+      return { ...state, componentReadState: action.readState };
+
+    case 'TOGGLE_COMPONENT_READ': {
+      if (!state.project || !state.commentUsername) return state;
+      const found = findComponent(state.project, action.componentId);
+      if (!found) return state;
+
+      const version = getComponentVersion(found.component);
+      const currentlyRead = isComponentRead(
+        action.componentId,
+        version,
+        state.componentReadState,
+      );
+      const componentReadState = currentlyRead
+        ? markComponentUnread(state.componentReadState, action.componentId)
+        : markComponentRead(state.componentReadState, action.componentId, version);
+
+      return { ...state, componentReadState };
     }
 
     case 'SELECT_COMMENT': {

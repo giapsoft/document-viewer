@@ -3,6 +3,17 @@ import { flushSync } from 'react-dom';
 import type { AppAction, CommentAnchor, Component, LoadedProject } from '../types';
 import { stripCommentTombstones } from '../lib/comments';
 import { setStoredCommentUsername } from '../lib/commentSession';
+import { getComponentVersion } from '../lib/componentVersion';
+import { queueFocusComponentBlock } from '../lib/keyboard';
+import {
+  isComponentRead,
+  markComponentRead,
+  markComponentUnread,
+  normalizeReadUsername,
+  toggleAllComponentsReadOnPage,
+} from '../lib/readState';
+import { loadReadStateForUser, saveReadStateForUser } from '../lib/readStateStorage';
+import { findComponent } from '../lib/projectMutations';
 import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus } from '../lib/saveProject';
 import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave, cancelAutoSave, setSaveStatusListener, isSaveInProgress } from '../lib/saveProject';
@@ -309,6 +320,19 @@ export function useAppStore() {
     [],
   );
 
+  const hydrateReadStateRef = useRef<() => Promise<void>>(async () => {});
+
+  hydrateReadStateRef.current = async () => {
+    const project = projectRef.current;
+    const username = appStateRef.current.commentUsername;
+    if (!project || !username) {
+      dispatch({ type: 'SET_COMPONENT_READ_STATE', readState: {} });
+      return;
+    }
+    const readState = await loadReadStateForUser(project, username);
+    dispatch({ type: 'SET_COMPONENT_READ_STATE', readState });
+  };
+
   const applyRemoteDocumentLoad = useCallback(
     (load: Awaited<ReturnType<typeof loadRemoteDocumentDeferred>>) => {
       dispatch({ type: 'SET_PROJECT', project: load.project });
@@ -316,6 +340,7 @@ export function useAppStore() {
         setDocIdInUrl(load.project.remoteDocId);
       }
       startRemoteBackgroundLoad(load, dispatchRemoteMd, dispatchRemoteImage);
+      void hydrateReadStateRef.current();
     },
     [dispatch, dispatchRemoteMd, dispatchRemoteImage, startRemoteBackgroundLoad],
   );
@@ -335,6 +360,7 @@ export function useAppStore() {
     } else {
       setDocIdInUrl(null);
     }
+    void hydrateReadStateRef.current();
   }, [dispatch, cancelRemoteBackgroundLoad]);
 
   const closeProject = useCallback(() => {
@@ -375,8 +401,11 @@ export function useAppStore() {
   }, [dispatch, setProject]);
 
   const selectComponent = useCallback(
-    (componentId: string, pageFile: string) => {
-      dispatch({ type: 'SELECT_COMPONENT', componentId, pageFile });
+    (componentId: string, pageFile: string, scrollIntoView = false) => {
+      dispatch({ type: 'SELECT_COMPONENT', componentId, pageFile, scrollIntoView });
+      if (scrollIntoView) {
+        queueFocusComponentBlock(componentId);
+      }
     },
     [dispatch],
   );
@@ -622,9 +651,56 @@ export function useAppStore() {
     dispatch({ type: 'TOGGLE_COMMENT_PANEL' });
   }, [dispatch]);
 
-  const setCommentUsername = useCallback((username: string) => {
-    setStoredCommentUsername(username);
-    dispatch({ type: 'SET_COMMENT_USERNAME', username });
+  const setCommentUsername = useCallback((username: string): boolean => {
+    const normalized = normalizeReadUsername(username);
+    if (!normalized) return false;
+    setStoredCommentUsername(normalized);
+    dispatch({ type: 'SET_COMMENT_USERNAME', username: normalized });
+    void hydrateReadStateRef.current();
+    return true;
+  }, [dispatch]);
+
+  const toggleComponentRead = useCallback((componentId: string) => {
+    const project = projectRef.current;
+    const username = appStateRef.current.commentUsername;
+    if (!project || !username) return;
+
+    const found = findComponent(project, componentId);
+    if (!found) return;
+
+    const version = getComponentVersion(found.component);
+    const current = appStateRef.current.componentReadState;
+    const currentlyRead = isComponentRead(componentId, version, current);
+    const next = currentlyRead
+      ? markComponentUnread(current, componentId)
+      : markComponentRead(current, componentId, version);
+
+    dispatch({ type: 'TOGGLE_COMPONENT_READ', componentId });
+    void saveReadStateForUser(project, username, next).catch(() => {});
+  }, [dispatch]);
+
+  const toggleSelectedComponentRead = useCallback(() => {
+    const project = projectRef.current;
+    const username = appStateRef.current.commentUsername;
+    const componentId = appStateRef.current.selection?.componentId;
+    if (!project || !username || !componentId) return;
+    toggleComponentRead(componentId);
+  }, [toggleComponentRead]);
+
+  const togglePageReadAll = useCallback((pageFile: string) => {
+    const project = projectRef.current;
+    const username = appStateRef.current.commentUsername;
+    if (!project || !username) return;
+
+    const page = project.pages.find((entry) => entry.fileName === pageFile);
+    if (!page) return;
+
+    const next = toggleAllComponentsReadOnPage(
+      page.components,
+      appStateRef.current.componentReadState,
+    );
+    dispatch({ type: 'SET_COMPONENT_READ_STATE', readState: next });
+    void saveReadStateForUser(project, username, next).catch(() => {});
   }, [dispatch]);
 
   const selectComment = useCallback((commentId: string) => {
@@ -764,6 +840,7 @@ export function useAppStore() {
         const load = await loadRemoteDocumentSession(project.remoteDocId);
         dispatch({ type: 'RELOAD_PROJECT', project: load.project });
         startRemoteBackgroundLoad(load, dispatchRemoteMd, dispatchRemoteImage);
+        void hydrateReadStateRef.current();
         return { ok: true };
       } catch (err) {
         return {
@@ -785,6 +862,7 @@ export function useAppStore() {
       setSaveStatus('idle');
       setSaveError(null);
       dispatch({ type: 'RELOAD_PROJECT', project: reloaded });
+      void hydrateReadStateRef.current();
       return { ok: true };
     } catch (err) {
       return {
@@ -1228,6 +1306,9 @@ export function useAppStore() {
     finishLinkSession,
     toggleCommentPanel,
     setCommentUsername,
+    toggleComponentRead,
+    toggleSelectedComponentRead,
+    togglePageReadAll,
     selectComment,
     setCommentLinkPreview,
     setCommentLinkCtrlActive,

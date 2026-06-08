@@ -12,6 +12,7 @@ import { getStoredPageOrder } from './pageOrder';
 import { getDocsDirectoryIfPresent } from './docsFolder';
 import { mergeStyles } from './styles';
 import { isValidStatus, isValidType } from './componentDisplay';
+import { parseComponentVersion } from './componentVersion';
 import { MD_FILE_EXT, componentIdFromMdFileName } from './mdFiles';
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|gif)$/i;
@@ -43,6 +44,7 @@ function parseComponents(raw: unknown, fileName: string): Component[] {
       type,
       status,
       content,
+      version: parseComponentVersion(c.version),
     };
   });
 }

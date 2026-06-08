@@ -17,6 +17,12 @@ import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { isSaveInProgress } from '../lib/saveProject';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { pageHasHighlightedComponents, getMainGroupPageFiles } from '../lib/selectionHighlight';
+import { countUnreadComponentsOnPage } from '../lib/readState';
+import {
+  findNextUnreadComponentId,
+  getAdjacentComponentId,
+} from '../lib/componentNavigation';
+import { findComponent } from '../lib/projectMutations';
 
 const APP_TOAST_MS = 2000;
 
@@ -53,6 +59,9 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     finishLinkSession,
     toggleCommentPanel,
     setCommentUsername,
+    toggleComponentRead,
+    togglePageReadAll,
+    toggleSelectedComponentRead,
     selectComment,
     setCommentLinkPreview,
     setCommentLinkCtrlActive,
@@ -85,6 +94,49 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   } = store;
 
   const project = state.project!;
+  const readShortcutsEnabled = Boolean(state.commentUsername);
+  const componentShortcutsEnabled =
+    Boolean(state.selection) &&
+    !state.linkMode &&
+    !state.commentLinkCtrlActive &&
+    !state.contentEditorOpen;
+
+  const handleSelectAdjacent = useCallback(
+    (direction: 'up' | 'down') => {
+      if (!state.selection) return;
+      const located = findComponent(project, state.selection.componentId);
+      if (!located) return;
+      const page = project.pages.find((entry) => entry.fileName === located.pageFile);
+      if (!page) return;
+      const nextId = getAdjacentComponentId(page.components, state.selection.componentId, direction);
+      if (nextId) selectComponent(nextId, located.pageFile, true);
+    },
+    [project, selectComponent, state.selection],
+  );
+
+  const handleSelectNextUnread = useCallback(() => {
+    if (!readShortcutsEnabled || !state.selection) return;
+    const located = findComponent(project, state.selection.componentId);
+    if (!located) return;
+    const page = project.pages.find((entry) => entry.fileName === located.pageFile);
+    if (!page) return;
+    const nextId = findNextUnreadComponentId(
+      page.components,
+      state.selection.componentId,
+      state.componentReadState,
+    );
+    if (nextId) selectComponent(nextId, located.pageFile, true);
+  }, [
+    project,
+    readShortcutsEnabled,
+    selectComponent,
+    state.componentReadState,
+    state.selection,
+  ]);
+
+  const handleToggleReadShortcut = useCallback(() => {
+    toggleSelectedComponentRead();
+  }, [toggleSelectedComponentRead]);
 
   useEffect(() => {
     if (!state.appToast) return;
@@ -202,12 +254,19 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     });
   };
 
-  const sidebarPages = project.pages.map((p) => ({
-    fileName: p.fileName,
-    pageId: p.pageId,
-    pageName: p.pageName,
-    componentCount: p.components.length,
-  }));
+  const sidebarPages = useMemo(
+    () =>
+      project.pages.map((p) => ({
+        fileName: p.fileName,
+        pageId: p.pageId,
+        pageName: p.pageName,
+        componentCount: p.components.length,
+        unreadCount: state.commentUsername
+          ? countUnreadComponentsOnPage(p.components, state.componentReadState)
+          : null,
+      })),
+    [project.pages, state.commentUsername, state.componentReadState],
+  );
   const canManagePages = true;
   const panelPageFiles = useMemo(
     () => new Set(state.panels.map((panel) => panel.pageFile)),
@@ -418,6 +477,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               onSelectionNext={goNextSelection}
               linkEditingListIndex={linkEditingListIndex}
               linkTargetMemberCount={linkGroupMembers.size}
+              showComponentShortcuts={componentShortcutsEnabled}
+              readShortcutsEnabled={readShortcutsEnabled}
             />
             <ProjectToolbar
               dirty={dirty}
@@ -470,6 +531,10 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 onCommentLinkMdRange={handleCommentLinkMdRange}
                 onCommentMarkClick={handleCommentMarkClick}
                 onNavigateToComponent={jumpToComponent}
+                commentUsername={state.commentUsername}
+                componentReadState={state.componentReadState}
+                onToggleComponentRead={toggleComponentRead}
+                onTogglePageReadAll={togglePageReadAll}
               />
             ))}
             <CommentPanel
@@ -508,6 +573,10 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             onImportImageFromClipboard={importImageFromClipboard}
             onDeleteProjectImage={deleteProjectImage}
             onContentEditorOpenChange={setContentEditorOpen}
+            readShortcutsEnabled={readShortcutsEnabled}
+            onSelectAdjacent={handleSelectAdjacent}
+            onSelectNextUnread={handleSelectNextUnread}
+            onToggleRead={handleToggleReadShortcut}
           />
         </main>
       </div>

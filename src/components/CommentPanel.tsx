@@ -11,6 +11,7 @@ import { getCommentCardSelectionStyle } from '../lib/styles';
 import { UsernamePrompt } from './UsernamePrompt';
 import { isTypingTarget } from '../lib/keyboard';
 import { setStoredCommentUsername } from '../lib/commentSession';
+import { normalizeReadUsername } from '../lib/readState';
 import { authorAvatarColors, authorInitial } from '../lib/commentAvatar';
 
 interface CommentPanelProps {
@@ -24,7 +25,7 @@ interface CommentPanelProps {
   commentLinkCtrlActive?: boolean;
   canLinkSelectedComment?: boolean;
   onToggle: () => void;
-  onSetUsername: (username: string) => void;
+  onSetUsername: (username: string) => boolean;
   onSelectComment: (commentId: string) => void;
   onAddRoot: (body: string) => void;
   onAddReply: (parentId: string, body: string) => void;
@@ -369,6 +370,7 @@ export function CommentPanel({
   const [composeBody, setComposeBody] = useState('');
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState(username ?? '');
+  const [usernameError, setUsernameError] = useState<string | null>(null);
 
   const comments = activeComments(project.relations.comments ?? []);
   const tree = buildCommentTree(comments);
@@ -383,10 +385,19 @@ export function CommentPanel({
   const appStyles = project.styles;
 
   const handleSetUsername = (name: string) => {
-    setStoredCommentUsername(name);
-    onSetUsername(name);
+    const normalized = normalizeReadUsername(name);
+    if (!normalized) {
+      setUsernameError('Use 1–20 letters or digits only (A–Z, a–z, 0–9).');
+      return;
+    }
+    setStoredCommentUsername(normalized);
+    if (!onSetUsername(normalized)) {
+      setUsernameError('Use 1–20 letters or digits only (A–Z, a–z, 0–9).');
+      return;
+    }
+    setUsernameError(null);
     setEditingUsername(false);
-    setUsernameDraft(name);
+    setUsernameDraft(normalized);
   };
 
   useEffect(() => {
@@ -452,39 +463,54 @@ export function CommentPanel({
             </p>
           )}
           {!username ? (
-            <UsernamePrompt
-              title="Sign in to comment"
-              hint="You can read all comments below without a name. Enter a display name to post, reply, or link your own comments."
-              onConfirm={handleSetUsername}
-            />
+            <>
+              <UsernamePrompt
+                title="Sign in to comment"
+                hint="You can read all comments below without a name. Enter a display name to post, reply, or link your own comments."
+                onConfirm={handleSetUsername}
+              />
+              {usernameError ? (
+                <p className="username-validation-error">{usernameError}</p>
+              ) : null}
+            </>
           ) : (
             <div className="comment-panel-top">
               <div className="comment-user-row">
                 <AuthorAvatar name={username} small />
                 {editingUsername ? (
-                  <div className="comment-user-edit">
-                    <input
-                      type="text"
-                      className="comment-user-input"
-                      value={usernameDraft}
-                      onChange={(event) => setUsernameDraft(event.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="comment-text-btn"
-                      onClick={() => handleSetUsername(usernameDraft)}
-                      disabled={!usernameDraft.trim()}
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      className="comment-text-btn"
-                      onClick={() => setEditingUsername(false)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
+                  <>
+                    <div className="comment-user-edit">
+                      <input
+                        type="text"
+                        className="comment-user-input"
+                        value={usernameDraft}
+                        maxLength={20}
+                        pattern="[A-Za-z0-9]+"
+                        onChange={(event) => {
+                          setUsernameDraft(event.target.value);
+                          setUsernameError(null);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="comment-text-btn"
+                        onClick={() => handleSetUsername(usernameDraft)}
+                        disabled={!usernameDraft.trim()}
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        className="comment-text-btn"
+                        onClick={() => setEditingUsername(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    {usernameError ? (
+                      <p className="username-validation-error">{usernameError}</p>
+                    ) : null}
+                  </>
                 ) : (
                   <>
                     <span

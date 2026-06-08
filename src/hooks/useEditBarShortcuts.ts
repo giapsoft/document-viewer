@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ComponentStatus } from '../types';
-import { isTypingTarget } from '../lib/keyboard';
+import { isTypingTarget, releaseComponentReadBarFocus } from '../lib/keyboard';
 
 const STATUSES: ComponentStatus[] = ['undefined', 'pending', 'working', 'done', 'blocked'];
 
@@ -14,7 +14,11 @@ interface UseEditBarShortcutsOptions {
   enabled: boolean;
   status: ComponentStatus;
   canDelete: boolean;
+  readShortcutsEnabled: boolean;
   onOpenFullscreen: () => void;
+  onSelectAdjacent: (direction: 'up' | 'down') => void;
+  onSelectNextUnread: () => void;
+  onToggleRead: () => void;
   onInsertAbove: () => void;
   onInsertBelow: () => void;
   onDelete: () => void;
@@ -25,7 +29,11 @@ export function useEditBarShortcuts({
   enabled,
   status,
   canDelete,
+  readShortcutsEnabled,
   onOpenFullscreen,
+  onSelectAdjacent,
+  onSelectNextUnread,
+  onToggleRead,
   onInsertAbove,
   onInsertBelow,
   onDelete,
@@ -38,10 +46,23 @@ export function useEditBarShortcuts({
     if (!enabled) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.altKey || event.ctrlKey || event.metaKey) return;
       if (isTypingTarget(event.target)) return;
 
       const key = event.key;
+
+      if (event.altKey && key === 'ArrowUp') {
+        event.preventDefault();
+        onInsertAbove();
+        return;
+      }
+
+      if (event.altKey && key === 'ArrowDown') {
+        event.preventDefault();
+        onInsertBelow();
+        return;
+      }
+
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
 
       if (key === 'e' || key === 'E') {
         event.preventDefault();
@@ -70,22 +91,43 @@ export function useEditBarShortcuts({
 
       if (key === 'ArrowUp') {
         event.preventDefault();
-        onInsertAbove();
+        releaseComponentReadBarFocus();
+        onSelectAdjacent('up');
         return;
       }
 
       if (key === 'ArrowDown') {
         event.preventDefault();
-        onInsertBelow();
+        releaseComponentReadBarFocus();
+        onSelectAdjacent('down');
+        return;
+      }
+
+      if (key === 'Enter' && readShortcutsEnabled) {
+        event.preventDefault();
+        event.stopPropagation();
+        releaseComponentReadBarFocus();
+        onToggleRead();
+        return;
+      }
+
+      if ((key === 'u' || key === 'U') && readShortcutsEnabled) {
+        event.preventDefault();
+        releaseComponentReadBarFocus();
+        onSelectNextUnread();
       }
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [
     enabled,
     canDelete,
+    readShortcutsEnabled,
     onOpenFullscreen,
+    onSelectAdjacent,
+    onSelectNextUnread,
+    onToggleRead,
     onInsertAbove,
     onInsertBelow,
     onDelete,

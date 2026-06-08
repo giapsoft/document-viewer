@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { normalizeReadUsername } from '../lib/readState';
 
 interface UsernamePromptProps {
   initialValue?: string;
@@ -14,6 +15,7 @@ export function UsernamePrompt({
   onConfirm,
 }: UsernamePromptProps) {
   const [value, setValue] = useState(initialValue);
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <div className="username-prompt">
@@ -23,9 +25,13 @@ export function UsernamePrompt({
         className="username-prompt-form"
         onSubmit={(event) => {
           event.preventDefault();
-          const trimmed = value.trim();
-          if (!trimmed) return;
-          onConfirm(trimmed);
+          const normalized = normalizeReadUsername(value);
+          if (!normalized) {
+            setError('Use 1–20 letters or digits only (A–Z, a–z, 0–9).');
+            return;
+          }
+          setError(null);
+          onConfirm(normalized);
         }}
       >
         <input
@@ -34,12 +40,18 @@ export function UsernamePrompt({
           value={value}
           placeholder="Username"
           autoFocus
-          onChange={(event) => setValue(event.target.value)}
+          maxLength={20}
+          pattern="[A-Za-z0-9]+"
+          onChange={(event) => {
+            setValue(event.target.value);
+            setError(null);
+          }}
         />
         <button type="submit" className="username-prompt-submit" disabled={!value.trim()}>
           Continue
         </button>
       </form>
+      {error ? <p className="username-validation-error">{error}</p> : null}
     </div>
   );
 }

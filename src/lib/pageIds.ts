@@ -1,4 +1,5 @@
 import type { Component, PageData } from '../types';
+import { getComponentVersion } from './componentVersion';
 
 /**
  * Id terminology: pageId (file stem), local id (in .p), global id (pageId.localId in app).
@@ -106,11 +107,20 @@ export function serializePageComponents(
   components: Component[],
   pageId: string,
 ): Component[] {
-  return components.map((component) => ({
-    ...component,
-    id: toLocalComponentId(pageId, component.id),
-    content: component.type === 'md' ? '' : component.content,
-  }));
+  return components.map((component) => {
+    const serialized: Component = {
+      ...component,
+      id: toLocalComponentId(pageId, component.id),
+      content: component.type === 'md' ? '' : component.content,
+    };
+    const version = getComponentVersion(component);
+    if (version > 0) {
+      serialized.version = version;
+    } else {
+      delete serialized.version;
+    }
+    return serialized;
+  });
 }
 
 export function buildPageIdByFile(pages: PageData[]): Map<string, string> {

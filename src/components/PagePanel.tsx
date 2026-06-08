@@ -31,6 +31,13 @@ import {
 import { ScrollbarMarkers } from './ScrollbarMarkers';
 import type { MdHighlightRange, MdTextRange } from '../lib/mdSelection';
 import { resolveMdHighlightSegments } from '../lib/mdSelection';
+import { ComponentReadBar } from './ComponentReadBar';
+import { getComponentVersion } from '../lib/componentVersion';
+import {
+  countUnreadComponentsOnPage,
+  formatPageComponentCount,
+  isComponentRead,
+} from '../lib/readState';
 
 function mdAnchorToHighlightRanges(
   anchor: Extract<NonNullable<DocComment['anchor']>, { kind: 'md-range' }>,
@@ -191,12 +198,16 @@ interface ComponentBlockProps {
   flashedComponentId?: string | null;
   flashNonce?: number;
   registerRef: (id: string, el: HTMLElement | null) => void;
+  commentUsername?: string | null;
+  componentReadState?: Record<string, number>;
+  onToggleComponentRead?: (componentId: string) => void;
 }
 
 interface ComponentShellProps {
   component: Component;
   highlightKind: 'none' | 'primary' | 'related' | 'related-transitive' | 'link' | 'comment-link';
   isDimmed: boolean;
+  isPrimarySelected: boolean;
   linkFlashActive: boolean;
   linkFlashNonce: number;
   className: string;
@@ -213,6 +224,7 @@ function ComponentShell({
   component,
   highlightKind,
   isDimmed,
+  isPrimarySelected,
   linkFlashActive,
   linkFlashNonce,
   className,
@@ -244,6 +256,7 @@ function ComponentShell({
         shellRef.current = el;
         registerRef(component.id, el);
       }}
+      data-component-id={component.id}
       className={`component-block ${className} ${highlightKind !== 'none' ? 'selected' : ''} ${highlightKind === 'primary' ? 'selected-primary' : ''} ${highlightKind === 'related' ? 'selected-related' : ''} ${highlightKind === 'related-transitive' ? 'selected-related-transitive' : ''} ${highlightKind === 'link' ? 'link-selected' : ''} ${highlightKind === 'comment-link' ? 'comment-link-preview' : ''} ${isDimmed ? 'dimmed' : ''}`}
       style={style}
       onClick={(e) => {
@@ -253,9 +266,10 @@ function ComponentShell({
           return;
         }
         onSelect(component.id, pageFile);
+        e.currentTarget.focus({ preventScroll: true });
       }}
       role="button"
-      tabIndex={0}
+      tabIndex={isPrimarySelected ? 0 : -1}
       onKeyDown={(e) => {
         if (isTypingTarget(e.target)) return;
         if (e.target !== e.currentTarget) return;
@@ -298,6 +312,9 @@ export function ComponentBlock({
   flashedComponentId = null,
   flashNonce = 0,
   registerRef,
+  commentUsername = null,
+  componentReadState = {},
+  onToggleComponentRead,
 }: ComponentBlockProps) {
   const resolved = resolveComponentForDisplay(component, project.mdFiles);
   const mdSelectionHandledRef = useRef(false);
@@ -305,6 +322,21 @@ export function ComponentBlock({
     () => createMarkdownComponentLinkResolver(pageFile, project),
     [pageFile, project],
   );
+
+  const wrapWithReadBar = (shell: ReactNode) => {
+    if (!commentUsername || !onToggleComponentRead) return shell;
+    const version = getComponentVersion(component);
+    const read = isComponentRead(component.id, version, componentReadState);
+    return (
+      <div className={`component-unit ${read ? 'is-read' : 'is-unread'}`}>
+        {shell}
+        <ComponentReadBar
+          isRead={read}
+          onToggle={() => onToggleComponentRead(component.id)}
+        />
+      </div>
+    );
+  };
 
   const isCommentLinkPreview =
     commentLinkMode &&
@@ -368,6 +400,7 @@ export function ComponentBlock({
     component,
     highlightKind,
     isDimmed,
+    isPrimarySelected,
     linkFlashActive: flashedComponentId === component.id,
     linkFlashNonce: flashNonce,
     onSelect,
@@ -391,7 +424,7 @@ export function ComponentBlock({
   const stickyClassExtra = resolved.type === 'title' ? ' component-sticky' : '';
 
   if (resolved.type === 'action') {
-    return (
+    return wrapWithReadBar(
       <ComponentShell
         {...shellProps}
         className={`component-action-wrap${shellClassExtra}`}
@@ -402,14 +435,14 @@ export function ComponentBlock({
           project={project}
           pendingImageNames={pendingImageNames}
         />
-      </ComponentShell>
+      </ComponentShell>,
     );
   }
 
   if (resolved.type === 'img') {
     const src = project.imageUrls.get(resolved.content);
     const isPending = pendingImageNames?.has(resolved.content) ?? false;
-    return (
+    return wrapWithReadBar(
       <ComponentShell
         {...shellProps}
         className={`component-img-wrap${shellClassExtra}`}
@@ -422,13 +455,13 @@ export function ComponentBlock({
         ) : (
           <span className="broken-image">🖼 {resolved.content} (not found)</span>
         )}
-      </ComponentShell>
+      </ComponentShell>,
     );
   }
 
   if (resolved.type === 'md') {
     const isMdPending = pendingMdComponentIds?.has(component.id) ?? false;
-    return (
+    return wrapWithReadBar(
       <ComponentShell
         {...shellProps}
         className={`component-md-wrap${shellClassExtra}`}
@@ -458,7 +491,7 @@ export function ComponentBlock({
         ) : (
           <span className="component-md-empty">Empty markdown</span>
         )}
-      </ComponentShell>
+      </ComponentShell>,
     );
   }
 
@@ -466,7 +499,7 @@ export function ComponentBlock({
   const displayContent =
     resolved.type === 'listItem' ? `• ${resolved.content}` : resolved.content;
 
-  return (
+  return wrapWithReadBar(
     <ComponentShell
       {...shellProps}
       className={`component-text component-${resolved.type}${shellClassExtra}${stickyClassExtra}`}
@@ -483,7 +516,7 @@ export function ComponentBlock({
           {i < displayContent.split('\n').length - 1 && <br />}
         </span>
       ))}
-    </ComponentShell>
+    </ComponentShell>,
   );
 }
 
@@ -570,6 +603,10 @@ interface PagePanelProps {
   onNavigateToComponent?: (componentId: string) => void;
   flashedComponentId?: string | null;
   flashNonce?: number;
+  commentUsername?: string | null;
+  componentReadState?: Record<string, number>;
+  onToggleComponentRead?: (componentId: string) => void;
+  onTogglePageReadAll?: (pageFile: string) => void;
 }
 
 export function PagePanel({
@@ -598,6 +635,10 @@ export function PagePanel({
   scrollToComponentId = null,
   scrollNonce = 0,
   selectionScrollNonce = 0,
+  commentUsername = null,
+  componentReadState = {},
+  onToggleComponentRead,
+  onTogglePageReadAll,
 }: PagePanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -706,6 +747,8 @@ export function PagePanel({
 
     const markScrollHandled = () => {
       handledScrollNonceRef.current = scrollNonce;
+      const el = componentRefs.current.get(scrollToComponentId);
+      el?.focus({ preventScroll: true });
     };
 
     if (scrollToMdHighlight) {
@@ -795,6 +838,11 @@ export function PagePanel({
 
   if (!page) return null;
 
+  const pageUnreadCount = commentUsername
+    ? countUnreadComponentsOnPage(page.components, componentReadState)
+    : null;
+  const pageCountLabel = formatPageComponentCount(page.components.length, pageUnreadCount);
+
   const panelTitle = (
     <PageLabel
       className="page-panel-title-label"
@@ -802,8 +850,13 @@ export function PagePanel({
       pageId={page.pageId}
       fileName={page.fileName}
       componentCount={page.components.length}
+      unreadCount={pageUnreadCount}
+      compact
     />
   );
+
+  const pageHasUnread = pageUnreadCount != null && pageUnreadCount > 0;
+  const readAllLabel = pageHasUnread ? 'All read' : 'All unread';
 
   const openPanel = () => {
     if (!expanded) onToggle();
@@ -828,21 +881,36 @@ export function PagePanel({
       role={expanded ? undefined : 'button'}
       tabIndex={expanded ? undefined : 0}
       aria-label={
-        expanded ? undefined : `Open page panel: ${page.pageName} (${page.components.length})`
+        expanded ? undefined : `Open page panel: ${page.pageName} (${pageCountLabel})`
       }
     >
       <div className="page-panel-header">
         {expanded ? (
           <>
             <span className="page-panel-title">{panelTitle}</span>
-            <button
-              type="button"
-              className="panel-toggle-btn"
-              onClick={onToggle}
-              title="Shrink"
-            >
-              ◀
-            </button>
+            <div className="page-panel-header-actions">
+              {commentUsername && onTogglePageReadAll ? (
+                <button
+                  type="button"
+                  className={`page-read-all-btn${pageHasUnread ? ' has-unread' : ''}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onTogglePageReadAll(pageFile);
+                  }}
+                  title={pageHasUnread ? 'Mark all components on this page as read' : 'Mark all components on this page as unread'}
+                >
+                  {readAllLabel}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="panel-toggle-btn"
+                onClick={onToggle}
+                title="Shrink"
+              >
+                ◀
+              </button>
+            </div>
           </>
         ) : (
           <>
@@ -851,10 +919,19 @@ export function PagePanel({
             </span>
             <span
               className="page-panel-vertical-title"
-              title={`${page.pageName} (${page.components.length})`}
+              title={`${page.pageName} (${pageCountLabel})`}
             >
               {page.pageName}
-              <span className="page-label-count"> ({page.components.length})</span>
+              <span
+                className={`page-label-count${
+                  pageUnreadCount != null && pageUnreadCount > 0
+                    ? ' page-label-count-has-unread'
+                    : ''
+                }`}
+              >
+                {' '}
+                ({pageCountLabel})
+              </span>
             </span>
           </>
         )}
@@ -929,6 +1006,9 @@ export function PagePanel({
                   flashedComponentId={flashedComponentId}
                   flashNonce={flashNonce}
                   registerRef={registerRef}
+                  commentUsername={commentUsername}
+                  componentReadState={componentReadState}
+                  onToggleComponentRead={onToggleComponentRead}
                 />
                 );
               })}

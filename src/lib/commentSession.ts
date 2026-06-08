@@ -1,10 +1,13 @@
+import { normalizeReadUsername } from './readState';
+
 const USERNAME_KEY = 'doc-viewer-comment-username';
 const AUTHOR_ID_KEY = 'doc-viewer-comment-author-id';
 
 export function getStoredCommentUsername(): string | null {
   try {
     const value = sessionStorage.getItem(USERNAME_KEY);
-    return value?.trim() ? value : null;
+    if (!value) return null;
+    return normalizeReadUsername(value);
   } catch {
     return null;
   }
@@ -12,7 +15,9 @@ export function getStoredCommentUsername(): string | null {
 
 export function setStoredCommentUsername(username: string): void {
   try {
-    sessionStorage.setItem(USERNAME_KEY, username.trim());
+    const normalized = normalizeReadUsername(username);
+    if (!normalized) return;
+    sessionStorage.setItem(USERNAME_KEY, normalized);
   } catch {
     // ignore quota / private mode
   }
