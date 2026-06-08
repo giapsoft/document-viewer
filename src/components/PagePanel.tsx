@@ -593,6 +593,7 @@ export function PagePanel({
   const handledScrollNonceRef = useRef(0);
   const handledAutoScrollKeyRef = useRef<string | null>(null);
   const wasExpandedRef = useRef(false);
+  const prevLinkModeRef = useRef(linkMode);
   const page = project.pages.find((p) => p.fileName === pageFile);
 
   const registerRef = (id: string, el: HTMLElement | null) => {
@@ -730,6 +731,9 @@ export function PagePanel({
   ]);
 
   useEffect(() => {
+    const justExitedLinkMode = prevLinkModeRef.current && !linkMode;
+    prevLinkModeRef.current = linkMode;
+
     if (!expanded) {
       handledAutoScrollKeyRef.current = null;
       return;
@@ -738,7 +742,7 @@ export function PagePanel({
     const justExpanded = !wasExpandedRef.current;
     wasExpandedRef.current = true;
 
-    if (linkMode || isCurrent || !page || !selection) return;
+    if (linkMode || justExitedLinkMode || isCurrent || !page || !selection) return;
 
     const targetId = getFirstSelectedComponentId(
       page,

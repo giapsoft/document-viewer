@@ -666,17 +666,6 @@ export const ActionEditor = forwardRef<ActionEditorHandle, ActionEditorProps>(fu
     <div className="action-editor">
       <aside className="action-editor-sidebar">
         <label className="action-editor-field">
-          <span className="action-editor-field-label">Action name</span>
-          <input
-            type="text"
-            className="action-editor-input"
-            value={metaRef.current.action_name}
-            placeholder="Action label…"
-            onChange={(event) => updateMeta({ action_name: event.target.value })}
-          />
-        </label>
-
-        <label className="action-editor-field">
           <span className="action-editor-field-label">Title</span>
           <input
             type="text"
@@ -684,6 +673,17 @@ export const ActionEditor = forwardRef<ActionEditorHandle, ActionEditorProps>(fu
             value={metaRef.current.title}
             placeholder="Footer caption…"
             onChange={(event) => updateMeta({ title: event.target.value })}
+          />
+        </label>
+
+        <label className="action-editor-field">
+          <span className="action-editor-field-label">Action name</span>
+          <input
+            type="text"
+            className="action-editor-input"
+            value={metaRef.current.action_name}
+            placeholder="Action label…"
+            onChange={(event) => updateMeta({ action_name: event.target.value })}
           />
         </label>
 

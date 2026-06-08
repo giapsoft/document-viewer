@@ -69,7 +69,12 @@ function applyExitLinkMode(state: AppState): AppState {
   if (!pageFile) return nextState;
 
   const applied = applyComponentSelection(nextState, focusId, pageFile);
-  return applied ? { ...nextState, ...applied } : nextState;
+  if (!applied) return nextState;
+
+  return {
+    ...nextState,
+    selection: applied.selection,
+  };
 }
 
 function bumpOutstandingComment(
@@ -645,7 +650,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         linkPreviewGroups: groups,
         linkTargetGroupIndex,
-        linkFocusComponentId: componentId,
         currentPage: pageFile,
         selection: null,
       };
