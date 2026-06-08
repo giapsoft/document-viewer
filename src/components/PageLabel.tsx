@@ -5,8 +5,8 @@ interface PageLabelProps {
   pageId: string;
   fileName?: string;
   componentCount?: number;
-  /** When set with componentCount, label shows read/total */
-  readCount?: number | null;
+  /** When set with componentCount, label shows unread/total */
+  unreadCount?: number | null;
   className?: string;
   /** Same group as selection — blue page name. Takes precedence over linked elsewhere (orange). */
   nameHighlight?: 'related' | 'main-group';
@@ -20,20 +20,18 @@ export function PageLabel({
   pageId,
   fileName,
   componentCount,
-  readCount = null,
+  unreadCount = null,
   className = '',
   nameHighlight,
   compact = false,
 }: PageLabelProps) {
   const showId = pageName !== pageId;
   const countLabel =
-    componentCount != null ? formatPageComponentCount(componentCount, readCount) : null;
-  const unreadCount =
-    componentCount != null && readCount != null ? componentCount - readCount : null;
+    componentCount != null ? formatPageComponentCount(componentCount, unreadCount) : null;
   const countNote =
     componentCount != null
-      ? readCount != null
-        ? ` · ${readCount}/${componentCount} read/total`
+      ? unreadCount != null
+        ? ` · ${unreadCount}/${componentCount} unread/total`
         : ` · ${componentCount} component${componentCount === 1 ? '' : 's'}`
       : '';
   const title = fileName

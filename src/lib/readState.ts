@@ -74,9 +74,9 @@ export function countReadComponentsOnPage(
 
 export function formatPageComponentCount(
   total: number,
-  readCount?: number | null,
+  unreadCount?: number | null,
 ): string {
-  if (readCount != null) return `${readCount}/${total}`;
+  if (unreadCount != null) return `${unreadCount}/${total}`;
   return String(total);
 }
 

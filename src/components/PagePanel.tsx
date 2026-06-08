@@ -34,7 +34,7 @@ import { resolveMdHighlightSegments } from '../lib/mdSelection';
 import { ComponentReadBar } from './ComponentReadBar';
 import { getComponentVersion } from '../lib/componentVersion';
 import {
-  countReadComponentsOnPage,
+  countUnreadComponentsOnPage,
   formatPageComponentCount,
   isComponentRead,
 } from '../lib/readState';
@@ -201,6 +201,7 @@ interface ComponentBlockProps {
   commentUsername?: string | null;
   componentReadState?: Record<string, number>;
   onToggleComponentRead?: (componentId: string) => void;
+  showReadBars?: boolean;
 }
 
 interface ComponentShellProps {
@@ -315,6 +316,7 @@ export function ComponentBlock({
   commentUsername = null,
   componentReadState = {},
   onToggleComponentRead,
+  showReadBars = true,
 }: ComponentBlockProps) {
   const resolved = resolveComponentForDisplay(component, project.mdFiles);
   const mdSelectionHandledRef = useRef(false);
@@ -324,7 +326,7 @@ export function ComponentBlock({
   );
 
   const wrapWithReadBar = (shell: ReactNode) => {
-    if (!commentUsername || !onToggleComponentRead) return shell;
+    if (!commentUsername || !onToggleComponentRead || !showReadBars) return shell;
     const version = getComponentVersion(component);
     const read = isComponentRead(component.id, version, componentReadState);
     return (
@@ -838,10 +840,10 @@ export function PagePanel({
 
   if (!page) return null;
 
-  const pageReadCount = commentUsername
-    ? countReadComponentsOnPage(page.components, componentReadState)
+  const pageUnreadCount = commentUsername
+    ? countUnreadComponentsOnPage(page.components, componentReadState)
     : null;
-  const pageCountLabel = formatPageComponentCount(page.components.length, pageReadCount);
+  const pageCountLabel = formatPageComponentCount(page.components.length, pageUnreadCount);
 
   const panelTitle = (
     <PageLabel
@@ -850,13 +852,12 @@ export function PagePanel({
       pageId={page.pageId}
       fileName={page.fileName}
       componentCount={page.components.length}
-      readCount={pageReadCount}
+      unreadCount={pageUnreadCount}
       compact
     />
   );
 
-  const pageHasUnread =
-    pageReadCount != null && pageReadCount < page.components.length;
+  const pageHasUnread = pageUnreadCount != null && pageUnreadCount > 0;
   const readAllLabel = pageHasUnread ? 'All read' : 'All unread';
 
   const openPanel = () => {
@@ -1008,6 +1009,7 @@ export function PagePanel({
                   commentUsername={commentUsername}
                   componentReadState={componentReadState}
                   onToggleComponentRead={onToggleComponentRead}
+                  showReadBars={pageHasUnread}
                 />
                 );
               })}

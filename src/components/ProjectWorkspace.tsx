@@ -18,7 +18,7 @@ import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { isSaveInProgress } from '../lib/saveProject';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { pageHasHighlightedComponents, getMainGroupPageFiles } from '../lib/selectionHighlight';
-import { countReadComponentsOnPage } from '../lib/readState';
+import { countUnreadComponentsOnPage } from '../lib/readState';
 import { getAdjacentComponentId } from '../lib/componentNavigation';
 import { findComponent } from '../lib/projectMutations';
 
@@ -235,8 +235,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
         pageId: p.pageId,
         pageName: p.pageName,
         componentCount: p.components.length,
-        readCount: state.commentUsername
-          ? countReadComponentsOnPage(p.components, state.componentReadState)
+        unreadCount: state.commentUsername
+          ? countUnreadComponentsOnPage(p.components, state.componentReadState)
           : null,
       })),
     [project.pages, state.commentUsername, state.componentReadState],
