@@ -127,23 +127,23 @@ export function Sidebar({
           <span className="sidebar-status-key-text">In workspace</span>
         </div>
         <div className="sidebar-status-key-row">
-          <span className="sidebar-status-key-name-demo sidebar-status-key-name-demo-linked" aria-hidden>
-            Page
-          </span>
-          <span className="sidebar-status-key-text">Linked selection</span>
-        </div>
-        <div className="sidebar-status-key-row">
           <span
             className="sidebar-status-key-name-demo sidebar-status-key-name-demo-main-group"
             aria-hidden
           >
             Page
           </span>
-          <span className="sidebar-status-key-text">Main group</span>
+          <span className="sidebar-status-key-text">Same group</span>
+        </div>
+        <div className="sidebar-status-key-row">
+          <span className="sidebar-status-key-name-demo sidebar-status-key-name-demo-linked" aria-hidden>
+            Page
+          </span>
+          <span className="sidebar-status-key-text">Linked elsewhere</span>
         </div>
         <div className="sidebar-status-key-row">
           <span className="sidebar-status-key-dot-demo" aria-hidden />
-          <span className="sidebar-status-key-text">Main selected component</span>
+          <span className="sidebar-status-key-text">Selected component</span>
         </div>
       </div>
 
@@ -171,7 +171,7 @@ export function Sidebar({
             <li
               key={page.fileName}
               className={`page-list-row${inPanel ? ' page-list-row-in-panel' : ''}${hasMainSelection ? ' page-list-row-main-selected' : ''} ${isDragging ? 'page-list-row-dragging' : ''} ${isDropTarget ? 'page-list-row-drop-target' : ''}`}
-              aria-label={`${page.pageName}: ${inPanel ? 'in panel area' : 'not in panel area'}, ${nameHighlight === 'main-group' ? 'in main group' : hasHighlight ? 'has linked selection' : 'no linked selection'}, ${hasMainSelection ? 'contains main selected component' : 'no main selected component'}`}
+              aria-label={`${page.pageName}: ${inPanel ? 'in panel area' : 'not in panel area'}, ${nameHighlight === 'main-group' ? 'same group as selection' : hasHighlight ? 'linked elsewhere' : 'no link highlight'}, ${hasMainSelection ? 'contains selected component' : 'no selected component'}`}
               onDragOver={(event) => handleDragOver(event, index)}
               onDrop={(event) => handleDrop(event, index)}
               onDragLeave={() => {

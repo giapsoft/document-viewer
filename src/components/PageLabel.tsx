@@ -4,7 +4,7 @@ interface PageLabelProps {
   fileName?: string;
   componentCount?: number;
   className?: string;
-  /** Linked selection on this page — orange page name. Main group overrides with blue. */
+  /** Same group as selection — blue page name. Takes precedence over linked elsewhere (orange). */
   nameHighlight?: 'related' | 'main-group';
 }
 
