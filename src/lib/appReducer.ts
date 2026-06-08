@@ -907,9 +907,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         fileHashes.set(action.storagePath, action.fileHash);
         remoteSync = { fileHashes };
       }
+      const shouldScrollToMd =
+        state.scrollToComponent?.componentId === action.componentId ||
+        state.selection?.componentId === action.componentId;
       return {
         ...state,
         project: { ...state.project, mdFiles, remoteSync },
+        ...(shouldScrollToMd
+          ? {
+              scrollToComponent: {
+                componentId: action.componentId,
+                nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+              },
+            }
+          : {}),
       };
     }
 

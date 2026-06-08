@@ -794,7 +794,8 @@ export function PagePanel({
       highlightedComment?.anchor?.kind === 'md-range' &&
       highlightedComment.anchor.componentId === scrollToComponentId;
 
-    const markScrollHandled = () => {
+    const markScrollHandled = (success: boolean) => {
+      if (!success) return;
       handledScrollNonceRef.current = scrollNonce;
       const el = componentRefs.current.get(scrollToComponentId);
       el?.focus({ preventScroll: true });
@@ -808,7 +809,7 @@ export function PagePanel({
         panelRef,
         (success) => {
           if (success) {
-            markScrollHandled();
+            markScrollHandled(true);
             return;
           }
           scheduleScrollToComponent(

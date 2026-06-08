@@ -143,6 +143,10 @@ export function applyWorkspaceRestore(
         ...nextState,
         ...applied,
         selectionScrollNonce: state.selectionScrollNonce + 1,
+        scrollToComponent: {
+          componentId: primaryComponentId,
+          nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+        },
       };
     }
   }
