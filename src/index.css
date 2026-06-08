@@ -26,10 +26,10 @@ body {
   user-select: none;
 }
 
-.welcome-card .version-badge {
-  display: block;
-  margin-top: 1rem;
-  text-align: center;
+.welcome-header-version.version-badge {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 0.15rem;
 }
 
 .sidebar-version.version-badge {
@@ -75,51 +75,139 @@ code {
 
 /* Welcome */
 .welcome {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
+  min-height: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 1.25rem 1.5rem;
 }
 
-.welcome-card {
+.welcome-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
   background: #fff;
   border-radius: 12px;
-  padding: 2.5rem;
-  max-width: 480px;
-  width: 100%;
+  padding: 1.25rem 1.5rem 1.5rem;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
 }
 
-.welcome-card-wide {
-  max-width: 640px;
+.welcome-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
 }
 
-.welcome-remote {
-  margin: 1.5rem 0;
-  padding-top: 1.25rem;
-  border-top: 1px solid #e9ecef;
+.welcome-header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.welcome-lead {
+  color: #495057;
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  max-width: 52rem;
+}
+
+.welcome-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.welcome-panels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.welcome-panel {
+  padding: 0.85rem 1rem;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  background: #f8f9fa;
+  min-width: 0;
+}
+
+.welcome-panel-docs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.welcome-panel h2 {
+  margin: 0 0 0.55rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #212529;
+}
+
+.welcome-panel-copy {
+  margin: 0 0 0.65rem;
+  color: #495057;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.welcome-video-panel {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #dee2e6;
+  border-radius: 10px;
+  background: #212529;
+}
+
+.welcome-video-heading {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ced4da;
+}
+
+.welcome-video-frame {
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: 16 / 9;
+}
+
+.welcome-video-frame iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
 .welcome-remote-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
 }
 
 .welcome-remote-header h2 {
   margin: 0;
-  font-size: 1.1rem;
 }
 
 .welcome-refresh-btn {
-  padding: 0.35rem 0.75rem;
+  padding: 0.25rem 0.55rem;
   border: 1px solid #dee2e6;
   border-radius: 6px;
   background: #fff;
   color: #495057;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -130,7 +218,7 @@ code {
 
 .welcome-remote-status {
   color: #6c757d;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   margin: 0;
 }
 
@@ -140,8 +228,8 @@ code {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  max-height: 280px;
+  gap: 0.4rem;
+  max-height: 10rem;
   overflow: auto;
 }
 
@@ -150,11 +238,11 @@ code {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.15rem;
-  padding: 0.75rem 1rem;
+  gap: 0.1rem;
+  padding: 0.55rem 0.7rem;
   border: 1px solid #dee2e6;
-  border-radius: 8px;
-  background: #f8f9fa;
+  border-radius: 6px;
+  background: #fff;
   text-align: left;
   cursor: pointer;
 }
@@ -171,36 +259,35 @@ code {
 
 .welcome-doc-title {
   font-weight: 600;
+  font-size: 0.85rem;
   color: #212529;
 }
 
 .welcome-doc-meta {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: #6c757d;
 }
 
 .welcome-remote-unavailable-hint {
-  margin-top: 1rem;
-}
-
-.welcome-card h1 {
-  margin: 0 0 0.5rem;
-  font-size: 1.75rem;
+  margin: 0;
 }
 
 .welcome-actions {
   display: flex;
-  gap: 0.75rem;
-  margin: 1.5rem 0;
   flex-wrap: wrap;
+  gap: 0.45rem;
 }
 
 .welcome-actions button {
-  padding: 0.65rem 1.25rem;
+  flex: 1 1 auto;
+  min-width: 7rem;
+  padding: 0.55rem 0.85rem;
   border: none;
   border-radius: 8px;
   background: #0d6efd;
   color: #fff;
+  font-size: 0.88rem;
+  cursor: pointer;
 }
 
 .welcome-actions button.secondary {
@@ -214,47 +301,22 @@ code {
 
 .welcome-error {
   color: #dc3545;
-  margin: 0.5rem 0;
-}
-
-.welcome-lead {
-  color: #495057;
-  margin: 0 0 1.25rem;
-  line-height: 1.5;
-}
-
-.welcome-intro {
-  margin: 0 0 1.5rem;
-  padding: 1rem 1.15rem;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  background: #f8f9fa;
-}
-
-.welcome-intro h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.05rem;
-}
-
-.welcome-intro p {
-  margin: 0 0 0.85rem;
-  color: #495057;
-  font-size: 0.95rem;
-  line-height: 1.45;
+  margin: 0 0 0.45rem;
+  font-size: 0.82rem;
 }
 
 .welcome-help-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .help-link-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.4rem 0.85rem;
-  font-size: 0.875rem;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
   font-weight: 500;
   border-radius: 6px;
   border: 1px solid #ced4da;
@@ -277,8 +339,42 @@ code {
 
 .welcome-hint {
   color: #6c757d;
-  font-size: 0.9rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 0 0 0.35rem;
+}
+
+.welcome-footer .welcome-hint {
   margin: 0;
+}
+
+.welcome-hint code {
+  font-size: 0.9em;
+}
+
+@media (max-width: 760px) {
+  .welcome-panels {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome-actions button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .welcome {
+    padding: 0.75rem;
+  }
+
+  .welcome-shell {
+    padding: 1rem;
+  }
+
+  .welcome-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 /* App layout */

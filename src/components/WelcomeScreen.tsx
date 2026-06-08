@@ -7,6 +7,8 @@ import { listRemoteDocuments, type RemoteDocumentMeta } from '../lib/remoteProje
 import { getDocIdFromUrl } from '../lib/docUrl';
 import { getHelpRequestFromUrl, HELP_ABOUT_PAGE, HELP_GUIDE_PAGE } from '../lib/helpUrl';
 
+const WELCOME_TUTORIAL_VIDEO_ID = 'qgN7L5gL2n4';
+
 interface WelcomeScreenProps {
   onLoaded: (project: import('../types').LoadedProject) => void;
   onCreateNewDocument: () => void;
@@ -150,93 +152,125 @@ export function WelcomeScreen({
 
   return (
     <div className="welcome">
-      <div className="welcome-card welcome-card-wide">
-        <h1>Document Viewer</h1>
-        <p className="welcome-lead">
-          Multi-page documentation with component trace/highlight linking, in-browser editing,
-          comments, and read tracking. Save to a local folder or Supabase remote storage.
-        </p>
+      <div className="welcome-shell">
+        <header className="welcome-header">
+          <div className="welcome-header-text">
+            <h1>Document Viewer</h1>
+            <p className="welcome-lead">
+              Multi-page docs with component linking, in-browser editing, comments, and read
+              tracking. Save to a local folder or Supabase.
+            </p>
+          </div>
+          <VersionBadge className="welcome-header-version" />
+        </header>
 
-        <section className="welcome-intro" aria-labelledby="welcome-intro-heading">
-          <h2 id="welcome-intro-heading">Learn the app</h2>
-          <p>
-            New here? Read a short introduction or the full user guide — keyboard shortcuts, linking,
-            comments, and save/sync behaviour.
-          </p>
-          <HelpLinks
-            disabled={loading}
-            onOpenAbout={() => void handleOpenHelp(HELP_ABOUT_PAGE)}
-            onOpenGuide={() => void handleOpenHelp(HELP_GUIDE_PAGE)}
-          />
-        </section>
-
-        <div className="welcome-actions">
-          <button type="button" onClick={onCreateNewDocument} disabled={loading}>
-            New document
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={handlePickFolder}
-            disabled={loading}
-          >
-            {loading ? 'Loading…' : 'Select folder'}
-          </button>
-        </div>
-
-        {supabaseReady ? (
-          <section className="welcome-remote">
-            <div className="welcome-remote-header">
-              <h2>Saved documents</h2>
-              <button
-                type="button"
-                className="welcome-refresh-btn"
-                onClick={() => void refreshRemoteDocs()}
-                disabled={remoteLoading || loading}
-              >
-                Refresh
-              </button>
+        <main className="welcome-main">
+          <section className="welcome-video-panel" aria-labelledby="welcome-video-heading">
+            <h2 id="welcome-video-heading" className="welcome-video-heading">
+              Tutorial
+            </h2>
+            <div className="welcome-video-frame">
+              <iframe
+                src={`https://www.youtube.com/embed/${WELCOME_TUTORIAL_VIDEO_ID}`}
+                title="Document Viewer tutorial"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
             </div>
-            {remoteLoading && <p className="welcome-remote-status">Loading list…</p>}
-            {remoteError && (
+          </section>
+
+          <div className="welcome-panels">
+            <section className="welcome-panel">
+              <h2>Get started</h2>
+              <div className="welcome-actions">
+                <button type="button" onClick={onCreateNewDocument} disabled={loading}>
+                  New document
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void handlePickFolder()}
+                  disabled={loading}
+                >
+                  {loading ? 'Loading…' : 'Select folder'}
+                </button>
+              </div>
+            </section>
+
+            <section className="welcome-panel" aria-labelledby="welcome-intro-heading">
+              <h2 id="welcome-intro-heading">Learn the app</h2>
+              <p className="welcome-panel-copy">
+                Built-in about page and full user guide — shortcuts, linking, comments, save/sync.
+              </p>
+              <HelpLinks
+                disabled={loading}
+                onOpenAbout={() => void handleOpenHelp(HELP_ABOUT_PAGE)}
+                onOpenGuide={() => void handleOpenHelp(HELP_GUIDE_PAGE)}
+              />
+            </section>
+
+            {supabaseReady ? (
+              <section className="welcome-panel welcome-panel-docs">
+                <div className="welcome-remote-header">
+                  <h2>Saved documents</h2>
+                  <button
+                    type="button"
+                    className="welcome-refresh-btn"
+                    onClick={() => void refreshRemoteDocs()}
+                    disabled={remoteLoading || loading}
+                  >
+                    Refresh
+                  </button>
+                </div>
+                {remoteLoading && <p className="welcome-remote-status">Loading list…</p>}
+                {remoteError && (
+                  <p className="welcome-error" role="alert">
+                    {remoteError}
+                  </p>
+                )}
+                {!remoteLoading && !remoteError && remoteDocs.length === 0 && (
+                  <p className="welcome-remote-status">No saved documents yet.</p>
+                )}
+                {!remoteLoading && remoteDocs.length > 0 && (
+                  <ul className="welcome-doc-list">
+                    {remoteDocs.map((doc) => (
+                      <li key={doc.id}>
+                        <button
+                          type="button"
+                          className="welcome-doc-item"
+                          disabled={loading}
+                          onClick={() => void handleOpenRemote(doc.id)}
+                        >
+                          <span className="welcome-doc-title">{doc.title}</span>
+                          <span className="welcome-doc-meta">{formatUpdatedAt(doc.updated_at)}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            ) : (
+              <section className="welcome-panel">
+                <h2>Saved documents</h2>
+                <p className="welcome-hint welcome-remote-unavailable-hint">
+                  Remote storage is not available on this site.
+                </p>
+              </section>
+            )}
+          </div>
+
+          <footer className="welcome-footer">
+            {error && (
               <p className="welcome-error" role="alert">
-                {remoteError}
+                {error}
               </p>
             )}
-            {!remoteLoading && !remoteError && remoteDocs.length === 0 && (
-              <p className="welcome-remote-status">No saved documents yet.</p>
-            )}
-            {!remoteLoading && remoteDocs.length > 0 && (
-              <ul className="welcome-doc-list">
-                {remoteDocs.map((doc) => (
-                  <li key={doc.id}>
-                    <button
-                      type="button"
-                      className="welcome-doc-item"
-                      disabled={loading}
-                      onClick={() => void handleOpenRemote(doc.id)}
-                    >
-                      <span className="welcome-doc-title">{doc.title}</span>
-                      <span className="welcome-doc-meta">{formatUpdatedAt(doc.updated_at)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        ) : (
-          <p className="welcome-hint welcome-remote-unavailable-hint">
-            Remote storage is not available on this site.
-          </p>
-        )}
-
-        {error && <p className="welcome-error">{error}</p>}
-        <p className="welcome-hint">
-          New documents stay in memory until you press <strong>Export</strong> to save to a local
-          folder or remote storage. Deep link: <code>?doc=DOCUMENT_ID</code> (also accepts{' '}
-          <code>?page=</code>).
-        </p>
-        <VersionBadge />
+            <p className="welcome-hint">
+              New documents stay in memory until you <strong>Export</strong> to a local folder or
+              remote storage. Deep link: <code>?doc=DOCUMENT_ID</code> (also <code>?page=</code>).
+            </p>
+          </footer>
+        </main>
       </div>
     </div>
   );
