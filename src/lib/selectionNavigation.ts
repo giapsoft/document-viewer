@@ -1,9 +1,8 @@
 import type { AppState, SelectionState, SelectionHistoryEntry } from '../types';
 import {
   getLinkedComponentIds,
-  getGroupIndicesForComponent,
 } from './index';
-import { getDisplayGroups } from './mdVirtualGroups';
+import { getDisplayGroups, getPersistedGroupIndicesForComponent } from './mdVirtualGroups';
 
 export const MAX_SELECTION_HISTORY = 20;
 
@@ -46,7 +45,7 @@ export function buildSelectionStateForComponent(
 
   const { index } = state.project;
   const displayGroups = getDisplayGroups(index);
-  const matchingGroupIndices = getGroupIndicesForComponent(displayGroups, componentId);
+  const matchingGroupIndices = getPersistedGroupIndicesForComponent(index, componentId);
   const { links: relatedIds } = getLinkedComponentIds(componentId, displayGroups);
 
   return {

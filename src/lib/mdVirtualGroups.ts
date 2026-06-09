@@ -1,5 +1,6 @@
 import { marked, type Token, type Tokens } from 'marked';
 import type { LoadedProject, PageData, ProjectIndex } from '../types';
+import { getGroupIndicesForComponent } from './groupRelations';
 import { resolveMarkdownComponentLink } from './mdComponentLinks';
 
 function collectLinkHrefs(tokens: Token[], hrefs: string[]): void {
@@ -73,6 +74,18 @@ export function buildMdVirtualGroups(
 
 export function getDisplayGroups(index: ProjectIndex): string[][] {
   return index.displayGroups ?? index.groups;
+}
+
+/** Persisted groups from groups.json — excludes md virtual groups. */
+export function getPersistedGroups(index: ProjectIndex): string[][] {
+  return index.groups;
+}
+
+export function getPersistedGroupIndicesForComponent(
+  index: ProjectIndex,
+  componentId: string,
+): number[] {
+  return getGroupIndicesForComponent(index.groups, componentId);
 }
 
 export function isVirtualGroupIndex(index: ProjectIndex, groupIndex: number): boolean {

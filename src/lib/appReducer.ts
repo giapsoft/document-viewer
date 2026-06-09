@@ -35,7 +35,7 @@ import {
   reorderPagesInProject,
 } from './pageMutations';
 import { addLinkedPageToPanels, addPageToPanels, applyOpenPage, getMainSelectionPageFile } from './pagePanels';
-import { getDisplayGroups } from './mdVirtualGroups';
+import { getPersistedGroupIndicesForComponent } from './mdVirtualGroups';
 import { getFirstHighlightedComponentId } from './selectionHighlight';
 import { applyWorkspaceRestore } from './workspaceUrl';
 import {
@@ -1222,8 +1222,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         return base;
       }
 
-      const matchingGroupIndices = getGroupIndicesForComponent(
-        getDisplayGroups(state.project.index),
+      const matchingGroupIndices = getPersistedGroupIndicesForComponent(
+        state.project.index,
         componentId,
       );
       const { history, index } = appendSelectionHistory(

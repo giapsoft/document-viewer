@@ -33,7 +33,7 @@ import type { MdHighlightRange, MdTextRange } from '../lib/mdSelection';
 import { resolveMdHighlightSegments } from '../lib/mdSelection';
 import { ComponentReadBar } from './ComponentReadBar';
 import { getComponentVersion } from '../lib/componentVersion';
-import { getDisplayGroups } from '../lib/mdVirtualGroups';
+import { getPersistedGroupIndicesForComponent } from '../lib/mdVirtualGroups';
 import {
   countUnreadComponentsOnPage,
   isComponentRead,
@@ -385,8 +385,10 @@ export function ComponentBlock({
   const isLinkSelected = linkMode && (linkGroupMembers?.has(component.id) ?? false);
   const isPrimarySelected =
     !linkMode && !commentLinkMode && selection?.componentId === component.id;
+  const hasPersistedGroups =
+    getPersistedGroupIndicesForComponent(project.index, component.id).length > 0;
   const showGroupLink =
-    isPrimarySelected && (selection?.matchingGroupIndices.length ?? 0) > 0;
+    isPrimarySelected && (hasPersistedGroups || linkedListPanelOpen);
   const isHighlighted = !linkMode && !commentLinkMode && (highlightedIds?.has(component.id) ?? false);
   const isRelatedSelected = isHighlighted && !isPrimarySelected;
   const isDimmed = commentLinkMode
@@ -442,7 +444,7 @@ export function ComponentBlock({
     isDimmed,
     isPrimarySelected,
     showGroupLink,
-    linkedListPanelOpen: showGroupLink ? linkedListPanelOpen : false,
+    linkedListPanelOpen: isPrimarySelected && linkedListPanelOpen,
     linkFlashActive: flashedComponentId === component.id,
     linkFlashNonce: flashNonce,
     onSelect,
@@ -709,7 +711,7 @@ export function PagePanel({
 
   const mainGroupMemberIds = useMemo(() => {
     if (!selection || linkMode) return new Set<string>();
-    return getMainGroupMemberIds(getDisplayGroups(project.index), selection);
+    return getMainGroupMemberIds(project.index.groups, selection);
   }, [project.index, selection, linkMode]);
 
   const scrollToHighlightedComponent = useCallback(

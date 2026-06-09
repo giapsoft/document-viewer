@@ -10,7 +10,7 @@ import { ComponentTypeBadge } from './ComponentTypeIcon';
 interface GroupMembershipDialogProps {
   project: LoadedProject;
   groups: string[][];
-  anchorComponentId: string;
+  anchorComponentId: string | null;
   groupIndices: number[];
   activeGroupIndex?: number | null;
   linkMode?: boolean;
@@ -178,8 +178,22 @@ export function GroupMembershipDialog({
 
       <div className="group-membership-sidebar-body">
         <p className="group-membership-dialog-intro">
-          <span className="group-membership-dialog-anchor">{anchorComponentId}</span> belongs to{' '}
-          {sortedIndices.length} linked {sortedIndices.length === 1 ? 'list' : 'lists'}.
+          {anchorComponentId ? (
+            <>
+              <span className="group-membership-dialog-anchor">{anchorComponentId}</span>
+              {sortedIndices.length === 0 ? (
+                <> is not in any linked list.</>
+              ) : (
+                <>
+                  {' '}
+                  belongs to {sortedIndices.length} linked{' '}
+                  {sortedIndices.length === 1 ? 'list' : 'lists'}.
+                </>
+              )}
+            </>
+          ) : (
+            <>No component selected.</>
+          )}
           {sortedIndices.length > 1 && !linkMode ? (
             <span className="group-membership-dialog-hint"> Select a list, then hold Ctrl to edit.</span>
           ) : null}

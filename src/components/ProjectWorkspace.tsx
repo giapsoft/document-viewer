@@ -24,7 +24,7 @@ import { countUnreadComponentsOnPage } from '../lib/readState';
 import { getAdjacentComponentId } from '../lib/componentNavigation';
 import { findComponent } from '../lib/projectMutations';
 import { getGroupIndicesForComponent } from '../lib/groupRelations';
-import { getDisplayGroups, isVirtualGroupIndex } from '../lib/mdVirtualGroups';
+import { getDisplayGroups, getPersistedGroupIndicesForComponent } from '../lib/mdVirtualGroups';
 
 const APP_TOAST_MS = 2000;
 
@@ -111,11 +111,14 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   }, []);
 
   const openGroupPanel = useCallback(() => {
-    const indices = state.selection?.matchingGroupIndices;
-    if (!indices?.length) return;
+    if (!state.selection) return;
+    const indices = getPersistedGroupIndicesForComponent(
+      project.index,
+      state.selection.componentId,
+    );
     setGroupPanelActiveIndex(indices[0] ?? null);
     setGroupPanelOpen(true);
-  }, [state.selection?.matchingGroupIndices]);
+  }, [project.index, state.selection]);
 
   const toggleGroupPanel = useCallback(() => {
     if (groupPanelOpen) {
@@ -138,7 +141,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const panelGroups =
     state.linkMode && state.linkPreviewGroups
       ? state.linkPreviewGroups
-      : getDisplayGroups(project.index);
+      : project.index.groups;
 
   const panelComponentId =
     state.linkMode && state.linkFocusComponentId
@@ -147,8 +150,24 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   const panelGroupIndices = useMemo(() => {
     if (!panelComponentId) return [];
-    return getGroupIndicesForComponent(panelGroups, panelComponentId);
-  }, [panelComponentId, panelGroups]);
+    if (state.linkMode && state.linkPreviewGroups) {
+      return getGroupIndicesForComponent(state.linkPreviewGroups, panelComponentId);
+    }
+    return getPersistedGroupIndicesForComponent(project.index, panelComponentId);
+  }, [
+    panelComponentId,
+    project.index,
+    state.linkMode,
+    state.linkPreviewGroups,
+  ]);
+
+  const persistedMatchingGroupIndices = useMemo(() => {
+    if (!state.selection) return [];
+    return getPersistedGroupIndicesForComponent(
+      project.index,
+      state.selection.componentId,
+    );
+  }, [project.index, state.selection?.componentId]);
 
   const panelActiveGroupIndex =
     state.linkMode && state.linkTargetGroupIndex !== null
@@ -181,20 +200,20 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   useEffect(() => {
     if (!groupPanelOpen || state.linkMode) return;
-    const indices = state.selection?.matchingGroupIndices ?? [];
-    if (indices.length === 0) {
-      closeGroupPanel();
-      return;
-    }
+    const indices = state.selection
+      ? getPersistedGroupIndicesForComponent(
+          project.index,
+          state.selection.componentId,
+        )
+      : [];
     setGroupPanelActiveIndex((prev) =>
       prev !== null && indices.includes(prev) ? prev : (indices[0] ?? null),
     );
   }, [
     groupPanelOpen,
     state.linkMode,
+    project.index,
     state.selection?.componentId,
-    state.selection?.matchingGroupIndices,
-    closeGroupPanel,
   ]);
 
   const showSidebarColumn = groupPanelOpen || state.sidebarExpanded;
@@ -346,7 +365,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const mainGroupPageFiles = useMemo(() => {
     if (!state.selection) return new Set<string>();
     return getMainGroupPageFiles(
-      getDisplayGroups(project.index),
+      project.index.groups,
       state.selection,
       project.index.componentToPage,
     );
@@ -359,8 +378,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     );
   }, [project.index, state.selection]);
 
-  const matchingGroupIndices = state.selection?.matchingGroupIndices ?? [];
-
   const groups = state.linkPreviewGroups ?? getDisplayGroups(project.index);
   const linkEditingListIndex = state.linkTargetGroupIndex;
   const linkGroupMembers =
@@ -370,7 +387,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   const canUnlinkGroup = state.linkMode
     ? linkEditingListIndex !== null
-    : matchingGroupIndices.length > 0;
+    : persistedMatchingGroupIndices.length > 0;
 
   const [toolbarLoading, setToolbarLoading] = useState(false);
   const [toolbarError, setToolbarError] = useState(null as string | null);
@@ -390,7 +407,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     onNavigateUnread: navigateToUnread,
   });
 
-  const canToggleLinkedList = Boolean(state.selection?.matchingGroupIndices.length);
+  const canToggleLinkedList = Boolean(state.selection);
 
   useLinkedListPanelShortcuts({
     enabled: !workspaceShortcutsBlocked,
@@ -515,7 +532,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   return (
     <>
       <div className={`app ${showSidebarColumn ? 'sidebar-open' : 'sidebar-collapsed'}`}>
-        {groupPanelOpen && panelComponentId && panelGroupIndices.length > 0 ? (
+        {groupPanelOpen ? (
           <GroupMembershipDialog
             project={project}
             groups={panelGroups}
@@ -523,10 +540,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             groupIndices={panelGroupIndices}
             activeGroupIndex={panelActiveGroupIndex}
             linkMode={state.linkMode}
-            isVirtualGroup={(groupIndex) => isVirtualGroupIndex(project.index, groupIndex)}
             onSelectGroup={handleSelectGroupInPanel}
             onRemoveMember={(groupIndex, componentId) => {
-              if (isVirtualGroupIndex(project.index, groupIndex)) return;
               removeComponentFromGroupAtIndex(componentId, groupIndex);
             }}
             onNavigateToComponent={jumpToComponent}
