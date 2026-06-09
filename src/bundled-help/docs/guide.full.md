@@ -4,7 +4,7 @@ From the **home screen** you can:
 
 1. **New document** — start an in-memory draft with one page. Press **Export** to link a local folder or publish to remote storage.
 2. **Select folder** — open an existing doc-tree on disk (Chrome or Edge recommended).
-3. **Saved documents** — open a remote document when Supabase is configured.
+3. **Saved documents** — open a remote document when Supabase is configured (`?id=LINK_ID` in the URL).
 4. **About** / **User guide** — open this built-in help (also available from the toolbar while editing).
 
 A doc-tree folder looks like:
@@ -16,8 +16,13 @@ your-folder/
 ├── docs/*.png|jpg        images
 ├── relations.json        page names and order
 ├── groups.json           cross-page component links
-└── comments.json         threaded comments (optional)
+├── comments.json         threaded comments (optional)
+├── {username}.reads.json per-user read state (optional)
+├── lock.json             password-protected export only
+└── payload.enc           password-protected export only
 ```
+
+For a linking demo: **Select folder** and choose the `sample-data/` directory from the project repository (see README).
 
 ---
 
@@ -25,12 +30,13 @@ your-folder/
 
 | Area | Purpose |
 |------|---------|
-| **Sidebar** | Page list — click to add/remove panels. Drag to reorder pages. |
-| **Panels** | Up to **3 expanded** page panels at once. Shrunk panels show a vertical title. |
+| **Sidebar** | Page list — click to add/remove panels. Drag to reorder pages. **Max** slider sets how many page panels can be open (default **2**, range 1–8). |
+| **Panels** | Side-by-side page views. Closing a panel removes it from the workspace; open pages stay fixed while you select components. |
+| **Linked lists** | Optional sidebar panel (link icon on a selected component, or `Alt+L`) — lists **persisted** groups from `groups.json`. |
 | **Top bar** | Selection history, unlink, link-mode hint, keyboard legend. |
 | **Toolbar** | Export, Reload (local), Close, **About** / **User guide** links. |
 | **Edit bar** | Appears when a component is selected — type, status, content, insert/delete. |
-| **Comment panel** | Right side — threaded comments (toggle from workspace). |
+| **Comment panel** | Right side — threaded comments (can shrink to a vertical tab). |
 
 Set a **username** (1–20 alphanumeric characters) to use comments and read/unread tracking.
 
@@ -38,18 +44,20 @@ Set a **username** (1–20 alphanumeric characters) to use comments and read/unr
 
 ## Reading and navigation
 
-- **Click a component** to select it. Related components (from `groups`) highlight in blue; indirect links show orange borders.
-- Related **pages open in panels** automatically and scroll to highlighted components.
+- **Click a component** to select it. Related components highlight on **already open** panels: blue dashed border for direct group members (including Markdown virtual links); orange for transitive trace.
+- **Open panels do not change** when you select a component on another page — only selection and highlights update. Panels change when you open a page from the sidebar, follow a **Markdown in-app link**, focus a **comment** anchor, or similar navigation.
+- **Markdown links** (`[text](globalId)` in a sidecar) jump to the target component, open its page if needed, and flash the target briefly.
 - **Scrollbar markers** on the right of each panel jump to highlighted components.
 - **Selection history**: `←` / `→` when nothing is selected.
 - **Move between components**: `↑` / `↓` on the selected page.
 - **Unread navigation**: `U` / `Shift+U` jumps to the next/previous unread component (requires username).
+- **Linked lists panel**: `Alt+L` toggles when a component is selected.
 
 ---
 
 ## Component linking (trace/highlight)
 
-Links are stored in **`groups.json`** — arrays of **global ids** (`pageId.localId`, e.g. `intro.b1`).
+**Persisted links** are stored in **`groups.json`** — arrays of **global ids** (`pageId.localId`, e.g. `intro.c1`).
 
 **Edit links in the UI:**
 
@@ -63,6 +71,8 @@ Rules:
 - A group must span **at least 2 components** on **at least 2 pages** (same-page-only groups are removed on save).
 - Maximum **2 pages** per group when editing in the app.
 - **Unlink** in the top bar removes the active group or all groups for the selected component.
+
+**Markdown virtual groups** (not saved): each `md` component automatically links to in-app targets in its sidecar. They affect highlight/trace only — not `groups.json` and not the Linked lists panel.
 
 ---
 
@@ -82,7 +92,7 @@ With a component selected, use the **edit bar** at the bottom:
 
 **Status values:** `undefined`, `pending`, `working`, `done`, `blocked` — shown as background colours.
 
-- **Markdown (`md`)** — body lives in a sidecar file `docs/{globalId}.md`. Use `[text](otherPage.componentId)` for in-app links.
+- **Markdown (`md`)** — body lives in a sidecar file `docs/{globalId}.md`. Use `[text](flows.c1)` (global id) or `[text](c1)` (local id on the same page) for in-app links.
 - **Action** — before/after images with an animated interaction zone; edit visually in the full-screen editor.
 - **Images** — import from file or clipboard; large images are compressed automatically.
 
@@ -100,13 +110,13 @@ Open the **comment panel** and set your username.
 - **Edit or delete** only your own comments (matched by display name).
 - **Anchor a comment** to a whole component or a **Markdown text range**:
   - Select your comment, hold **Ctrl**, click a component or drag-select text in Markdown, release Ctrl to save the anchor.
-- Click a comment to **scroll** to its anchor.
+- Click a comment to **scroll** to its anchor (opens the target page if needed).
 
 ---
 
 ## Read state
 
-Per-user read tracking uses `{username}.reads.json` (local folder) or remote storage under `reads/`.
+Per-user read tracking uses `{username}.reads.json` (local folder root) or `{docId}/reads/` on remote storage.
 
 - A component is **read** when your stored version ≥ the component's current `version`.
 - Click the **read bar** on a component, or use **All read / All unread** on a page header.
@@ -121,9 +131,11 @@ Per-user read tracking uses `{username}.reads.json` (local folder) or remote sto
 | **Draft** (no folder, no remote) | Stays in memory until **Export**. |
 | **Local folder** | Auto-saves to disk every **3 seconds** after changes. |
 | **Remote (Supabase)** | Auto-saves every **3 seconds** (paused while the full-screen editor is open). Only changed files upload. |
-| **Export dialog** | Choose local folder or remote; set title; copy share link (`?id=ID`). |
+| **Export dialog** | Local folder or remote; optional **password protection**; remote requires **Link ID** and supports **show/hide in Saved documents**; copy share link (`?id=LINK_ID`). |
 
 **Reload** re-reads from disk (local) or re-fetches from the server (remote). If someone else saved a newer remote version, a banner offers **Reload** or **Overwrite**.
+
+Password-protected exports store `lock.json` + `payload.enc` instead of plaintext project files. Viewers must enter the password before content loads.
 
 ---
 
@@ -136,6 +148,7 @@ Per-user read tracking uses `{username}.reads.json` (local folder) or remote sto
 | `E` | Full-screen editor |
 | `Delete` | Delete selected component |
 | `Alt+↑` / `Alt+↓` | Insert component above/below |
+| `Alt+L` | Toggle Linked lists panel (when a component is selected) |
 | `Enter` | Toggle read/unread |
 | `U` / `Shift+U` | Next / previous unread |
 | **Ctrl** (hold) | Component link mode or comment anchor mode |
@@ -150,9 +163,7 @@ Shortcuts are disabled while typing in inputs, in link mode, or in the full-scre
 | Term | Example | Notes |
 |------|---------|-------|
 | **pageId** | `intro` | File stem without `.p` — fixed |
-| **local id** | `b1` | Unique within one `.p` file |
-| **global id** | `intro.b1` | Used in groups, comments, md sidecar names |
+| **local id** | `c1` | Unique within one `.p` file |
+| **global id** | `intro.c1` | Used in groups, comments, md sidecar names |
 
-Authoring spec for agents and advanced users: see `docs/HUONG-DAN-TAO-TAI-LIEU.md` in the repository.
-
-For a linking demo, open the **sample-data** folder bundled with the project from the home screen.
+Full authoring spec (file formats, validation, remote ids): see `docs/HUONG-DAN-TAO-TAI-LIEU.md` in the repository.

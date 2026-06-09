@@ -39,7 +39,7 @@
     "id": "f1",
     "type": "listItem",
     "status": "done",
-    "content": "Multi-page workspace with up to 3 expanded panels"
+    "content": "Multi-page workspace — configurable panel count (default 2, up to 8)"
   },
   {
     "id": "f2",
@@ -69,7 +69,7 @@
     "id": "f6",
     "type": "listItem",
     "status": "done",
-    "content": "Save to a local folder (Chrome/Edge) or Supabase remote storage"
+    "content": "Save to a local folder (Chrome/Edge) or Supabase remote storage with share links (?id=)"
   },
   {
     "id": "guide-link",
