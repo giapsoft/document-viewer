@@ -88,6 +88,20 @@ export function getPersistedGroupIndicesForComponent(
   return getGroupIndicesForComponent(index.groups, componentId);
 }
 
+export function getDirectDisplayGroupMemberIds(
+  index: ProjectIndex,
+  componentId: string,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const group of getDisplayGroups(index)) {
+    if (!group.includes(componentId)) continue;
+    for (const memberId of group) {
+      if (memberId !== componentId) ids.add(memberId);
+    }
+  }
+  return ids;
+}
+
 export function isVirtualGroupIndex(index: ProjectIndex, groupIndex: number): boolean {
   return groupIndex >= index.persistedGroupCount;
 }

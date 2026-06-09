@@ -177,7 +177,7 @@ export interface AppState {
   linkCtrlActive: boolean;
   selectionHistory: SelectionHistoryEntry[];
   selectionHistoryIndex: number;
-  scrollToComponent: { componentId: string; nonce: number; coldOpen?: boolean } | null;
+  scrollToComponent: { componentId: string; nonce: number; coldOpen?: boolean; immediate?: boolean } | null;
   /** Temporary highlight after md component-link navigation (does not affect selection). */
   flashedComponent: { componentId: string; nonce: number } | null;
   /** Bumped when selection/group changes — each panel scrolls to first related component */

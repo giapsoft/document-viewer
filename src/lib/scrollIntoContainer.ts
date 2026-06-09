@@ -485,6 +485,7 @@ export function scheduleScrollToMdCommentHighlight(
 function waitForPanelOpenLayout(
   panelRef: { current: HTMLElement | null } | undefined,
   onReady: () => void,
+  maxWaitMs = PANEL_COLD_OPEN_LAYOUT_DELAY_MS,
 ): () => void {
   const el = panelRef?.current;
   if (!el) {
@@ -508,7 +509,7 @@ function waitForPanelOpenLayout(
   };
 
   el.addEventListener('transitionend', onTransitionEnd);
-  const timer = setTimeout(finish, PANEL_COLD_OPEN_LAYOUT_DELAY_MS);
+  const timer = setTimeout(finish, maxWaitMs);
 
   return () => {
     cancelled = true;
@@ -523,10 +524,15 @@ export function scheduleScrollToComponent(
   componentId: string,
   panelRef?: { current: HTMLElement | null },
   onDone?: (success: boolean) => void,
-  options?: { coldOpen?: boolean },
+  options?: { coldOpen?: boolean; immediate?: boolean },
 ): () => void {
   const coldOpen = options?.coldOpen ?? false;
-  const initialDelayMs = coldOpen ? PANEL_COLD_OPEN_LAYOUT_DELAY_MS : PANEL_COLD_OPEN_DELAY_MS;
+  const immediate = options?.immediate ?? false;
+  const initialDelayMs = immediate
+    ? 0
+    : coldOpen
+      ? PANEL_COLD_OPEN_LAYOUT_DELAY_MS
+      : PANEL_COLD_OPEN_DELAY_MS;
   let cancelled = false;
   const cleanups: (() => void)[] = [];
 
@@ -547,7 +553,7 @@ export function scheduleScrollToComponent(
       componentId,
       (success) => {
         if (cancelled) return;
-        if (success && !coldOpen) {
+        if (success) {
           cleanups.push(
             watchLayoutAndRescroll(
               scrollRef,
@@ -569,6 +575,16 @@ export function scheduleScrollToComponent(
     componentId,
     () => {
       if (cancelled) return;
+
+      if (immediate) {
+        if (coldOpen) {
+          const cleanupPanelWait = waitForPanelOpenLayout(panelRef, runScroll, 120);
+          cleanups.push(cleanupPanelWait);
+        } else {
+          runScroll();
+        }
+        return;
+      }
 
       const startLayoutWait = () => {
         const cleanupLayoutWait = waitForLayoutSettled(

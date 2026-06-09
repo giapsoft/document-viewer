@@ -33,7 +33,7 @@ import type { MdHighlightRange, MdTextRange } from '../lib/mdSelection';
 import { resolveMdHighlightSegments } from '../lib/mdSelection';
 import { ComponentReadBar } from './ComponentReadBar';
 import { getComponentVersion } from '../lib/componentVersion';
-import { getPersistedGroupIndicesForComponent } from '../lib/mdVirtualGroups';
+import { getPersistedGroupIndicesForComponent, getDirectDisplayGroupMemberIds } from '../lib/mdVirtualGroups';
 import {
   countUnreadComponentsOnPage,
   isComponentRead,
@@ -178,6 +178,7 @@ interface ComponentBlockProps {
   selection: SelectionState | null;
   highlightedIds: Set<string> | null;
   mainGroupMemberIds?: Set<string>;
+  directDisplayGroupMemberIds?: Set<string>;
   pendingImageNames?: ReadonlySet<string>;
   pendingMdComponentIds?: ReadonlySet<string>;
   linkMode?: boolean;
@@ -331,6 +332,7 @@ export function ComponentBlock({
   selection,
   highlightedIds,
   mainGroupMemberIds,
+  directDisplayGroupMemberIds,
   linkMode = false,
   linkGroupMembers,
   pendingImageNames,
@@ -408,7 +410,8 @@ export function ComponentBlock({
       : isPrimarySelected
         ? 'primary'
         : isRelatedSelected
-          ? mainGroupMemberIds?.has(component.id)
+          ? mainGroupMemberIds?.has(component.id) ||
+              directDisplayGroupMemberIds?.has(component.id)
             ? 'related'
             : 'related-transitive'
           : 'none';
@@ -635,6 +638,7 @@ interface PagePanelProps {
   scrollToComponentId?: string | null;
   scrollNonce?: number;
   scrollColdOpen?: boolean;
+  scrollImmediate?: boolean;
   selectionScrollNonce?: number;
   commentLinkMode?: boolean;
   commentLinkPreviewAnchor?: CommentAnchor | null;
@@ -683,6 +687,7 @@ export function PagePanel({
   scrollToComponentId = null,
   scrollNonce = 0,
   scrollColdOpen = false,
+  scrollImmediate = false,
   selectionScrollNonce = 0,
   commentUsername = null,
   componentReadState = {},
@@ -712,6 +717,11 @@ export function PagePanel({
   const mainGroupMemberIds = useMemo(() => {
     if (!selection || linkMode) return new Set<string>();
     return getMainGroupMemberIds(project.index.groups, selection);
+  }, [project.index, selection, linkMode]);
+
+  const directDisplayGroupMemberIds = useMemo(() => {
+    if (!selection || linkMode) return new Set<string>();
+    return getDirectDisplayGroupMemberIds(project.index, selection.componentId);
   }, [project.index, selection, linkMode]);
 
   const scrollToHighlightedComponent = useCallback(
@@ -830,12 +840,13 @@ export function PagePanel({
       scrollToComponentId,
       panelRef,
       markScrollHandled,
-      { coldOpen: scrollColdOpen },
+      { coldOpen: scrollColdOpen, immediate: scrollImmediate },
     );
   }, [
     scrollToComponentId,
     scrollNonce,
     scrollColdOpen,
+    scrollImmediate,
     pageFile,
     page,
     commentAnchorHighlightId,
@@ -982,6 +993,7 @@ export function PagePanel({
                   selection={selection}
                   highlightedIds={highlightedOnPage}
                   mainGroupMemberIds={mainGroupMemberIds}
+                  directDisplayGroupMemberIds={directDisplayGroupMemberIds}
                   linkMode={linkMode}
                   linkGroupMembers={linkGroupMembers}
                   pendingImageNames={pendingImageNames}
