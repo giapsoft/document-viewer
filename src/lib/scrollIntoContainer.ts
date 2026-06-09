@@ -2,22 +2,89 @@ export type ScrollIntoContainerOptions = {
   behavior?: ScrollBehavior;
 };
 
-export function scrollElementIntoContainer(
-  container: HTMLElement,
-  element: HTMLElement,
-  options?: ScrollIntoContainerOptions,
-) {
+const SMOOTH_SCROLL_MIN_MS = 280;
+const SMOOTH_SCROLL_MAX_MS = 650;
+const SMOOTH_SCROLL_MS_PER_PX = 0.35;
+
+const activeSmoothScrollCancels = new WeakMap<HTMLElement, () => void>();
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+}
+
+function cancelSmoothScroll(container: HTMLElement) {
+  activeSmoothScrollCancels.get(container)?.();
+  activeSmoothScrollCancels.delete(container);
+}
+
+function computeCenteredScrollTop(container: HTMLElement, element: HTMLElement): number {
   const containerRect = container.getBoundingClientRect();
   const elementRect = element.getBoundingClientRect();
   const offset =
     elementRect.top - containerRect.top + container.scrollTop;
   const target =
     offset - container.clientHeight / 2 + element.clientHeight / 2;
-  const top = Math.max(0, target);
+  return Math.max(0, target);
+}
+
+function smoothScrollContainerTo(
+  container: HTMLElement,
+  targetTop: number,
+  onComplete?: () => void,
+): () => void {
+  cancelSmoothScroll(container);
+
+  const startTop = container.scrollTop;
+  const distance = targetTop - startTop;
+  if (Math.abs(distance) < 2) {
+    container.scrollTop = targetTop;
+    onComplete?.();
+    return () => {};
+  }
+
+  const duration = Math.min(
+    SMOOTH_SCROLL_MAX_MS,
+    Math.max(SMOOTH_SCROLL_MIN_MS, Math.abs(distance) * SMOOTH_SCROLL_MS_PER_PX),
+  );
+  let cancelled = false;
+  let raf = 0;
+  const startedAt = performance.now();
+
+  const cancel = () => {
+    if (cancelled) return;
+    cancelled = true;
+    cancelAnimationFrame(raf);
+    activeSmoothScrollCancels.delete(container);
+  };
+
+  activeSmoothScrollCancels.set(container, cancel);
+
+  const step = (now: number) => {
+    if (cancelled) return;
+    const t = Math.min(1, (now - startedAt) / duration);
+    container.scrollTop = startTop + distance * easeInOutCubic(t);
+    if (t < 1) {
+      raf = requestAnimationFrame(step);
+      return;
+    }
+    activeSmoothScrollCancels.delete(container);
+    onComplete?.();
+  };
+
+  raf = requestAnimationFrame(step);
+  return cancel;
+}
+
+export function scrollElementIntoContainer(
+  container: HTMLElement,
+  element: HTMLElement,
+  options?: ScrollIntoContainerOptions,
+) {
+  const top = computeCenteredScrollTop(container, element);
   const behavior = options?.behavior ?? 'auto';
 
   if (behavior === 'smooth') {
-    container.scrollTo({ top, behavior: 'smooth' });
+    smoothScrollContainerTo(container, top);
   } else {
     container.scrollTop = top;
   }
@@ -249,35 +316,41 @@ function runScrollWithRetry(
 ): () => void {
   let cancelled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let smoothCancel: (() => void) | undefined;
   let attempt = 0;
+  const isSmooth = scrollOptions?.behavior === 'smooth';
 
   const tryScroll = () => {
     if (cancelled) return;
 
-    if (
-      scrollToComponentInContainer(
-        scrollRef.current,
-        componentRefs.current,
-        componentId,
-        scrollOptions,
-      )
-    ) {
-      if (!cancelled) onDone(true);
+    const container = scrollRef.current;
+    const element = componentRefs.current.get(componentId);
+    if (!container || !element) {
+      attempt += 1;
+      if (attempt >= SCROLL_RETRY_DELAYS_MS.length) {
+        if (!cancelled) onDone(false);
+        return;
+      }
+
+      const delay = SCROLL_RETRY_DELAYS_MS[attempt];
+      if (delay === 0) {
+        requestAnimationFrame(tryScroll);
+      } else {
+        timer = setTimeout(tryScroll, delay);
+      }
       return;
     }
 
-    attempt += 1;
-    if (attempt >= SCROLL_RETRY_DELAYS_MS.length) {
-      if (!cancelled) onDone(false);
+    if (isSmooth) {
+      const targetTop = computeCenteredScrollTop(container, element);
+      smoothCancel = smoothScrollContainerTo(container, targetTop, () => {
+        if (!cancelled) onDone(true);
+      });
       return;
     }
 
-    const delay = SCROLL_RETRY_DELAYS_MS[attempt];
-    if (delay === 0) {
-      requestAnimationFrame(tryScroll);
-    } else {
-      timer = setTimeout(tryScroll, delay);
-    }
+    scrollElementIntoContainer(container, element);
+    if (!cancelled) onDone(true);
   };
 
   tryScroll();
@@ -285,6 +358,8 @@ function runScrollWithRetry(
   return () => {
     cancelled = true;
     if (timer !== undefined) clearTimeout(timer);
+    smoothCancel?.();
+    if (scrollRef.current) cancelSmoothScroll(scrollRef.current);
   };
 }
 
@@ -570,7 +645,7 @@ export function scheduleScrollToComponent(
       componentId,
       (success) => {
         if (cancelled) return;
-        if (success) {
+        if (success && scrollOptions?.behavior !== 'smooth') {
           cleanups.push(
             watchLayoutAndRescroll(
               scrollRef,
@@ -594,7 +669,7 @@ export function scheduleScrollToComponent(
     () => {
       if (cancelled) return;
 
-      if (immediate) {
+      if (immediate || scrollOptions?.behavior === 'smooth') {
         if (coldOpen) {
           const cleanupPanelWait = waitForPanelOpenLayout(panelRef, runScroll, 120);
           cleanups.push(cleanupPanelWait);
@@ -623,7 +698,7 @@ export function scheduleScrollToComponent(
         startLayoutWait();
       }
     },
-    initialDelayMs,
+    scrollOptions?.behavior === 'smooth' ? 0 : initialDelayMs,
   );
   cleanups.push(cleanupTargetWait);
 

@@ -863,10 +863,11 @@ export function PagePanel({
 
     if (linkMode || justExitedLinkMode || isCurrent || !page || !selection) return;
 
+    // Keep an explicit scroll target (e.g. MD link jump) — do not override with
+    // the first linked component from the existing selection.
     if (
       scrollToComponentId &&
       scrollNonce > 0 &&
-      handledScrollNonceRef.current !== scrollNonce &&
       page.components.some((component) => component.id === scrollToComponentId)
     ) {
       return;
