@@ -1,3 +1,5 @@
+import { buildWelcomePath } from './docUrl';
+
 export const HELP_ABOUT_PAGE = 'about.p';
 export const HELP_GUIDE_PAGE = 'guide.p';
 
@@ -14,7 +16,7 @@ export function getHelpRequestFromUrl(): { requested: boolean; pageFile: string 
 }
 
 export function setHelpInUrl(pageFile: string | null): void {
-  const url = new URL(window.location.href);
+  const url = new URL(window.location.origin + buildWelcomePath());
   url.searchParams.delete('doc');
   url.searchParams.delete('page');
   if (pageFile) {

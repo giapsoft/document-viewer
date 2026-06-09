@@ -138,6 +138,10 @@ export interface LoadedProject {
   remoteUpdatedAt?: string | null;
   /** Built-in help doc-tree loaded from public/help (not persisted). */
   bundledHelp?: boolean;
+  /** Opened from an encrypted export; saves re-encrypt with session password. */
+  passwordProtected?: boolean;
+  /** When false, hidden from the welcome screen list (remote documents only). */
+  remotePublished?: boolean;
 }
 
 export interface PanelState {

@@ -766,6 +766,18 @@ code {
   max-width: 480px;
 }
 
+.save-destination-dialog > .picker-header {
+  flex-shrink: 0;
+}
+
+.save-destination-dialog > .save-destination-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 .page-file-dialog-body {
   padding: 1rem;
 }
@@ -1103,6 +1115,40 @@ code {
   outline: none;
   border-color: #86b7fe;
   box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+}
+
+.save-destination-password-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.save-destination-checkbox-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: #343a40;
+}
+
+.save-destination-checkbox-field input {
+  margin-top: 0.15rem;
+}
+
+.document-password-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.document-password-description {
+  margin: 0;
+  color: #495057;
+  font-size: 0.92rem;
+}
+
+.document-password-error {
+  margin: 0;
 }
 
 .save-destination-footer {

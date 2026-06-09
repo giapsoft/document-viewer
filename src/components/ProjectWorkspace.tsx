@@ -3,7 +3,7 @@ import { PagePanel } from './PagePanel';
 import { EditBar } from './EditBar';
 import { WorkspaceTopBar } from './WorkspaceTopBar';
 import { ProjectToolbar } from './ProjectToolbar';
-import { SaveDestinationDialog, type SaveDestination } from './SaveDestinationDialog';
+import { SaveDestinationDialog, type SaveDestinationChoice } from './SaveDestinationDialog';
 import { RemoteConflictDialog } from './RemoteConflictDialog';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
@@ -436,8 +436,14 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   );
 
   const runRemoteSave = useCallback(
-    async (title?: string, force = false) => {
-      const result = await saveToRemote(title, { force });
+    async (
+      title?: string,
+      force = false,
+      protection?: import('../lib/saveProject').ExportProtection,
+      docId?: string,
+      isPublished?: boolean,
+    ) => {
+      const result = await saveToRemote(title, { force, protection, docId, isPublished });
       if (result.ok) return { ok: true as const };
       if (result.conflict) {
         setPendingRemoteTitle(title);
@@ -478,19 +484,27 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     setSaveDestinationOpen(true);
   };
 
-  const handleChooseDestination = (destination: SaveDestination, remoteTitle?: string) => {
+  const handleChooseDestination = (choice: SaveDestinationChoice) => {
     setSaveDestinationOpen(false);
 
-    if (destination === 'local') {
+    if (choice.destination === 'local') {
       void runToolbarAction(async () => {
-        const result = await saveToLocal();
+        const result = await saveToLocal(choice.protection ?? undefined);
         if (!result.ok && result.cancelled) return { ok: true };
         return result.ok ? { ok: true } : { ok: false, error: result.error };
       });
       return;
     }
 
-    void runToolbarAction(async () => runRemoteSave(remoteTitle));
+    void runToolbarAction(async () =>
+      runRemoteSave(
+        choice.remoteTitle,
+        false,
+        choice.protection,
+        choice.remoteDocId,
+        choice.remotePublished,
+      ),
+    );
   };
 
   const handleClose = () => {

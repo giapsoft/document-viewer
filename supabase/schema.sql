@@ -2,10 +2,20 @@
 -- Run in Supabase Dashboard → SQL Editor
 
 create table if not exists public.documents (
-  id uuid primary key default gen_random_uuid(),
+  id text primary key,
   title text not null,
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  password_protected boolean not null default false,
+  is_published boolean not null default true
 );
+
+-- Migration for existing databases (uuid ids become text; app supplies friendly ids for new docs):
+alter table public.documents alter column id drop default;
+alter table public.documents alter column id type text using id::text;
+
+alter table public.documents add column if not exists is_published boolean not null default true;
+alter table public.documents alter column is_published set default true;
+update public.documents set is_published = true where is_published = false;
 
 create or replace function public.set_documents_updated_at()
 returns trigger

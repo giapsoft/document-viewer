@@ -86,6 +86,7 @@ export function assembleLoadedProject(
     folderHandle?: FileSystemDirectoryHandle | null;
     remoteSync?: LoadedProject['remoteSync'];
     remoteUpdatedAt?: string | null;
+    remotePublished?: boolean | null;
   },
 ): LoadedProject {
   const project = assembleProject(input);
@@ -97,6 +98,7 @@ export function assembleLoadedProject(
     folderHandle: meta.folderHandle ?? null,
     remoteSync: meta.remoteSync ?? null,
     remoteUpdatedAt: meta.remoteUpdatedAt ?? null,
+    remotePublished: meta.remotePublished ?? undefined,
   };
 }
 
@@ -205,6 +207,7 @@ export type RemoteDocumentMeta = {
   id: string;
   title: string;
   updated_at: string;
+  password_protected?: boolean;
 };
 
 export function defaultRemoteTitle(project: LoadedProject): string {

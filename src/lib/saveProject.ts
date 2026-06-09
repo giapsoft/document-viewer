@@ -2,13 +2,20 @@ import type { LoadedProject, Component } from '../types';
 import { serializePageComponents } from './pageIds';
 import { normalizeRelations } from './groupRelations';
 import { mdSidecarFileName } from './mdFiles';
-import { ensureDocsDirectory } from './docsFolder';
+import { ensureDocsDirectory, getDocsDirectoryIfPresent } from './docsFolder';
 import { removeOrphanedDocsOnSave } from './pageFileOps';
 import { collectReferencedImageNames } from './projectBundle';
 import type { CommentReadState } from './commentReadState';
 import { saveCommentReadStatesToFolder } from './commentReadStateStorage';
 import type { ComponentReadState } from './readState';
 import { saveReadStatesToFolder } from './readStateStorage';
+import {
+  LOCK_FILE_NAME,
+  PAYLOAD_FILE_NAME,
+  lockFileToBlob,
+  encryptedPayloadToBlob,
+} from './documentPassword';
+import { buildEncryptedDocumentExport } from './documentPayload';
 
 export type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -119,10 +126,51 @@ export async function pickSaveFolder(): Promise<FileSystemDirectoryHandle | null
   return window.showDirectoryPicker({ mode: 'readwrite' });
 }
 
+async function removeEntryIfExists(
+  dirHandle: FileSystemDirectoryHandle,
+  name: string,
+): Promise<void> {
+  try {
+    await dirHandle.removeEntry(name);
+  } catch {
+    // ignore missing entries
+  }
+}
+
+async function clearPlaintextProjectExport(root: FileSystemDirectoryHandle): Promise<void> {
+  await removeEntryIfExists(root, 'relations.json');
+  await removeEntryIfExists(root, 'groups.json');
+  await removeEntryIfExists(root, 'comments.json');
+  await removeEntryIfExists(root, 'styles.json');
+
+  const docsHandle = await getDocsDirectoryIfPresent(root);
+  if (docsHandle) {
+    for await (const entry of docsHandle.values()) {
+      if (entry.kind === 'file') {
+        await removeEntryIfExists(docsHandle, entry.name);
+      }
+    }
+    await removeEntryIfExists(root, 'docs');
+  }
+
+  for await (const entry of root.values()) {
+    if (entry.kind !== 'file') continue;
+    if (/\.reads\.json$/i.test(entry.name) || /\.comment-reads\.json$/i.test(entry.name)) {
+      await removeEntryIfExists(root, entry.name);
+    }
+  }
+}
+
+export type ExportProtection =
+  | { mode: 'protect'; password: string }
+  | { mode: 'remove' }
+  | null;
+
 export async function saveProjectToFolder(
   project: LoadedProject,
   readStatesByUsername?: Record<string, ComponentReadState>,
   commentReadStatesByUsername?: Record<string, CommentReadState>,
+  protection: ExportProtection = null,
 ): Promise<void> {
   const root = project.folderHandle;
   if (!root) {
@@ -132,6 +180,17 @@ export async function saveProjectToFolder(
   const allowed = await ensureWritePermission(root);
   if (!allowed) {
     throw new Error('Write permission was not granted for the selected folder');
+  }
+
+  if (protection?.mode === 'protect') {
+    const { lock, encrypted } = await buildEncryptedDocumentExport(project, protection.password, {
+      readStatesByUsername,
+      commentReadStatesByUsername,
+    });
+    await writeBlobFile(root, LOCK_FILE_NAME, lockFileToBlob(lock));
+    await writeBlobFile(root, PAYLOAD_FILE_NAME, encryptedPayloadToBlob(encrypted));
+    await clearPlaintextProjectExport(root);
+    return;
   }
 
   if (project.pages.length > 0) {
@@ -170,6 +229,11 @@ export async function saveProjectToFolder(
   }
   if (commentReadStatesByUsername && Object.keys(commentReadStatesByUsername).length > 0) {
     await saveCommentReadStatesToFolder(root, commentReadStatesByUsername);
+  }
+
+  if (protection?.mode === 'remove') {
+    await removeEntryIfExists(root, LOCK_FILE_NAME);
+    await removeEntryIfExists(root, PAYLOAD_FILE_NAME);
   }
 }
 

@@ -15,6 +15,14 @@ import { mergeStyles } from './styles';
 import { isValidStatus, isValidType } from './componentDisplay';
 import { parseComponentVersion } from './componentVersion';
 import { MD_FILE_EXT, componentIdFromMdFileName } from './mdFiles';
+import {
+  LOCK_FILE_NAME,
+  PAYLOAD_FILE_NAME,
+  isDocumentLockFile,
+  type DocumentLockFile,
+} from './documentPassword';
+import { decryptDocumentPayloadToRawInput } from './documentPayload';
+import { assembleLoadedProject } from './projectBundle';
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|gif)$/i;
 const PAGE_EXT = /\.p$/i;
@@ -191,9 +199,54 @@ async function loadRelationsFromRoot(root: FileSystemDirectoryHandle): Promise<R
   return normalizeRelations({ ...meta, groups, comments });
 }
 
+export async function readDocumentLockFromRoot(
+  root: FileSystemDirectoryHandle,
+): Promise<DocumentLockFile | null> {
+  try {
+    const handle = await root.getFileHandle(LOCK_FILE_NAME);
+    const file = await handle.getFile();
+    const parsed = JSON.parse(await file.text()) as unknown;
+    return isDocumentLockFile(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadPasswordProtectedProjectFromFolder(
+  root: FileSystemDirectoryHandle,
+  password: string,
+): Promise<LoadedProject> {
+  const lock = await readDocumentLockFromRoot(root);
+  if (!lock) {
+    throw new Error('This folder is not password-protected.');
+  }
+
+  const payloadHandle = await root.getFileHandle(PAYLOAD_FILE_NAME);
+  const payloadFile = await payloadHandle.getFile();
+  const encrypted = new Uint8Array(await payloadFile.arrayBuffer());
+  const raw = await decryptDocumentPayloadToRawInput(password, lock, encrypted);
+
+  return {
+    ...assembleLoadedProject(raw, {
+      source: 'local',
+      folderHandle: root,
+    }),
+    passwordProtected: true,
+  };
+}
+
+export type FolderOpenResult =
+  | { status: 'loaded'; project: LoadedProject }
+  | { status: 'password'; folderHandle: FileSystemDirectoryHandle; lock: DocumentLockFile };
+
 export async function loadFromDirectoryHandle(
   root: FileSystemDirectoryHandle,
 ): Promise<LoadedProject> {
+  const lock = await readDocumentLockFromRoot(root);
+  if (lock) {
+    throw new Error('This document is password-protected. Enter the password to open it.');
+  }
+
   const relations = await loadRelationsFromRoot(root);
   const docsHandle = await getDocsDirectoryIfPresent(root);
 
@@ -281,8 +334,13 @@ export function revokeProjectImageUrls(project: LoadedProject | null | undefined
   }
 }
 
-export async function pickProjectFolder(): Promise<LoadedProject | null> {
+export async function pickProjectFolder(): Promise<FolderOpenResult | null> {
   if (!window.showDirectoryPicker) return null;
   const root = await window.showDirectoryPicker({ mode: 'readwrite' });
-  return loadFromDirectoryHandle(root);
+  const lock = await readDocumentLockFromRoot(root);
+  if (lock) {
+    return { status: 'password', folderHandle: root, lock };
+  }
+  const project = await loadFromDirectoryHandle(root);
+  return { status: 'loaded', project };
 }

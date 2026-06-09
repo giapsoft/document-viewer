@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d dist",
+    "deploy": "node scripts/deploy.mjs",
     "bump": "node scripts/bump-version.mjs",
     "bump:minor": "node scripts/bump-version.mjs minor",
     "bump:major": "node scripts/bump-version.mjs major",

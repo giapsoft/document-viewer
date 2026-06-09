@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { pickProjectFolder } from '../lib/loadProject';
 import { VersionBadge } from './VersionBadge';
 import { HelpLinks } from './HelpLinks';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
@@ -14,6 +13,7 @@ interface WelcomeScreenProps {
   onCreateNewDocument: () => void;
   onLoadRemoteDoc: (docId: string) => Promise<{ ok: boolean; error?: string }>;
   onLoadBundledHelp: (pageFile?: string | null) => Promise<{ ok: boolean; error?: string }>;
+  onPickFolder: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 function formatUpdatedAt(value: string): string {
@@ -29,10 +29,10 @@ function formatUpdatedAt(value: string): string {
 }
 
 export function WelcomeScreen({
-  onLoaded,
   onCreateNewDocument,
   onLoadRemoteDoc,
   onLoadBundledHelp,
+  onPickFolder,
 }: WelcomeScreenProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -114,8 +114,10 @@ export function WelcomeScreen({
         );
         return;
       }
-      const project = await pickProjectFolder();
-      if (project) onLoaded(project);
+      const result = await onPickFolder();
+      if (!result.ok && result.error) {
+        setError(result.error);
+      }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : 'Could not load folder');
@@ -241,7 +243,15 @@ export function WelcomeScreen({
                           disabled={loading}
                           onClick={() => void handleOpenRemote(doc.id)}
                         >
-                          <span className="welcome-doc-title">{doc.title}</span>
+                          <span className="welcome-doc-title">
+                            {doc.title}
+                            {doc.password_protected ? (
+                              <span className="welcome-doc-protected" title="Password protected">
+                                {' '}
+                                🔒
+                              </span>
+                            ) : null}
+                          </span>
                           <span className="welcome-doc-meta">{formatUpdatedAt(doc.updated_at)}</span>
                         </button>
                       </li>

@@ -9,6 +9,7 @@ import {
   REMOTE_MD_LOAD_CONCURRENCY,
 } from './concurrency';
 import { assembleProject } from './loadProject';
+import { isDuplicateDocumentIdError, resolveNewDocumentId } from './documentId';
 import { fingerprintBlob } from './fileFingerprint';
 import {
   assembleLoadedProject,
@@ -50,6 +51,18 @@ import {
   getRemoteCachedFile,
   putRemoteCachedFile,
 } from './remoteFileCache';
+import {
+  isDocumentLockFile,
+  lockStoragePath,
+  payloadStoragePath,
+  lockFileToBlob,
+  encryptedPayloadToBlob,
+  type DocumentLockFile,
+} from './documentPassword';
+import { buildEncryptedDocumentExport, decryptDocumentPayloadToRawInput } from './documentPayload';
+import type { ExportProtection } from './saveProject';
+import type { CommentReadState } from './commentReadState';
+import type { ComponentReadState } from './readState';
 
 export type { RemoteDocumentMeta };
 
@@ -121,10 +134,154 @@ export type SaveRemoteResult = {
   mergedProject: LoadedProject;
 };
 
+export type RemoteDocumentLoadResult =
+  | { status: 'ready'; load: DeferredRemoteLoad }
+  | {
+      status: 'password';
+      docId: string;
+      title: string;
+      lock: DocumentLockFile;
+      isPublished: boolean;
+    };
+
+export type SaveRemoteOptions = {
+  docId?: string;
+  isPublished?: boolean;
+  protection?: ExportProtection;
+  sessionPassword?: string | null;
+  readStatesByUsername?: Record<string, ComponentReadState>;
+  commentReadStatesByUsername?: Record<string, CommentReadState>;
+};
+
+function resolveRemoteExportProtection(
+  project: LoadedProject,
+  options?: SaveRemoteOptions,
+): ExportProtection {
+  if (options?.protection) return options.protection;
+  if (project.passwordProtected && options?.sessionPassword) {
+    return { mode: 'protect', password: options.sessionPassword };
+  }
+  return null;
+}
+
+async function readRemoteDocumentLock(docId: string): Promise<DocumentLockFile | null> {
+  const entriesByPath = await remoteStorageEntryMap(docId);
+  const lockBlob = await downloadKnownStorageFile(entriesByPath, lockStoragePath(docId));
+  if (!lockBlob) return null;
+  const parsed = JSON.parse(await lockBlob.text()) as unknown;
+  return isDocumentLockFile(parsed) ? parsed : null;
+}
+
+export async function unlockRemoteDocumentDeferred(
+  docId: string,
+  password: string,
+  meta: RemoteDocumentRow,
+): Promise<DeferredRemoteLoad> {
+  const entriesByPath = await remoteStorageEntryMap(docId);
+  const lockPath = lockStoragePath(docId);
+  const payloadPath = payloadStoragePath(docId);
+  const lockBlob = await downloadKnownStorageFile(entriesByPath, lockPath);
+  const payloadBlob = await downloadKnownStorageFile(entriesByPath, payloadPath);
+  if (!lockBlob || !payloadBlob) {
+    throw new Error('Encrypted document files are missing.');
+  }
+
+  const parsed = JSON.parse(await lockBlob.text()) as unknown;
+  if (!isDocumentLockFile(parsed)) {
+    throw new Error('Lock file is invalid.');
+  }
+
+  const encrypted = new Uint8Array(await payloadBlob.arrayBuffer());
+  const raw = await decryptDocumentPayloadToRawInput(password, parsed, encrypted);
+  const fileHashes = new Map<string, string>([
+    [lockPath, await fingerprintBlob(lockBlob)],
+    [payloadPath, await fingerprintBlob(payloadBlob)],
+  ]);
+
+  const project = {
+    ...assembleLoadedProject(raw, {
+      source: 'remote',
+      remoteDocId: docId,
+      remoteTitle: meta.title,
+      folderHandle: null,
+      remoteSync: { fileHashes },
+      remoteUpdatedAt: meta.updated_at ?? null,
+      remotePublished: remotePublishedFromRow(meta),
+    }),
+    passwordProtected: true,
+  };
+
+  return emptyDeferredLoad(project);
+}
+
 export type LoadRemoteOptions = {
   /** @deprecated Cache is handled automatically via IndexedDB. */
   cached?: LoadedProject;
 };
+
+async function setRemotePasswordProtected(docId: string, protectedDoc: boolean): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from('documents')
+    .update({ password_protected: protectedDoc })
+    .eq('id', docId);
+  if (error && !error.message.includes('password_protected')) {
+    throw new Error(error.message);
+  }
+}
+
+type RemoteDocumentRow = {
+  id: string;
+  title: string;
+  updated_at?: string | null;
+  is_published?: boolean | null;
+};
+
+function remotePublishedFromRow(row: Pick<RemoteDocumentRow, 'is_published'>): boolean {
+  return row.is_published !== false;
+}
+
+type RemoteDocumentRowPatch = {
+  title?: string;
+  isPublished?: boolean;
+};
+
+async function patchRemoteDocumentRow(
+  docId: string,
+  patch: RemoteDocumentRowPatch,
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (patch.title !== undefined) row.title = patch.title;
+  if (patch.isPublished !== undefined) row.is_published = patch.isPublished;
+  if (Object.keys(row).length === 0) return;
+
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.from('documents').update(row).eq('id', docId);
+  if (!error) return;
+
+  if (patch.isPublished !== undefined && error.message.includes('is_published')) {
+    if (patch.title !== undefined) {
+      const { error: titleError } = await supabase
+        .from('documents')
+        .update({ title: patch.title })
+        .eq('id', docId);
+      if (titleError) throw new Error(titleError.message);
+    }
+    return;
+  }
+
+  throw new Error(error.message);
+}
+
+function resolveRemotePublished(project: LoadedProject, options?: SaveRemoteOptions): boolean {
+  if (options?.isPublished !== undefined) return options.isPublished;
+  return project.remotePublished !== false;
+}
+
+function remotePublishedChanged(project: LoadedProject, options?: SaveRemoteOptions): boolean {
+  if (options?.isPublished === undefined) return false;
+  return options.isPublished !== (project.remotePublished !== false);
+}
 
 export async function fetchRemoteDocumentUpdatedAt(docId: string): Promise<string | null> {
   const supabase = getSupabaseClient();
@@ -192,11 +349,74 @@ export async function listRemoteDocuments(): Promise<RemoteDocumentMeta[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('documents')
-    .select('id, title, updated_at')
+    .select('id, title, updated_at, password_protected')
+    .eq('is_published', true)
     .order('updated_at', { ascending: false });
 
-  if (error) throw new Error(error.message);
-  return (data ?? []) as RemoteDocumentMeta[];
+  if (error) {
+    if (error.message.includes('is_published')) {
+      const fallback = await supabase
+        .from('documents')
+        .select('id, title, updated_at, password_protected')
+        .order('updated_at', { ascending: false });
+      if (fallback.error) {
+        if (fallback.error.message.includes('password_protected')) {
+          const legacy = await supabase
+            .from('documents')
+            .select('id, title, updated_at')
+            .order('updated_at', { ascending: false });
+          if (legacy.error) throw new Error(legacy.error.message);
+          return ((legacy.data ?? []) as RemoteDocumentMeta[]).map((entry) => ({
+            ...entry,
+            password_protected: false,
+          }));
+        }
+        throw new Error(fallback.error.message);
+      }
+      return (
+        (fallback.data ?? []) as Array<RemoteDocumentMeta & { password_protected?: boolean | null }>
+      ).map((entry) => ({
+        id: entry.id,
+        title: entry.title,
+        updated_at: entry.updated_at,
+        password_protected: Boolean(entry.password_protected),
+      }));
+    }
+    if (error.message.includes('password_protected')) {
+      const fallback = await supabase
+        .from('documents')
+        .select('id, title, updated_at')
+        .eq('is_published', true)
+        .order('updated_at', { ascending: false });
+      if (fallback.error) {
+        if (fallback.error.message.includes('is_published')) {
+          const legacy = await supabase
+            .from('documents')
+            .select('id, title, updated_at')
+            .order('updated_at', { ascending: false });
+          if (legacy.error) throw new Error(legacy.error.message);
+          return ((legacy.data ?? []) as RemoteDocumentMeta[]).map((entry) => ({
+            ...entry,
+            password_protected: false,
+          }));
+        }
+        throw new Error(fallback.error.message);
+      }
+      return ((fallback.data ?? []) as RemoteDocumentMeta[]).map((entry) => ({
+        ...entry,
+        password_protected: false,
+      }));
+    }
+    throw new Error(error.message);
+  }
+  return ((data ?? []) as Array<RemoteDocumentMeta & { password_protected?: boolean | null }>).map(
+    (entry) => ({
+      id: entry.id,
+      title: entry.title,
+      updated_at: entry.updated_at,
+      password_protected: Boolean(entry.password_protected),
+    }),
+  );
 }
 
 async function listRemoteDocEntries(docId: string): Promise<RemoteStorageEntry[]> {
@@ -473,7 +693,7 @@ async function parseRemoteFileBlobs(
 }
 
 function createStarterRemoteProject(
-  meta: { id: string; title: string; updated_at?: string | null },
+  meta: RemoteDocumentRow,
   relations: RelationsFile = EMPTY_RELATIONS,
 ): LoadedProject {
   const normalized = normalizeRelations(relations);
@@ -498,12 +718,13 @@ function createStarterRemoteProject(
       folderHandle: null,
       remoteSync: emptyRemoteSync(),
       remoteUpdatedAt: meta.updated_at ?? null,
+      remotePublished: remotePublishedFromRow(meta),
     },
   );
 }
 
 async function loadRemoteDocumentFromFiles(
-  meta: { id: string; title: string; updated_at?: string | null },
+  meta: RemoteDocumentRow,
   entries: RemoteStorageEntry[],
   fileBlobs: Map<string, Blob>,
   fileHashes: Map<string, string>,
@@ -530,6 +751,7 @@ async function loadRemoteDocumentFromFiles(
       folderHandle: null,
       remoteSync: { fileHashes },
       remoteUpdatedAt: meta.updated_at ?? null,
+      remotePublished: remotePublishedFromRow(meta),
     },
   );
 }
@@ -587,7 +809,7 @@ function emptyDeferredLoad(project: LoadedProject): DeferredRemoteLoad {
 }
 
 async function loadRemoteDocumentFromFilesDeferred(
-  meta: { id: string; title: string; updated_at?: string | null },
+  meta: RemoteDocumentRow,
   entries: RemoteStorageEntry[],
 ): Promise<DeferredRemoteLoad> {
   const docId = meta.id;
@@ -600,7 +822,7 @@ async function loadRemoteDocumentFromFilesDeferred(
 }
 
 async function loadRemoteDocumentFromFilesDeferredInner(
-  meta: { id: string; title: string; updated_at?: string | null },
+  meta: RemoteDocumentRow,
   entries: RemoteStorageEntry[],
   docId: string,
 ): Promise<DeferredRemoteLoad> {
@@ -647,6 +869,7 @@ async function loadRemoteDocumentFromFilesDeferredInner(
       folderHandle: null,
       remoteSync: { fileHashes: new Map(metaPageBlobs.hashes) },
       remoteUpdatedAt: meta.updated_at ?? null,
+      remotePublished: remotePublishedFromRow(meta),
     },
   );
 
@@ -728,11 +951,11 @@ async function loadRemoteDocumentFromFilesDeferredInner(
 }
 
 /** Load remote doc: open after text; call `startImages` once project is in state. */
-export async function loadRemoteDocumentDeferred(docId: string): Promise<DeferredRemoteLoad> {
+export async function loadRemoteDocumentDeferred(docId: string): Promise<RemoteDocumentLoadResult> {
   const supabase = getSupabaseClient();
   const { data: meta, error: metaError } = await supabase
     .from('documents')
-    .select('id, title, updated_at')
+    .select('id, title, updated_at, is_published')
     .eq('id', docId)
     .maybeSingle();
 
@@ -741,10 +964,24 @@ export async function loadRemoteDocumentDeferred(docId: string): Promise<Deferre
 
   const entries = await listRemoteDocEntries(docId);
   if (entries.length === 0) {
-    return emptyDeferredLoad(createStarterRemoteProject(meta));
+    return { status: 'ready', load: emptyDeferredLoad(createStarterRemoteProject(meta)) };
   }
 
-  return loadRemoteDocumentFromFilesDeferred(meta, entries);
+  const lock = await readRemoteDocumentLock(docId);
+  if (lock) {
+    return {
+      status: 'password',
+      docId,
+      title: meta.title,
+      lock,
+      isPublished: remotePublishedFromRow(meta),
+    };
+  }
+
+  return {
+    status: 'ready',
+    load: await loadRemoteDocumentFromFilesDeferred(meta, entries),
+  };
 }
 
 export async function loadRemoteDocument(
@@ -754,7 +991,7 @@ export async function loadRemoteDocument(
   const supabase = getSupabaseClient();
   const { data: meta, error: metaError } = await supabase
     .from('documents')
-    .select('id, title, updated_at')
+    .select('id, title, updated_at, is_published')
     .eq('id', docId)
     .maybeSingle();
 
@@ -1009,13 +1246,79 @@ export async function saveRemoteDocument(
   docId: string,
   project: LoadedProject,
   title?: string,
+  options?: SaveRemoteOptions,
 ): Promise<SaveRemoteResult> {
-  const supabase = getSupabaseClient();
   const nextTitle = normalizeDocumentTitle(title ?? defaultRemoteTitle(project));
   const projectForSave = await mergeRemoteCommentsIntoProject(project, docId);
+  const protection = resolveRemoteExportProtection(projectForSave, options);
+  const prevHashes = project.remoteSync?.fileHashes;
+  const nextPublished = resolveRemotePublished(project, options);
+  const publishedChanged = remotePublishedChanged(project, options);
+  const titleChanged =
+    nextTitle !== normalizeDocumentTitle(project.remoteTitle ?? defaultRemoteTitle(project));
+  const metadataPatch = (): RemoteDocumentRowPatch => ({
+    title: nextTitle,
+    ...(options?.isPublished !== undefined ? { isPublished: nextPublished } : {}),
+  });
+
+  if (protection?.mode === 'protect') {
+    const { lock, encrypted } = await buildEncryptedDocumentExport(
+      projectForSave,
+      protection.password,
+      {
+        readStatesByUsername: options?.readStatesByUsername,
+        commentReadStatesByUsername: options?.commentReadStatesByUsername,
+      },
+    );
+    const fileMap = new Map<string, Blob>([
+      [lockStoragePath(docId), lockFileToBlob(lock)],
+      [payloadStoragePath(docId), encryptedPayloadToBlob(encrypted)],
+    ]);
+    const nextHashes = await fingerprintFileMap(fileMap);
+    const nextPaths = new Set(fileMap.keys());
+    const removePaths = new Set<string>([
+      ...listRemovedRemotePaths(prevHashes, nextPaths),
+      legacyBundlePath(docId),
+    ]);
+    for (const path of prevHashes?.keys() ?? []) {
+      if (path.startsWith(`${docId}/`) && !nextPaths.has(path)) {
+        removePaths.add(path);
+      }
+    }
+
+    await mapWithConcurrency(
+      [...fileMap.keys()],
+      async (path) => {
+        const blob = fileMap.get(path);
+        if (blob) await uploadStorageFile(path, blob);
+      },
+      DEFAULT_CONCURRENCY,
+    );
+    await refreshRemoteCacheAfterSave(docId, [...fileMap.keys()], fileMap, nextHashes);
+
+    if (removePaths.size > 0) {
+      await removeStoragePaths([...removePaths]);
+      await deleteRemoteCachedPaths([...removePaths]);
+    }
+
+    await patchRemoteDocumentRow(docId, metadataPatch());
+    await setRemotePasswordProtected(docId, true);
+
+    const remoteUpdatedAt = await fetchRemoteDocumentUpdatedAt(docId);
+    return {
+      skippedUpload: false,
+      remoteSync: { fileHashes: nextHashes },
+      remoteUpdatedAt,
+      mergedProject: {
+        ...projectForSave,
+        passwordProtected: true,
+        remotePublished: nextPublished,
+      },
+    };
+  }
+
   const fileMap = await buildRemoteFileMap(projectForSave, docId);
   const nextHashes = await fingerprintFileMap(fileMap);
-  const prevHashes = project.remoteSync?.fileHashes;
   const nextPaths = new Set(fileMap.keys());
 
   const uploadPaths: string[] = [];
@@ -1031,6 +1334,9 @@ export async function saveRemoteDocument(
     ...listRemovedRemotePaths(prevHashes, nextPaths),
     legacyBundlePath(docId),
   ];
+  if (protection?.mode === 'remove' || !project.passwordProtected) {
+    removePaths.push(lockStoragePath(docId), payloadStoragePath(docId));
+  }
 
   const skippedUpload = uploadPaths.length === 0 && removePaths.length === 0;
 
@@ -1051,15 +1357,19 @@ export async function saveRemoteDocument(
     await deleteRemoteCachedPaths(removePaths);
   }
 
-  const titleChanged =
-    nextTitle !== normalizeDocumentTitle(project.remoteTitle ?? defaultRemoteTitle(project));
+  if (titleChanged || publishedChanged || !skippedUpload) {
+    await patchRemoteDocumentRow(docId, metadataPatch());
+  }
 
-  if (titleChanged || !skippedUpload) {
-    const { error } = await supabase.from('documents').update({ title: nextTitle }).eq('id', docId);
-    if (error) throw new Error(error.message);
+  if (protection?.mode === 'remove') {
+    await setRemotePasswordProtected(docId, false);
   }
 
   const remoteUpdatedAt = await fetchRemoteDocumentUpdatedAt(docId);
+  const mergedBase =
+    protection?.mode === 'remove'
+      ? { ...projectForSave, passwordProtected: false }
+      : projectForSave;
 
   return {
     skippedUpload,
@@ -1067,29 +1377,63 @@ export async function saveRemoteDocument(
       fileHashes: nextHashes,
     },
     remoteUpdatedAt,
-    mergedProject: projectForSave,
+    mergedProject: {
+      ...mergedBase,
+      remotePublished: nextPublished,
+    },
   };
 }
 
 export async function createRemoteDocument(
   project: LoadedProject,
   title: string,
+  options?: SaveRemoteOptions,
 ): Promise<{ docId: string; remoteSync: RemoteSyncState; remoteUpdatedAt: string | null }> {
   const supabase = getSupabaseClient();
   const nextTitle = normalizeDocumentTitle(title);
   if (!nextTitle) throw new Error('Document title is required');
 
+  const docId = resolveNewDocumentId(options?.docId);
+  const isPublished = options?.isPublished ?? true;
+
   const { data, error } = await supabase
     .from('documents')
-    .insert({ title: nextTitle })
+    .insert({
+      id: docId,
+      title: nextTitle,
+      password_protected: options?.protection?.mode === 'protect',
+      is_published: isPublished,
+    })
     .select('id')
     .single();
 
   if (error || !data?.id) {
+    if (error && isDuplicateDocumentIdError(error.message)) {
+      throw new Error('This link ID is already taken. Choose a different ID.');
+    }
+    if (error?.message.includes('password_protected') || error?.message.includes('is_published')) {
+      const fallback = await supabase
+        .from('documents')
+        .insert({ id: docId, title: nextTitle })
+        .select('id')
+        .single();
+      if (fallback.error || !fallback.data?.id) {
+        if (fallback.error && isDuplicateDocumentIdError(fallback.error.message)) {
+          throw new Error('This link ID is already taken. Choose a different ID.');
+        }
+        throw new Error(fallback.error?.message ?? 'Could not create document');
+      }
+      const saveResult = await saveRemoteDocument(fallback.data.id, project, nextTitle, options);
+      return {
+        docId: fallback.data.id,
+        remoteSync: saveResult.remoteSync,
+        remoteUpdatedAt: saveResult.remoteUpdatedAt,
+      };
+    }
     throw new Error(error?.message ?? 'Could not create document');
   }
 
-  const saveResult = await saveRemoteDocument(data.id, project, nextTitle);
+  const saveResult = await saveRemoteDocument(data.id, project, nextTitle, options);
   return {
     docId: data.id,
     remoteSync: saveResult.remoteSync,

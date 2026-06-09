@@ -23,7 +23,7 @@ import { findComponent } from '../lib/projectMutations';
 import { findUnreadComponentGlobally } from '../lib/componentNavigation';
 import { getStoredPageOrder } from '../lib/pageOrder';
 import { appReducer, initialAppState } from '../lib/appReducer';
-import type { SaveStatus } from '../lib/saveProject';
+import type { SaveStatus, ExportProtection } from '../lib/saveProject';
 import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave, cancelAutoSave, setSaveStatusListener, isSaveInProgress } from '../lib/saveProject';
 import { importImageFromComputer, importImageFromClipboardSource, type ImportImageResult } from '../lib/importImage';
 import { clearPageScrollMemory } from '../lib/pageScrollMemory';
@@ -42,10 +42,12 @@ import {
 } from '../lib/pageFileOps';
 import {
   loadFromDirectoryHandle,
+  loadPasswordProtectedProjectFromFolder,
   pickProjectFolder,
   createBlankProject,
   revokeProjectImageUrls,
 } from '../lib/loadProject';
+import type { PendingDocumentUnlock } from '../components/DocumentPasswordDialog';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import {
   createRemoteDocument,
@@ -56,6 +58,8 @@ import {
   applyRemoteCommentSync,
   syncRemoteComments,
   syncRemoteRelations,
+  unlockRemoteDocumentDeferred,
+  type DeferredRemoteLoad,
 } from '../lib/remoteProject';
 import {
   cancelRemoteAutoSave,
@@ -127,6 +131,31 @@ export function useAppStore() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingRemoteImages, setPendingRemoteImages] = useState<Set<string>>(() => new Set());
   const [pendingRemoteMd, setPendingRemoteMd] = useState<Set<string>>(() => new Set());
+  const [pendingUnlock, setPendingUnlock] = useState<PendingDocumentUnlock | null>(null);
+  const [unlockError, setUnlockError] = useState<string | null>(null);
+  const [unlockBusy, setUnlockBusy] = useState(false);
+  const sessionExportPasswordRef = useRef<string | null>(null);
+
+  const resolveExportProtection = useCallback(
+    (explicit: ExportProtection | undefined, project: LoadedProject): ExportProtection => {
+      if (explicit) return explicit;
+      if (project.passwordProtected && sessionExportPasswordRef.current) {
+        return { mode: 'protect', password: sessionExportPasswordRef.current };
+      }
+      return null;
+    },
+    [],
+  );
+
+  const rememberExportPassword = useCallback((protection: ExportProtection | undefined) => {
+    if (protection?.mode === 'protect') {
+      sessionExportPasswordRef.current = protection.password;
+      return;
+    }
+    if (protection?.mode === 'remove') {
+      sessionExportPasswordRef.current = null;
+    }
+  }, []);
 
   const remoteBackgroundLoadRef = useRef<{
     cancel: () => void;
@@ -317,7 +346,7 @@ export function useAppStore() {
 
   const startRemoteBackgroundLoad = useCallback(
     (
-      load: Awaited<ReturnType<typeof loadRemoteDocumentDeferred>>,
+      load: DeferredRemoteLoad,
       onMd: (
         componentId: string,
         content: string,
@@ -416,7 +445,7 @@ export function useAppStore() {
   };
 
   const applyRemoteDocumentLoad = useCallback(
-    (load: Awaited<ReturnType<typeof loadRemoteDocumentDeferred>>) => {
+    (load: DeferredRemoteLoad) => {
       skipWorkspaceUrlSyncRef.current = true;
       dispatch({ type: 'SET_PROJECT', project: load.project });
       if (load.project.remoteDocId) {
@@ -469,6 +498,9 @@ export function useAppStore() {
     setDirty(false);
     setSaveStatus('idle');
     setSaveError(null);
+    sessionExportPasswordRef.current = null;
+    setPendingUnlock(null);
+    setUnlockError(null);
     skipWorkspaceUrlSyncRef.current = true;
     setDocIdInUrl(null);
     clearHelpFromUrl();
@@ -996,9 +1028,31 @@ export function useAppStore() {
       }
       try {
         beginRemoteDocumentSession();
-        const load = await loadRemoteDocumentSession(project.remoteDocId);
-        dispatch({ type: 'RELOAD_PROJECT', project: load.project });
-        startRemoteBackgroundLoad(load, dispatchRemoteMd, dispatchRemoteImage);
+        const result = await loadRemoteDocumentSession(project.remoteDocId);
+        if (result.status === 'password') {
+          const password = sessionExportPasswordRef.current;
+          if (!password) {
+            setPendingUnlock({
+              source: 'remote',
+              docId: result.docId,
+              title: result.title,
+              lock: result.lock,
+              isPublished: result.isPublished,
+            });
+            return { ok: false, error: 'Enter the document password to reload.' };
+          }
+          const load = await unlockRemoteDocumentDeferred(result.docId, password, {
+            id: result.docId,
+            title: result.title,
+            is_published: result.isPublished === false ? false : true,
+          });
+          dispatch({ type: 'RELOAD_PROJECT', project: load.project });
+          startRemoteBackgroundLoad(load, dispatchRemoteMd, dispatchRemoteImage);
+          void hydrateReadStateRef.current();
+          return { ok: true };
+        }
+        dispatch({ type: 'RELOAD_PROJECT', project: result.load.project });
+        startRemoteBackgroundLoad(result.load, dispatchRemoteMd, dispatchRemoteImage);
         void hydrateReadStateRef.current();
         return { ok: true };
       } catch (err) {
@@ -1016,7 +1070,12 @@ export function useAppStore() {
     try {
       revokeProjectImageUrls(project);
       clearPageScrollMemory();
-      const reloaded = await loadFromDirectoryHandle(project.folderHandle);
+      const reloaded = project.passwordProtected
+        ? await loadPasswordProtectedProjectFromFolder(
+            project.folderHandle,
+            sessionExportPasswordRef.current ?? '',
+          )
+        : await loadFromDirectoryHandle(project.folderHandle);
       setDirty(false);
       setSaveStatus('idle');
       setSaveError(null);
@@ -1040,9 +1099,19 @@ export function useAppStore() {
     }
 
     try {
-      const project = await pickProjectFolder();
-      if (!project) return { ok: true };
-      setProject(project);
+      const result = await pickProjectFolder();
+      if (!result) return { ok: true };
+      if (result.status === 'password') {
+        setPendingUnlock({
+          source: 'local',
+          title: result.folderHandle.name,
+          folderHandle: result.folderHandle,
+          lock: result.lock,
+        });
+        setUnlockError(null);
+        return { ok: true };
+      }
+      setProject(result.project);
       return { ok: true };
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -1055,7 +1124,53 @@ export function useAppStore() {
     }
   }, [setProject]);
 
-  const saveToLocal = useCallback(async (): Promise<SaveResult> => {
+  const cancelDocumentUnlock = useCallback(() => {
+    setPendingUnlock(null);
+    setUnlockError(null);
+    setUnlockBusy(false);
+  }, []);
+
+  const unlockPendingDocument = useCallback(
+    async (password: string): Promise<PageActionResult> => {
+      const pending = pendingUnlock;
+      if (!pending) return { ok: false, error: 'No document is waiting for a password.' };
+
+      setUnlockBusy(true);
+      setUnlockError(null);
+      try {
+        if (pending.source === 'local') {
+          const project = await loadPasswordProtectedProjectFromFolder(
+            pending.folderHandle,
+            password,
+          );
+          sessionExportPasswordRef.current = password;
+          setPendingUnlock(null);
+          setProject(project);
+          return { ok: true };
+        }
+
+        beginRemoteDocumentSession();
+        const load = await unlockRemoteDocumentDeferred(pending.docId, password, {
+          id: pending.docId,
+          title: pending.title,
+          is_published: pending.isPublished === false ? false : true,
+        });
+        sessionExportPasswordRef.current = password;
+        setPendingUnlock(null);
+        applyRemoteDocumentLoad(load);
+        return { ok: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Incorrect password.';
+        setUnlockError(message);
+        return { ok: false, error: message };
+      } finally {
+        setUnlockBusy(false);
+      }
+    },
+    [pendingUnlock, setProject, applyRemoteDocumentLoad, beginRemoteDocumentSession],
+  );
+
+  const saveToLocal = useCallback(async (explicitProtection?: ExportProtection): Promise<SaveResult> => {
     const project = projectRef.current;
     if (!project) {
       return { ok: false, error: 'No project is open.' };
@@ -1086,6 +1201,15 @@ export function useAppStore() {
         }
       }
 
+      const protection = resolveExportProtection(explicitProtection, project);
+      if (project.passwordProtected && !protection) {
+        setSaveStatus('idle');
+        return {
+          ok: false,
+          error: 'This document is password-protected. Export again and enter the password.',
+        };
+      }
+
       const projectForSave: LoadedProject = { ...project, folderHandle };
       const readStates = collectReadStatesForExport(
         project,
@@ -1097,12 +1221,18 @@ export function useAppStore() {
         appStateRef.current.commentUsername,
         appStateRef.current.commentReadState,
       );
-      await saveProjectToFolder(projectForSave, readStates, commentReadStates);
+      await saveProjectToFolder(projectForSave, readStates, commentReadStates, protection);
 
       const nextProject = stripCommentTombstones({
         ...project,
         folderHandle,
+        passwordProtected: protection?.mode === 'protect'
+          ? true
+          : protection?.mode === 'remove'
+            ? false
+            : project.passwordProtected,
       });
+      rememberExportPassword(protection);
       projectRef.current = nextProject;
       if (nextProject.relations !== project.relations || nextProject.folderHandle !== project.folderHandle) {
         dispatch({ type: 'PATCH_PROJECT', project: nextProject });
@@ -1117,10 +1247,13 @@ export function useAppStore() {
       setSaveError(message);
       return { ok: false, error: message };
     }
-  }, [dispatch]);
+  }, [dispatch, resolveExportProtection, rememberExportPassword]);
 
   const saveToRemote = useCallback(
-    async (title?: string, options?: { force?: boolean }): Promise<SaveResult> => {
+    async (
+      title?: string,
+      options?: { force?: boolean; protection?: ExportProtection; docId?: string; isPublished?: boolean },
+    ): Promise<SaveResult> => {
     const project = projectRef.current;
     if (!project) {
       return { ok: false, error: 'No project is open.' };
@@ -1150,6 +1283,31 @@ export function useAppStore() {
     try {
       await flushRemoteBackgroundLoad();
       let projectToSave = project;
+      const protection = resolveExportProtection(options?.protection, project);
+      if (project.passwordProtected && !protection) {
+        setSaveStatus('idle');
+        return {
+          ok: false,
+          error: 'This document is password-protected. Export again and enter the password.',
+        };
+      }
+      const readStates = collectReadStatesForExport(
+        project,
+        appStateRef.current.commentUsername,
+        appStateRef.current.componentReadState,
+      );
+      const commentReadStates = collectCommentReadStatesForExport(
+        project,
+        appStateRef.current.commentUsername,
+        appStateRef.current.commentReadState,
+      );
+      const saveOptions = {
+        protection,
+        sessionPassword: sessionExportPasswordRef.current,
+        readStatesByUsername: readStates,
+        commentReadStatesByUsername: commentReadStates,
+        isPublished: options?.isPublished,
+      };
 
       if (project.remoteDocId && !options?.force) {
         const serverUpdatedAt = await fetchRemoteDocumentUpdatedAt(project.remoteDocId);
@@ -1181,12 +1339,24 @@ export function useAppStore() {
           project.remoteDocId,
           projectToSave,
           title ?? project.remoteTitle ?? undefined,
+          saveOptions,
         );
+        rememberExportPassword(protection);
         const nextProject = stripCommentTombstones({
           ...saveResult.mergedProject,
           remoteTitle: title?.trim() || project.remoteTitle || defaultRemoteTitle(project),
           remoteSync: saveResult.remoteSync,
           remoteUpdatedAt: saveResult.remoteUpdatedAt,
+          remotePublished:
+            options?.isPublished ??
+            saveResult.mergedProject.remotePublished ??
+            project.remotePublished,
+          passwordProtected:
+            protection?.mode === 'protect'
+              ? true
+              : protection?.mode === 'remove'
+                ? false
+                : project.passwordProtected,
         });
         projectRef.current = nextProject;
         dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
@@ -1204,14 +1374,26 @@ export function useAppStore() {
         return { ok: false, error: 'Document title is required.' };
       }
 
-      const created = await createRemoteDocument(project, nextTitle);
+      if (!options?.docId?.trim()) {
+        setSaveStatus('error');
+        setSaveError('Link ID is required when publishing to remote storage.');
+        return { ok: false, error: 'Link ID is required when publishing to remote storage.' };
+      }
+
+      const created = await createRemoteDocument(project, nextTitle, {
+        ...saveOptions,
+        docId: options?.docId,
+      });
+      rememberExportPassword(protection);
       const savedProject: LoadedProject = {
         ...project,
         remoteDocId: created.docId,
         remoteTitle: nextTitle,
+        remotePublished: options?.isPublished ?? true,
         remoteSync: created.remoteSync,
         remoteUpdatedAt: created.remoteUpdatedAt,
         folderHandle: project.folderHandle ?? null,
+        passwordProtected: protection?.mode === 'protect',
       };
       projectRef.current = savedProject;
       dispatch({ type: 'RELOAD_PROJECT', project: savedProject });
@@ -1227,7 +1409,7 @@ export function useAppStore() {
       return { ok: false, error: message };
     }
   },
-    [dispatch, flushRemoteBackgroundLoad],
+    [dispatch, flushRemoteBackgroundLoad, resolveExportProtection, rememberExportPassword],
   );
 
   const saveProject = saveToRemote;
@@ -1281,8 +1463,19 @@ export function useAppStore() {
       }
       try {
         beginRemoteDocumentSession();
-        const load = await loadRemoteDocumentSession(docId);
-        applyRemoteDocumentLoad(load);
+        const result = await loadRemoteDocumentSession(docId);
+        if (result.status === 'password') {
+          setPendingUnlock({
+            source: 'remote',
+            docId: result.docId,
+            title: result.title,
+            lock: result.lock,
+            isPublished: result.isPublished,
+          });
+          setUnlockError(null);
+          return { ok: true };
+        }
+        applyRemoteDocumentLoad(result.load);
         return { ok: true };
       } catch (err) {
         return {
@@ -1346,17 +1539,42 @@ export function useAppStore() {
 
     try {
       await flushRemoteBackgroundLoad();
-      // Single save call: merges remote comments then uploads all changed files atomically.
+      const protection = resolveExportProtection(undefined, project);
+      if (project.passwordProtected && !protection) {
+        return { ok: true, skipped: true };
+      }
+      const readStates = collectReadStatesForExport(
+        project,
+        appStateRef.current.commentUsername,
+        appStateRef.current.componentReadState,
+      );
+      const commentReadStates = collectCommentReadStatesForExport(
+        project,
+        appStateRef.current.commentUsername,
+        appStateRef.current.commentReadState,
+      );
       const saveResult = await saveRemoteDocument(
         docId,
         project,
         project.remoteTitle ?? undefined,
+        {
+          protection,
+          sessionPassword: sessionExportPasswordRef.current,
+          readStatesByUsername: readStates,
+          commentReadStatesByUsername: commentReadStates,
+        },
       );
 
       const nextProject = stripCommentTombstones({
         ...saveResult.mergedProject,
         remoteSync: saveResult.remoteSync,
         remoteUpdatedAt: saveResult.remoteUpdatedAt,
+        passwordProtected:
+          protection?.mode === 'protect'
+            ? true
+            : protection?.mode === 'remove'
+              ? false
+              : project.passwordProtected,
       });
       const commentsChanged =
         nextProject.relations.comments !== project.relations.comments;
@@ -1380,7 +1598,7 @@ export function useAppStore() {
         error: err instanceof Error ? err.message : 'Could not save document',
       };
     }
-  }, [dispatch, flushRemoteBackgroundLoad]);
+  }, [dispatch, flushRemoteBackgroundLoad, resolveExportProtection]);
 
   runRemoteAutoSaveRef.current = runRemoteAutoSave;
 
@@ -1396,6 +1614,10 @@ export function useAppStore() {
     }
 
     try {
+      const protection = resolveExportProtection(undefined, project);
+      if (project.passwordProtected && !protection) {
+        return { ok: true, skipped: true };
+      }
       const readStates = collectReadStatesForExport(
         project,
         appStateRef.current.commentUsername,
@@ -1406,7 +1628,7 @@ export function useAppStore() {
         appStateRef.current.commentUsername,
         appStateRef.current.commentReadState,
       );
-      await saveProjectToFolder(project, readStates, commentReadStates);
+      await saveProjectToFolder(project, readStates, commentReadStates, protection);
       const nextProject = stripCommentTombstones(project);
       projectRef.current = nextProject;
       if (nextProject !== project) {
@@ -1420,7 +1642,7 @@ export function useAppStore() {
         error: err instanceof Error ? err.message : 'Could not save project',
       };
     }
-  }, [dispatch]);
+  }, [dispatch, resolveExportProtection]);
 
   runLocalAutoSaveRef.current = runLocalAutoSave;
 
@@ -1480,6 +1702,11 @@ export function useAppStore() {
     saveError,
     pendingRemoteImages,
     pendingRemoteMd,
+    pendingUnlock,
+    unlockError,
+    unlockBusy,
+    unlockPendingDocument,
+    cancelDocumentUnlock,
     setProject,
     createNewDocument,
     closeProject,
