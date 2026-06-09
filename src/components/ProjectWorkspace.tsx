@@ -673,6 +673,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 scrollNonce={state.scrollToComponent?.nonce ?? 0}
                 scrollColdOpen={state.scrollToComponent?.coldOpen ?? false}
                 scrollImmediate={state.scrollToComponent?.immediate ?? false}
+                scrollSmooth={state.scrollToComponent?.smooth ?? false}
                 flashedComponentId={state.flashedComponent?.componentId ?? null}
                 flashNonce={state.flashedComponent?.nonce ?? 0}
                 selectionScrollNonce={state.selectionScrollNonce}

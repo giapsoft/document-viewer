@@ -1,6 +1,11 @@
+export type ScrollIntoContainerOptions = {
+  behavior?: ScrollBehavior;
+};
+
 export function scrollElementIntoContainer(
   container: HTMLElement,
   element: HTMLElement,
+  options?: ScrollIntoContainerOptions,
 ) {
   const containerRect = container.getBoundingClientRect();
   const elementRect = element.getBoundingClientRect();
@@ -8,18 +13,25 @@ export function scrollElementIntoContainer(
     elementRect.top - containerRect.top + container.scrollTop;
   const target =
     offset - container.clientHeight / 2 + element.clientHeight / 2;
+  const top = Math.max(0, target);
+  const behavior = options?.behavior ?? 'auto';
 
-  container.scrollTop = Math.max(0, target);
+  if (behavior === 'smooth') {
+    container.scrollTo({ top, behavior: 'smooth' });
+  } else {
+    container.scrollTop = top;
+  }
 }
 
 export function scrollToComponentInContainer(
   container: HTMLElement | null,
   componentRefs: Map<string, HTMLElement>,
   componentId: string,
+  options?: ScrollIntoContainerOptions,
 ): boolean {
   const element = componentRefs.get(componentId);
   if (container && element) {
-    scrollElementIntoContainer(container, element);
+    scrollElementIntoContainer(container, element, options);
     return true;
   }
   return false;
@@ -233,6 +245,7 @@ function runScrollWithRetry(
   componentRefs: { current: Map<string, HTMLElement> },
   componentId: string,
   onDone: (success: boolean) => void,
+  scrollOptions?: ScrollIntoContainerOptions,
 ): () => void {
   let cancelled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -246,6 +259,7 @@ function runScrollWithRetry(
         scrollRef.current,
         componentRefs.current,
         componentId,
+        scrollOptions,
       )
     ) {
       if (!cancelled) onDone(true);
@@ -524,10 +538,13 @@ export function scheduleScrollToComponent(
   componentId: string,
   panelRef?: { current: HTMLElement | null },
   onDone?: (success: boolean) => void,
-  options?: { coldOpen?: boolean; immediate?: boolean },
+  options?: { coldOpen?: boolean; immediate?: boolean; smooth?: boolean },
 ): () => void {
   const coldOpen = options?.coldOpen ?? false;
   const immediate = options?.immediate ?? false;
+  const scrollOptions: ScrollIntoContainerOptions | undefined = options?.smooth
+    ? { behavior: 'smooth' }
+    : undefined;
   const initialDelayMs = immediate
     ? 0
     : coldOpen
@@ -565,6 +582,7 @@ export function scheduleScrollToComponent(
         }
         onDone?.(success);
       },
+      scrollOptions,
     );
     cleanups.push(cleanupRetry);
   };

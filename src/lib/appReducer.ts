@@ -335,6 +335,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       const resolved = findComponent(state.project, componentId);
       const isMd = resolved?.component.type === 'md';
+      const isAction = resolved?.component.type === 'action';
+      const shouldScrollToComponent = action.scrollIntoView || isAction;
       const anchorCommentId = !isMd
         ? pickComponentAnchorCommentId(state.project.relations.comments ?? [], componentId)
         : null;
@@ -344,10 +346,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...applied,
         selectionHistory: history,
         selectionHistoryIndex: index,
-        scrollToComponent: action.scrollIntoView
+        scrollToComponent: shouldScrollToComponent
           ? {
               componentId,
               nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+              ...(isAction ? { smooth: true } : {}),
             }
           : null,
         ...(isMd ? { outstandingCommentId: null } : bumpOutstandingComment(state, anchorCommentId)),

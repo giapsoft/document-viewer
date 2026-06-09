@@ -93,7 +93,7 @@ With a component selected, use the **edit bar** at the bottom:
 **Status values:** `undefined`, `pending`, `working`, `done`, `blocked` — shown as background colours.
 
 - **Markdown (`md`)** — body lives in a sidecar file `docs/{globalId}.md`. Use `[text](flows.c1)` (global id) or `[text](c1)` (local id on the same page) for in-app links.
-- **Action** — before/after images with an animated interaction zone; edit visually in the full-screen editor.
+- **Action** — before/after images with an animated interaction zone; edit visually in the full-screen editor. Selecting an action scrolls its page panel smoothly to center it on screen (panels do not open or close).
 - **Images** — import from file or clipboard; large images are compressed automatically.
 
 **Pages:** use **+ New page** in the sidebar, **✎** to rename the display name, **×** to delete. The file name and `pageId` stay fixed.

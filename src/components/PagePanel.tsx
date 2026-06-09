@@ -639,6 +639,7 @@ interface PagePanelProps {
   scrollNonce?: number;
   scrollColdOpen?: boolean;
   scrollImmediate?: boolean;
+  scrollSmooth?: boolean;
   selectionScrollNonce?: number;
   commentLinkMode?: boolean;
   commentLinkPreviewAnchor?: CommentAnchor | null;
@@ -688,6 +689,7 @@ export function PagePanel({
   scrollNonce = 0,
   scrollColdOpen = false,
   scrollImmediate = false,
+  scrollSmooth = false,
   selectionScrollNonce = 0,
   commentUsername = null,
   componentReadState = {},
@@ -829,6 +831,7 @@ export function PagePanel({
             scrollToComponentId,
             panelRef,
             markScrollHandled,
+            { smooth: scrollSmooth },
           );
         },
       );
@@ -840,13 +843,14 @@ export function PagePanel({
       scrollToComponentId,
       panelRef,
       markScrollHandled,
-      { coldOpen: scrollColdOpen, immediate: scrollImmediate },
+      { coldOpen: scrollColdOpen, immediate: scrollImmediate, smooth: scrollSmooth },
     );
   }, [
     scrollToComponentId,
     scrollNonce,
     scrollColdOpen,
     scrollImmediate,
+    scrollSmooth,
     pageFile,
     page,
     commentAnchorHighlightId,
