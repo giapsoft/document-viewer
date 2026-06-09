@@ -4,6 +4,11 @@ import { PageLabel } from './PageLabel';
 import { VersionBadge } from './VersionBadge';
 import { reorderPageFileList } from '../lib/pageOrder';
 
+import {
+  MAX_MAX_OPEN_PAGES,
+  MIN_MAX_OPEN_PAGES,
+} from '../lib/maxOpenPagesStorage';
+
 export interface SidebarPageEntry {
   fileName: string;
   pageId: string;
@@ -22,6 +27,8 @@ interface SidebarProps {
   canManagePages: boolean;
   onSelectPage: (pageFile: string) => void;
   onToggle: () => void;
+  maxOpenPages: number;
+  onMaxOpenPagesChange: (value: number) => void;
   onCreatePage: (fileName: string) => Promise<{ ok: boolean; error?: string }>;
   onRenamePage: (
     fileName: string,
@@ -43,6 +50,8 @@ export function Sidebar({
   canManagePages,
   onSelectPage,
   onToggle,
+  maxOpenPages,
+  onMaxOpenPagesChange,
   onCreatePage,
   onRenamePage,
   onReorderPages,
@@ -109,9 +118,23 @@ export function Sidebar({
     <aside className="sidebar">
       <div className="sidebar-header">
         <h2>Pages</h2>
-        <button type="button" className="sidebar-collapse-btn" onClick={onToggle}>
-          Collapse
-        </button>
+        <div className="sidebar-header-controls">
+          <label className="sidebar-max-pages" title="Maximum pages open at once">
+            <span className="sidebar-max-pages-label">Max</span>
+            <input
+              type="range"
+              min={MIN_MAX_OPEN_PAGES}
+              max={MAX_MAX_OPEN_PAGES}
+              value={maxOpenPages}
+              onChange={(event) => onMaxOpenPagesChange(Number(event.target.value))}
+              aria-label={`Maximum open pages: ${maxOpenPages}`}
+            />
+            <span className="sidebar-max-pages-value">{maxOpenPages}</span>
+          </label>
+          <button type="button" className="sidebar-collapse-btn" onClick={onToggle}>
+            Collapse
+          </button>
+        </div>
       </div>
 
       {!canManagePages && (

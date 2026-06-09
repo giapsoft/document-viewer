@@ -512,11 +512,11 @@ export function useAppStore() {
   );
 
   const jumpToComponent = useCallback(
-    (componentId: string) => {
+    (componentId: string, anchorPageFile?: string | null) => {
       if (jumpFlashTimerRef.current) {
         window.clearTimeout(jumpFlashTimerRef.current);
       }
-      dispatch({ type: 'JUMP_TO_COMPONENT', componentId });
+      dispatch({ type: 'JUMP_TO_COMPONENT', componentId, anchorPageFile });
       jumpFlashTimerRef.current = window.setTimeout(() => {
         dispatch({ type: 'CLEAR_FLASHED_COMPONENT' });
         jumpFlashTimerRef.current = null;
@@ -529,9 +529,9 @@ export function useAppStore() {
     dispatch({ type: 'CLEAR_SELECTION' });
   }, [dispatch]);
 
-  const togglePanel = useCallback(
-    (pageFile: string) => {
-      dispatch({ type: 'TOGGLE_PANEL', pageFile });
+  const setMaxOpenPages = useCallback(
+    (maxOpenPages: number) => {
+      dispatch({ type: 'SET_MAX_OPEN_PAGES', maxOpenPages });
     },
     [dispatch],
   );
@@ -1500,7 +1500,7 @@ export function useAppStore() {
     selectComponent,
     jumpToComponent,
     clearSelection,
-    togglePanel,
+    setMaxOpenPages,
     updateComponent,
     updateMdContent,
     insertComponentAbove,

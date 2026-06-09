@@ -4,11 +4,13 @@ import { applyComponentPatchWithVersion } from './componentVersion';
 import { removeCommentsForComponent } from './comments';
 import { removeMemberIdsFromGroups } from './groupRelations';
 import { buildIndex } from './index';
+import { rebuildIndexWithMdVirtualGroups } from './mdVirtualGroups';
 import { getOrphanedComponentAssets } from './pageFileOps';
 import { createComponentId } from './pageIds';
 
 export function rebuildProject(project: LoadedProject): LoadedProject {
-  const { index, warnings } = buildIndex(project.pages, project.relations);
+  const { index: baseIndex, warnings } = buildIndex(project.pages, project.relations);
+  const index = rebuildIndexWithMdVirtualGroups(project.pages, project, baseIndex);
   return {
     ...project,
     index,

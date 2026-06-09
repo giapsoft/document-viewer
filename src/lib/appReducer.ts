@@ -1,5 +1,4 @@
-import type { AppAction, AppState, DocComment, PanelState } from '../types';
-import { shrinkFarthestExpanded, MAX_EXPANDED_PANELS } from '../lib/index';
+import type { AppAction, AppState, DocComment } from '../types';
 import {
   updateComponentInProject,
   insertComponentRelative,
@@ -35,8 +34,8 @@ import {
   applyRenamePageState,
   reorderPagesInProject,
 } from './pageMutations';
-import { reorderPanelsBySidebar } from './pageOrder';
-import { addPageToPanels, applyOpenPage, getSidebarOrder } from './pagePanels';
+import { addLinkedPageToPanels, addPageToPanels, applyOpenPage, getMainSelectionPageFile } from './pagePanels';
+import { getDisplayGroups } from './mdVirtualGroups';
 import { getFirstHighlightedComponentId } from './selectionHighlight';
 import { applyWorkspaceRestore } from './workspaceUrl';
 import {
@@ -61,6 +60,12 @@ import {
   type CommentReadState,
 } from './commentReadState';
 import { getOrCreateCommentAuthorId, getStoredCommentUsername } from './commentSession';
+import {
+  clampMaxOpenPages,
+  getStoredMaxOpenPages,
+  persistMaxOpenPages,
+} from './maxOpenPagesStorage';
+import { enforcePanelLimit } from './index';
 import { bumpComponentVersion, getComponentVersion } from './componentVersion';
 import {
   isComponentRead,
@@ -188,6 +193,7 @@ function applyEnterLinkPreview(
 export const initialAppState: AppState = {
   project: null,
   sidebarExpanded: true,
+  maxOpenPages: getStoredMaxOpenPages(),
   panels: [],
   currentPage: null,
   selection: null,
@@ -415,47 +421,39 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       }
       return { ...state, selection: null };
 
-    case 'TOGGLE_PANEL': {
-      const panel = state.panels.find((p) => p.pageFile === action.pageFile);
-      if (!panel) return state;
-
-      let panels: PanelState[];
-      if (panel.expanded) {
-        panels = state.panels.map((p) =>
-          p.pageFile === action.pageFile ? { ...p, expanded: false } : p,
-        );
-      } else {
-        const expandedCount = state.panels.filter((p) => p.expanded).length;
-        if (expandedCount >= MAX_EXPANDED_PANELS) {
-          panels = shrinkFarthestExpanded(
-            state.panels,
-            state.currentPage ?? '',
-            action.pageFile,
-          );
-        } else {
-          panels = state.panels.map((p) =>
-            p.pageFile === action.pageFile ? { ...p, expanded: true } : p,
-          );
-        }
+    case 'SET_MAX_OPEN_PAGES': {
+      const maxOpenPages = clampMaxOpenPages(action.maxOpenPages);
+      if (maxOpenPages === state.maxOpenPages) return state;
+      persistMaxOpenPages(maxOpenPages);
+      const selectionPage = getMainSelectionPageFile(state);
+      const keepPages =
+        maxOpenPages > 1
+          ? [selectionPage, state.currentPage].filter((pageFile): pageFile is string =>
+              Boolean(pageFile),
+            )
+          : state.currentPage
+            ? [state.currentPage]
+            : [];
+      const panels = enforcePanelLimit(
+        state.panels,
+        maxOpenPages,
+        keepPages.length > 0 ? keepPages : undefined,
+      );
+      let currentPage = state.currentPage;
+      if (currentPage && !panels.some((panel) => panel.pageFile === currentPage)) {
+        currentPage = panels[0]?.pageFile ?? null;
       }
-
-      return { ...state, panels };
+      return { ...state, maxOpenPages, panels, currentPage };
     }
 
-    case 'REORDER_PANELS': {
-      if (!state.project) return state;
-      const sidebarOrder = action.orderedPageFiles;
-      const panels = reorderPanelsBySidebar(state.panels, sidebarOrder);
-      return { ...state, panels };
-    }
+    case 'REORDER_PANELS':
+      return state;
 
     case 'REORDER_PAGES': {
       if (!state.project) return state;
       const project = reorderPagesInProject(state.project, action.orderedPageFiles);
       if (!project) return state;
-      const sidebarOrder = project.relations.pageOrder ?? action.orderedPageFiles;
-      const panels = reorderPanelsBySidebar(state.panels, sidebarOrder);
-      return { ...state, project, panels };
+      return { ...state, project };
     }
 
     case 'UPDATE_COMPONENT': {
@@ -549,7 +547,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const project = deleteComponentFromProject(state.project, pageFile, componentId);
       if (!project) return state;
 
-      const panels = state.panels.filter((p) => p.pageFile !== pageFile || p.expanded);
+      const panels = state.panels.filter((p) => p.pageFile !== pageFile);
       let currentPage = state.currentPage;
       if (!panels.some((p) => p.pageFile === currentPage)) {
         currentPage = pageFile;
@@ -632,10 +630,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             : null),
         };
 
-        const sidebarOrder = getSidebarOrder(nextState);
         return {
           ...nextState,
-          panels: addPageToPanels(nextState.panels, pageFile, sidebarOrder),
+          panels: addPageToPanels(nextState.panels, pageFile, state.maxOpenPages),
         };
       }
 
@@ -950,8 +947,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         filename,
       );
 
-      const targetPanel = state.panels.find((p) => p.pageFile === pageFile);
-      const shouldScroll = Boolean(targetPanel?.expanded);
+      const shouldScroll = state.panels.some((panel) => panel.pageFile === pageFile);
 
       const componentReadState = authorReadStateForComponent(
         state.componentReadState,
@@ -1212,8 +1208,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         componentId,
         nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
       };
-      const sidebarOrder = getSidebarOrder(state);
-      const panels = addPageToPanels(state.panels, pageFile, sidebarOrder);
+      const panels = addPageToPanels(state.panels, pageFile, state.maxOpenPages);
 
       const base = {
         ...state,
@@ -1228,7 +1223,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       }
 
       const matchingGroupIndices = getGroupIndicesForComponent(
-        state.project.relations.groups,
+        getDisplayGroups(state.project.index),
         componentId,
       );
       const { history, index } = appendSelectionHistory(
@@ -1255,16 +1250,28 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const pageFile = state.project.index.componentToPage.get(action.componentId);
       if (!pageFile) return state;
 
-      const sidebarOrder = getSidebarOrder(state);
-      const panels = addPageToPanels(state.panels, pageFile, sidebarOrder);
+      const targetWasOpen = state.panels.some((panel) => panel.pageFile === pageFile);
+      const anchorPageFile = action.anchorPageFile ?? state.currentPage;
+      const panels = addLinkedPageToPanels(
+        state.panels,
+        pageFile,
+        anchorPageFile,
+        state.maxOpenPages,
+      );
+
+      const keepCurrentPage =
+        anchorPageFile && panels.some((panel) => panel.pageFile === anchorPageFile)
+          ? anchorPageFile
+          : pageFile;
 
       return {
         ...state,
-        currentPage: pageFile,
+        currentPage: keepCurrentPage,
         panels,
         scrollToComponent: {
           componentId: action.componentId,
           nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+          coldOpen: !targetWasOpen,
         },
         flashedComponent: {
           componentId: action.componentId,

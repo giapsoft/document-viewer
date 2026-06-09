@@ -1,5 +1,4 @@
 import type { PageData, RelationsFile } from '../types';
-import { enforceExpandedLimit } from './index';
 
 export function getStoredPageOrder(
   relations: RelationsFile,
@@ -70,37 +69,4 @@ export function appendPageToOrder(pageOrder: string[], fileName: string): string
 
 export function removePageFromOrder(pageOrder: string[], fileName: string): string[] {
   return pageOrder.filter((f) => f !== fileName);
-}
-
-export function buildPanelsInSidebarOrder(
-  existingPanels: { pageFile: string; expanded: boolean }[],
-  visiblePageFiles: string[],
-  sidebarOrder: string[],
-  currentPage: string,
-): { pageFile: string; expanded: boolean }[] {
-  const sorted = orderPageFilesBySidebar(visiblePageFiles, sidebarOrder);
-  const existingMap = new Map(existingPanels.map((p) => [p.pageFile, p]));
-
-  const panels = sorted.map((pageFile) => {
-    const existing = existingMap.get(pageFile);
-    if (existing) {
-      return { pageFile, expanded: existing.expanded };
-    }
-    return { pageFile, expanded: pageFile === currentPage };
-  });
-
-  return enforceExpandedLimit(panels, currentPage, currentPage);
-}
-
-export function reorderPanelsBySidebar(
-  panels: { pageFile: string; expanded: boolean }[],
-  sidebarOrder: string[],
-): { pageFile: string; expanded: boolean }[] {
-  const panelMap = new Map(panels.map((p) => [p.pageFile, p]));
-  return orderPageFilesBySidebar(
-    panels.map((p) => p.pageFile),
-    sidebarOrder,
-  )
-    .map((fileName) => panelMap.get(fileName))
-    .filter((p): p is { pageFile: string; expanded: boolean } => !!p);
 }

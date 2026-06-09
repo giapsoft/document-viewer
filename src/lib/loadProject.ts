@@ -5,6 +5,7 @@ import type {
   RelationsFile,
 } from '../types';
 import { buildIndex } from './index';
+import { rebuildIndexWithMdVirtualGroups } from './mdVirtualGroups';
 import { normalizePageComponents, resolvePageId, resolvePageName, serializePageComponents } from './pageIds';
 import { EMPTY_RELATIONS, normalizeRelations } from './groupRelations';
 import { createDefaultPageData } from './pageMutations';
@@ -118,18 +119,23 @@ export function assembleProject(input: RawProjectInput): AssembledProject {
     }
   }
 
-  const { index, warnings: indexWarnings } = buildIndex(pages, relations);
+  const { index: baseIndex, warnings: indexWarnings } = buildIndex(pages, relations);
   warnings.push(...indexWarnings);
 
-  return {
+  const assembled: AssembledProject = {
     pages,
     relations,
     styles: mergeStyles(input.stylesPartial),
     imageUrls,
     imageBlobs,
     mdFiles,
-    index,
+    index: baseIndex,
     warnings,
+  };
+
+  return {
+    ...assembled,
+    index: rebuildIndexWithMdVirtualGroups(pages, assembled, baseIndex),
   };
 }
 

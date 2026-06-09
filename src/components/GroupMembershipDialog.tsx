@@ -14,6 +14,7 @@ interface GroupMembershipDialogProps {
   groupIndices: number[];
   activeGroupIndex?: number | null;
   linkMode?: boolean;
+  isVirtualGroup?: (groupIndex: number) => boolean;
   onSelectGroup?: (groupIndex: number) => void;
   onRemoveMember: (groupIndex: number, componentId: string) => void;
   onNavigateToComponent: (componentId: string) => void;
@@ -122,12 +123,16 @@ function formatGroupTitle(
   groupIndex: number,
   group: string[],
   project: LoadedProject,
+  isVirtual: boolean,
 ): string {
   const pageFiles = [...getGroupMemberPageFiles(group, project.index.componentToPage)];
   const pageLabels = pageFiles.map((file) =>
     resolvePageName(file, project.relations.pageNames),
   );
   const pagesPart = pageLabels.length > 0 ? ` · ${pageLabels.join(' ↔ ')}` : '';
+  if (isVirtual) {
+    return `MD links${pagesPart}`;
+  }
   return `List ${groupIndex + 1}${pagesPart}`;
 }
 
@@ -138,6 +143,7 @@ export function GroupMembershipDialog({
   groupIndices,
   activeGroupIndex = null,
   linkMode = false,
+  isVirtualGroup,
   onSelectGroup,
   onRemoveMember,
   onNavigateToComponent,
@@ -185,6 +191,7 @@ export function GroupMembershipDialog({
         {sortedIndices.map((groupIndex) => {
           const group = groups[groupIndex] ?? [];
           const isActiveGroup = activeGroupIndex === groupIndex;
+          const virtual = isVirtualGroup?.(groupIndex) ?? false;
           return (
             <section
               key={groupIndex}
@@ -196,7 +203,7 @@ export function GroupMembershipDialog({
                 onClick={() => onSelectGroup?.(groupIndex)}
                 aria-pressed={isActiveGroup}
               >
-                {formatGroupTitle(groupIndex, group, project)}
+                {formatGroupTitle(groupIndex, group, project, virtual)}
               </button>
               <div className="group-membership-members">
                 {group.map((memberId) => (
@@ -206,7 +213,9 @@ export function GroupMembershipDialog({
                     componentId={memberId}
                     isAnchor={memberId === anchorComponentId}
                     onRemove={
-                      linkMode ? undefined : () => onRemoveMember(groupIndex, memberId)
+                      linkMode || virtual
+                        ? undefined
+                        : () => onRemoveMember(groupIndex, memberId)
                     }
                     onNavigate={() => handleNavigateMember(groupIndex, memberId)}
                   />

@@ -1,6 +1,6 @@
 import type { AppState, LoadedProject } from '../types';
-import { enforceExpandedLimit } from './index';
-import { addPageToPanels, getSidebarOrder } from './pagePanels';
+import { enforcePanelLimit } from './index';
+import { addPageToPanels } from './pagePanels';
 import { applyComponentSelection } from './selectionNavigation';
 
 export interface WorkspaceUrlState {
@@ -32,7 +32,6 @@ export function encodeWorkspaceUrlParams(state: AppState): {
 
   const pageIdByFile = state.project.index.pageIdByFile;
   const expandedPageIds = state.panels
-    .filter((panel) => panel.expanded)
     .map((panel) => pageIdByFile.get(panel.pageFile))
     .filter((pageId): pageId is string => Boolean(pageId));
 
@@ -109,16 +108,10 @@ export function applyWorkspaceRestore(
     }
   }
 
-  const sidebarOrder = getSidebarOrder(state);
   let panels = state.panels;
   for (const pageFile of targetPageFiles) {
-    panels = addPageToPanels(panels, pageFile, sidebarOrder);
+    panels = addPageToPanels(panels, pageFile, state.maxOpenPages);
   }
-
-  const requested = new Set(targetPageFiles);
-  panels = panels.map((panel) =>
-    requested.has(panel.pageFile) ? { ...panel, expanded: true } : panel,
-  );
 
   const focusPage =
     (primaryComponentId
@@ -128,7 +121,11 @@ export function applyWorkspaceRestore(
     state.currentPage ??
     '';
 
-  panels = enforceExpandedLimit(panels, focusPage, focusPage || undefined);
+  panels = enforcePanelLimit(
+    panels,
+    state.maxOpenPages,
+    focusPage || undefined,
+  );
 
   let nextState: AppState = {
     ...state,

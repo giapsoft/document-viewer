@@ -99,8 +99,14 @@ export interface ProjectIndex {
   componentToPage: Map<string, string>;
   componentData: Map<string, Component>;
   pageIdByFile: Map<string, string>;
+  /** Persisted link groups only (saved to groups.json). */
   groups: string[][];
   componentToGroups: Map<string, number[]>;
+  /** Persisted + md virtual groups for UI highlighting only. */
+  displayGroups: string[][];
+  /** Indices `< persistedGroupCount` are persisted; the rest are md virtual. */
+  persistedGroupCount: number;
+  componentToDisplayGroups: Map<string, number[]>;
 }
 
 export type ProjectSource = 'local' | 'remote';
@@ -151,6 +157,8 @@ export interface SelectionState {
 export interface AppState {
   project: LoadedProject | null;
   sidebarExpanded: boolean;
+  /** Maximum page panels open at once (user preference). */
+  maxOpenPages: number;
   panels: PanelState[];
   currentPage: string | null;
   selection: SelectionState | null;
@@ -165,7 +173,7 @@ export interface AppState {
   linkCtrlActive: boolean;
   selectionHistory: SelectionHistoryEntry[];
   selectionHistoryIndex: number;
-  scrollToComponent: { componentId: string; nonce: number } | null;
+  scrollToComponent: { componentId: string; nonce: number; coldOpen?: boolean } | null;
   /** Temporary highlight after md component-link navigation (does not affect selection). */
   flashedComponent: { componentId: string; nonce: number } | null;
   /** Bumped when selection/group changes — each panel scrolls to first related component */
@@ -213,7 +221,7 @@ export type AppAction =
       scrollIntoView?: boolean;
     }
   | { type: 'CLEAR_SELECTION' }
-  | { type: 'TOGGLE_PANEL'; pageFile: string }
+  | { type: 'SET_MAX_OPEN_PAGES'; maxOpenPages: number }
   | { type: 'REORDER_PANELS'; orderedPageFiles: string[] }
   | { type: 'REORDER_PAGES'; orderedPageFiles: string[] }
   | {
@@ -283,7 +291,7 @@ export type AppAction =
   | { type: 'UPDATE_COMMENT'; commentId: string; body: string }
   | { type: 'DELETE_COMMENT'; commentId: string }
   | { type: 'FOCUS_COMMENT'; commentId: string | null }
-  | { type: 'JUMP_TO_COMPONENT'; componentId: string }
+  | { type: 'JUMP_TO_COMPONENT'; componentId: string; anchorPageFile?: string | null }
   | { type: 'CLEAR_FLASHED_COMPONENT' }
   | { type: 'OUTSTANDING_COMMENT'; commentId: string | null }
   | { type: 'SET_CONTENT_EDITOR_OPEN'; open: boolean }

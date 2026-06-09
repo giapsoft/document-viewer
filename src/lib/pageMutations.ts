@@ -8,7 +8,7 @@ import {
 } from './pageOrder';
 import { rebuildProject } from './projectMutations';
 import { castPageId, createComponentId, resolvePageId, resolvePageName } from './pageIds';
-import { addPageToPanels, getSidebarOrder } from './pagePanels';
+import { addPageToPanels } from './pagePanels';
 import { getOrphanedPageAssets } from './pageFileOps';
 
 function uniquePageFileName(baseId: string, existingFiles: Iterable<string>): string {
@@ -225,8 +225,7 @@ export function applyCreatePageState(
     selection: state.linkMode ? state.selection : null,
     panels: state.panels,
   };
-  const sidebarOrder = getSidebarOrder(nextState);
-  const panels = addPageToPanels(nextState.panels, fileName, sidebarOrder);
+  const panels = addPageToPanels(nextState.panels, fileName, state.maxOpenPages);
   return { ...nextState, panels };
 }
 

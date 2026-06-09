@@ -28,6 +28,7 @@ export function scrollToComponentInContainer(
 const SCROLL_RETRY_DELAYS_MS = [0, 0, 0, 50, 100, 200, 350, 500, 800, 1200];
 /** Let a newly opened panel mount components (img/md) before measuring. */
 const PANEL_COLD_OPEN_DELAY_MS = 100;
+const PANEL_COLD_OPEN_LAYOUT_DELAY_MS = 320;
 const LAYOUT_SETTLE_MS = 60;
 const LAYOUT_MAX_WAIT_MS = 450;
 /** Panel transitions + late image loads on the imgs page. */
@@ -80,6 +81,7 @@ function waitForScrollTargets(
   componentRefs: { current: Map<string, HTMLElement> },
   componentId: string,
   onReady: () => void,
+  initialDelayMs = PANEL_COLD_OPEN_DELAY_MS,
 ): () => void {
   let cancelled = false;
   let delayTimer: ReturnType<typeof setTimeout> | undefined;
@@ -114,7 +116,7 @@ function waitForScrollTargets(
 
   delayTimer = setTimeout(() => {
     if (!cancelled) tick();
-  }, PANEL_COLD_OPEN_DELAY_MS);
+  }, initialDelayMs);
 
   return () => {
     cancelled = true;
@@ -480,13 +482,51 @@ export function scheduleScrollToMdCommentHighlight(
   return cancelAll;
 }
 
+function waitForPanelOpenLayout(
+  panelRef: { current: HTMLElement | null } | undefined,
+  onReady: () => void,
+): () => void {
+  const el = panelRef?.current;
+  if (!el) {
+    onReady();
+    return () => {};
+  }
+
+  let cancelled = false;
+  let done = false;
+  const finish = () => {
+    if (cancelled || done) return;
+    done = true;
+    onReady();
+  };
+
+  const onTransitionEnd = (event: TransitionEvent) => {
+    if (event.target !== el) return;
+    if (event.propertyName === 'flex' || event.propertyName === 'width') {
+      finish();
+    }
+  };
+
+  el.addEventListener('transitionend', onTransitionEnd);
+  const timer = setTimeout(finish, PANEL_COLD_OPEN_LAYOUT_DELAY_MS);
+
+  return () => {
+    cancelled = true;
+    clearTimeout(timer);
+    el.removeEventListener('transitionend', onTransitionEnd);
+  };
+}
+
 export function scheduleScrollToComponent(
   scrollRef: { current: HTMLDivElement | null },
   componentRefs: { current: Map<string, HTMLElement> },
   componentId: string,
   panelRef?: { current: HTMLElement | null },
   onDone?: (success: boolean) => void,
+  options?: { coldOpen?: boolean },
 ): () => void {
+  const coldOpen = options?.coldOpen ?? false;
+  const initialDelayMs = coldOpen ? PANEL_COLD_OPEN_LAYOUT_DELAY_MS : PANEL_COLD_OPEN_DELAY_MS;
   let cancelled = false;
   const cleanups: (() => void)[] = [];
 
@@ -507,7 +547,7 @@ export function scheduleScrollToComponent(
       componentId,
       (success) => {
         if (cancelled) return;
-        if (success) {
+        if (success && !coldOpen) {
           cleanups.push(
             watchLayoutAndRescroll(
               scrollRef,
@@ -530,16 +570,26 @@ export function scheduleScrollToComponent(
     () => {
       if (cancelled) return;
 
-      const cleanupLayoutWait = waitForLayoutSettled(
-        () => getLayoutObserveTargets(scrollRef, componentRefs, componentId, panelRef),
-        () => {
-          if (cancelled) return;
-          const cleanupImageWait = waitForImagesInContainer(scrollRef, runScroll);
-          cleanups.push(cleanupImageWait);
-        },
-      );
-      cleanups.push(cleanupLayoutWait);
+      const startLayoutWait = () => {
+        const cleanupLayoutWait = waitForLayoutSettled(
+          () => getLayoutObserveTargets(scrollRef, componentRefs, componentId, panelRef),
+          () => {
+            if (cancelled) return;
+            const cleanupImageWait = waitForImagesInContainer(scrollRef, runScroll);
+            cleanups.push(cleanupImageWait);
+          },
+        );
+        cleanups.push(cleanupLayoutWait);
+      };
+
+      if (coldOpen) {
+        const cleanupPanelWait = waitForPanelOpenLayout(panelRef, startLayoutWait);
+        cleanups.push(cleanupPanelWait);
+      } else {
+        startLayoutWait();
+      }
     },
+    initialDelayMs,
   );
   cleanups.push(cleanupTargetWait);
 

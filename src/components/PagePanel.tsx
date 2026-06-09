@@ -33,9 +33,9 @@ import type { MdHighlightRange, MdTextRange } from '../lib/mdSelection';
 import { resolveMdHighlightSegments } from '../lib/mdSelection';
 import { ComponentReadBar } from './ComponentReadBar';
 import { getComponentVersion } from '../lib/componentVersion';
+import { getDisplayGroups } from '../lib/mdVirtualGroups';
 import {
   countUnreadComponentsOnPage,
-  formatPageComponentCount,
   isComponentRead,
 } from '../lib/readState';
 
@@ -194,7 +194,7 @@ interface ComponentBlockProps {
     range: MdTextRange,
   ) => void;
   onCommentMarkClick?: (commentId: string, componentId: string, pageFile: string) => void;
-  onNavigateToComponent?: (componentId: string) => void;
+  onNavigateToComponent?: (componentId: string, sourcePageFile: string) => void;
   flashedComponentId?: string | null;
   flashNonce?: number;
   registerRef: (id: string, el: HTMLElement | null) => void;
@@ -526,7 +526,9 @@ export function ComponentBlock({
                 : (commentId) => onCommentMarkClick?.(commentId, component.id, pageFile)
             }
             onComponentLinkClick={
-              commentLinkMode || linkMode ? undefined : onNavigateToComponent
+              commentLinkMode || linkMode
+                ? undefined
+                : (componentId) => onNavigateToComponent?.(componentId, pageFile)
             }
           />
         ) : isMdPending ? (
@@ -618,7 +620,6 @@ function shouldSkipScrollRestore(
 
 interface PagePanelProps {
   pageFile: string;
-  expanded: boolean;
   project: LoadedProject;
   isCurrent: boolean;
   selection: SelectionState | null;
@@ -626,12 +627,12 @@ interface PagePanelProps {
   linkGroupMembers?: Set<string>;
   pendingImageNames?: ReadonlySet<string>;
   pendingMdComponentIds?: ReadonlySet<string>;
-  onToggle: () => void;
   onClose: () => void;
   onSelect: (componentId: string, pageFile: string) => void;
   onClearSelection: () => void;
   scrollToComponentId?: string | null;
   scrollNonce?: number;
+  scrollColdOpen?: boolean;
   selectionScrollNonce?: number;
   commentLinkMode?: boolean;
   commentLinkPreviewAnchor?: CommentAnchor | null;
@@ -644,7 +645,7 @@ interface PagePanelProps {
     range: MdTextRange,
   ) => void;
   onCommentMarkClick?: (commentId: string, componentId: string, pageFile: string) => void;
-  onNavigateToComponent?: (componentId: string) => void;
+  onNavigateToComponent?: (componentId: string, sourcePageFile: string) => void;
   flashedComponentId?: string | null;
   flashNonce?: number;
   commentUsername?: string | null;
@@ -657,7 +658,6 @@ interface PagePanelProps {
 
 export function PagePanel({
   pageFile,
-  expanded,
   project,
   isCurrent,
   selection,
@@ -665,7 +665,6 @@ export function PagePanel({
   linkGroupMembers,
   pendingImageNames,
   pendingMdComponentIds,
-  onToggle,
   onClose,
   onSelect,
   onClearSelection,
@@ -681,6 +680,7 @@ export function PagePanel({
   flashNonce = 0,
   scrollToComponentId = null,
   scrollNonce = 0,
+  scrollColdOpen = false,
   selectionScrollNonce = 0,
   commentUsername = null,
   componentReadState = {},
@@ -694,7 +694,6 @@ export function PagePanel({
   const componentRefs = useRef<Map<string, HTMLElement>>(new Map());
   const handledScrollNonceRef = useRef(0);
   const handledAutoScrollKeyRef = useRef<string | null>(null);
-  const wasExpandedRef = useRef(false);
   const prevLinkModeRef = useRef(linkMode);
   const page = project.pages.find((p) => p.fileName === pageFile);
 
@@ -710,8 +709,8 @@ export function PagePanel({
 
   const mainGroupMemberIds = useMemo(() => {
     if (!selection || linkMode) return new Set<string>();
-    return getMainGroupMemberIds(project.relations.groups, selection);
-  }, [project.relations.groups, selection, linkMode]);
+    return getMainGroupMemberIds(getDisplayGroups(project.index), selection);
+  }, [project.index, selection, linkMode]);
 
   const scrollToHighlightedComponent = useCallback(
     (componentId: string) => {
@@ -723,11 +722,6 @@ export function PagePanel({
   const comments = activeComments(project.relations.comments ?? []);
 
   useEffect(() => {
-    if (!expanded) {
-      wasExpandedRef.current = false;
-      return;
-    }
-
     const el = scrollRef.current;
     if (!el) return;
 
@@ -743,13 +737,18 @@ export function PagePanel({
       setPageScrollTop(pageFile, el.scrollTop);
       el.removeEventListener('scroll', onScroll);
     };
-  }, [expanded, pageFile]);
+  }, [pageFile]);
 
   useLayoutEffect(() => {
-    if (!expanded) return;
-    if (wasExpandedRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
+    if (
+      scrollColdOpen &&
+      scrollToComponentId &&
+      page?.components.some((c) => c.id === scrollToComponentId)
+    ) {
+      return;
+    }
     if (
       shouldSkipScrollRestore(
         page,
@@ -770,11 +769,11 @@ export function PagePanel({
       el.scrollTop = saved;
     }
   }, [
-    expanded,
     pageFile,
     page,
     scrollToComponentId,
     scrollNonce,
+    scrollColdOpen,
     isCurrent,
     selection,
     selectionScrollNonce,
@@ -783,7 +782,7 @@ export function PagePanel({
   ]);
 
   useEffect(() => {
-    if (!scrollToComponentId || scrollNonce === 0 || !expanded) return;
+    if (!scrollToComponentId || scrollNonce === 0) return;
     if (handledScrollNonceRef.current === scrollNonce) return;
     if (!page?.components.some((c) => c.id === scrollToComponentId)) return;
 
@@ -829,11 +828,12 @@ export function PagePanel({
       scrollToComponentId,
       panelRef,
       markScrollHandled,
+      { coldOpen: scrollColdOpen },
     );
   }, [
     scrollToComponentId,
     scrollNonce,
-    expanded,
+    scrollColdOpen,
     pageFile,
     page,
     commentAnchorHighlightId,
@@ -844,15 +844,16 @@ export function PagePanel({
     const justExitedLinkMode = prevLinkModeRef.current && !linkMode;
     prevLinkModeRef.current = linkMode;
 
-    if (!expanded) {
-      handledAutoScrollKeyRef.current = null;
+    if (linkMode || justExitedLinkMode || isCurrent || !page || !selection) return;
+
+    if (
+      scrollToComponentId &&
+      scrollNonce > 0 &&
+      handledScrollNonceRef.current !== scrollNonce &&
+      page.components.some((component) => component.id === scrollToComponentId)
+    ) {
       return;
     }
-
-    const justExpanded = !wasExpandedRef.current;
-    wasExpandedRef.current = true;
-
-    if (linkMode || justExitedLinkMode || isCurrent || !page || !selection) return;
 
     const targetId = getFirstSelectedComponentId(
       page,
@@ -864,7 +865,7 @@ export function PagePanel({
     if (!targetId) return;
 
     const scrollKey = `${selectionScrollNonce}:${selection.componentId}:${selection.relatedIds.size}:${targetId}`;
-    if (!justExpanded && handledAutoScrollKeyRef.current === scrollKey) return;
+    if (handledAutoScrollKeyRef.current === scrollKey) return;
 
     return scheduleScrollToComponent(
       scrollRef,
@@ -876,7 +877,6 @@ export function PagePanel({
       },
     );
   }, [
-    expanded,
     isCurrent,
     linkMode,
     pageFile,
@@ -884,6 +884,8 @@ export function PagePanel({
     selection,
     selectionScrollNonce,
     linkGroupMembers,
+    scrollToComponentId,
+    scrollNonce,
   ]);
 
   if (!page) return null;
@@ -891,7 +893,6 @@ export function PagePanel({
   const pageUnreadCount = commentUsername
     ? countUnreadComponentsOnPage(page.components, componentReadState)
     : null;
-  const pageCountLabel = formatPageComponentCount(page.components.length, pageUnreadCount);
 
   const panelTitle = (
     <PageLabel
@@ -908,110 +909,48 @@ export function PagePanel({
   const pageHasUnread = pageUnreadCount != null && pageUnreadCount > 0;
   const readAllLabel = pageHasUnread ? 'All read' : 'All unread';
 
-  const openPanel = () => {
-    if (!expanded) onToggle();
-  };
-
   const handleClose = (event: MouseEvent) => {
     event.stopPropagation();
     onClose();
   };
 
-  const closePageButton = (
-    <button
-      type="button"
-      className="panel-close-btn"
-      onClick={handleClose}
-      title="Close page"
-      aria-label={`Close page: ${page.pageName}`}
-    >
-      ×
-    </button>
-  );
-
   return (
     <div
       ref={panelRef}
-      className={`page-panel ${expanded ? 'expanded' : 'shrunk'} ${isCurrent ? 'current' : ''}`}
+      className={`page-panel expanded ${isCurrent ? 'current' : ''}`}
       data-page={pageFile}
-      onClick={expanded ? undefined : openPanel}
-      onKeyDown={
-        expanded
-          ? undefined
-          : (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                openPanel();
-              }
-            }
-      }
-      role={expanded ? undefined : 'button'}
-      tabIndex={expanded ? undefined : 0}
-      aria-label={
-        expanded ? undefined : `Open page panel: ${page.pageName} (${pageCountLabel})`
-      }
     >
       <div className="page-panel-header">
-        {expanded ? (
-          <>
-            <div className="page-panel-header-leading">
-              {closePageButton}
-              <span className="page-panel-title">{panelTitle}</span>
-            </div>
-            <div className="page-panel-header-actions">
-              {commentUsername && onTogglePageReadAll ? (
-                <button
-                  type="button"
-                  className={`page-read-all-btn${pageHasUnread ? ' has-unread' : ''}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onTogglePageReadAll(pageFile);
-                  }}
-                  title={pageHasUnread ? 'Mark all components on this page as read' : 'Mark all components on this page as unread'}
-                >
-                  {readAllLabel}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="panel-toggle-btn"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggle();
-                }}
-                title="Shrink"
-                aria-label={`Shrink page panel: ${page.pageName}`}
-              >
-                ◀
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <span className="panel-toggle-btn panel-toggle-btn-hint" aria-hidden="true">
-              ▶
-            </span>
-            <span
-              className="page-panel-vertical-title"
-              title={`${page.pageName} (${pageCountLabel})`}
+        <div className="page-panel-header-leading">
+          <span className="page-panel-title">{panelTitle}</span>
+        </div>
+        <div className="page-panel-header-actions">
+          {commentUsername && onTogglePageReadAll ? (
+            <button
+              type="button"
+              className={`page-read-all-btn${pageHasUnread ? ' has-unread' : ''}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onTogglePageReadAll(pageFile);
+              }}
+              title={pageHasUnread ? 'Mark all components on this page as read' : 'Mark all components on this page as unread'}
             >
-              {page.pageName}
-              <span
-                className={`page-label-count${
-                  pageHasUnread ? ' page-label-count-has-unread' : ''
-                }`}
-              >
-                {' '}
-                ({pageCountLabel})
-              </span>
-            </span>
-            {closePageButton}
-          </>
-        )}
+              {readAllLabel}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="panel-close-btn"
+            onClick={handleClose}
+            title="Close page"
+            aria-label={`Close page: ${page.pageName}`}
+          >
+            ×
+          </button>
+        </div>
       </div>
 
-      {expanded ? (
-        <div className="page-panel-body">
+      <div className="page-panel-body">
           <div className="page-scroll-host">
           <div
             ref={scrollRef}
@@ -1103,7 +1042,6 @@ export function PagePanel({
           )}
           </div>
         </div>
-      ) : null}
     </div>
   );
 }

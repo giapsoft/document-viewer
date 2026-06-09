@@ -24,6 +24,7 @@ import { countUnreadComponentsOnPage } from '../lib/readState';
 import { getAdjacentComponentId } from '../lib/componentNavigation';
 import { findComponent } from '../lib/projectMutations';
 import { getGroupIndicesForComponent } from '../lib/groupRelations';
+import { getDisplayGroups, isVirtualGroupIndex } from '../lib/mdVirtualGroups';
 
 const APP_TOAST_MS = 2000;
 
@@ -48,7 +49,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     selectComponent,
     jumpToComponent,
     clearSelection,
-    togglePanel,
+    setMaxOpenPages,
     updateComponent,
     updateMdContent,
     insertComponentAbove,
@@ -137,7 +138,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const panelGroups =
     state.linkMode && state.linkPreviewGroups
       ? state.linkPreviewGroups
-      : project.relations.groups;
+      : getDisplayGroups(project.index);
 
   const panelComponentId =
     state.linkMode && state.linkFocusComponentId
@@ -345,11 +346,11 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const mainGroupPageFiles = useMemo(() => {
     if (!state.selection) return new Set<string>();
     return getMainGroupPageFiles(
-      project.relations.groups,
+      getDisplayGroups(project.index),
       state.selection,
       project.index.componentToPage,
     );
-  }, [project.relations.groups, project.index.componentToPage, state.selection]);
+  }, [project.index, state.selection]);
 
   const mainSelectionPageFile = useMemo(() => {
     if (!state.selection) return null;
@@ -360,7 +361,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   const matchingGroupIndices = state.selection?.matchingGroupIndices ?? [];
 
-  const groups = state.linkPreviewGroups ?? project.relations.groups;
+  const groups = state.linkPreviewGroups ?? getDisplayGroups(project.index);
   const linkEditingListIndex = state.linkTargetGroupIndex;
   const linkGroupMembers =
     state.linkMode && linkEditingListIndex !== null
@@ -522,10 +523,12 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             groupIndices={panelGroupIndices}
             activeGroupIndex={panelActiveGroupIndex}
             linkMode={state.linkMode}
+            isVirtualGroup={(groupIndex) => isVirtualGroupIndex(project.index, groupIndex)}
             onSelectGroup={handleSelectGroupInPanel}
-            onRemoveMember={(groupIndex, componentId) =>
-              removeComponentFromGroupAtIndex(componentId, groupIndex)
-            }
+            onRemoveMember={(groupIndex, componentId) => {
+              if (isVirtualGroupIndex(project.index, groupIndex)) return;
+              removeComponentFromGroupAtIndex(componentId, groupIndex);
+            }}
             onNavigateToComponent={jumpToComponent}
             onClose={closeGroupPanel}
           />
@@ -536,6 +539,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             canManagePages={canManagePages}
             onSelectPage={openPage}
             onToggle={toggleSidebar}
+            maxOpenPages={state.maxOpenPages}
+            onMaxOpenPagesChange={setMaxOpenPages}
             onCreatePage={createPage}
             onRenamePage={renamePage}
             onReorderPages={reorderPages}
@@ -625,7 +630,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               <PagePanel
                 key={panel.pageFile}
                 pageFile={panel.pageFile}
-                expanded={panel.expanded}
                 project={project}
                 isCurrent={state.currentPage === panel.pageFile}
                 selection={state.selection}
@@ -633,12 +637,12 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 linkGroupMembers={linkGroupMembers}
                 pendingImageNames={pendingRemoteImages}
                 pendingMdComponentIds={pendingRemoteMd}
-                onToggle={() => togglePanel(panel.pageFile)}
                 onClose={() => openPage(panel.pageFile)}
                 onSelect={handleComponentClick}
                 onClearSelection={clearSelection}
                 scrollToComponentId={state.scrollToComponent?.componentId ?? null}
                 scrollNonce={state.scrollToComponent?.nonce ?? 0}
+                scrollColdOpen={state.scrollToComponent?.coldOpen ?? false}
                 flashedComponentId={state.flashedComponent?.componentId ?? null}
                 flashNonce={state.flashedComponent?.nonce ?? 0}
                 selectionScrollNonce={state.selectionScrollNonce}

@@ -237,6 +237,17 @@ export function buildIndex(
     pageIdByFile.set(page.fileName, page.pageId);
   }
 
+  const persistedGroupCount = groups.length;
+  const displayGroups = groups.map((group) => [...group]);
+  const componentToDisplayGroups = new Map<string, number[]>();
+  displayGroups.forEach((group, groupIndex) => {
+    for (const id of group) {
+      const existing = componentToDisplayGroups.get(id) ?? [];
+      existing.push(groupIndex);
+      componentToDisplayGroups.set(id, existing);
+    }
+  });
+
   return {
     index: {
       componentToPage,
@@ -244,6 +255,9 @@ export function buildIndex(
       pageIdByFile,
       groups,
       componentToGroups,
+      displayGroups,
+      persistedGroupCount,
+      componentToDisplayGroups,
     },
     warnings,
   };
@@ -289,40 +303,40 @@ export function orderPagesForSelection(
   return ordered;
 }
 
-const MAX_EXPANDED_PANELS = 3;
-
-export { MAX_EXPANDED_PANELS };
-
-export function applyExpandLimits(
+/** Drop panels past the open limit, starting from the farthest slot. */
+export function enforcePanelLimit(
   panels: { pageFile: string; expanded: boolean }[],
-  _orderedPages: string[],
-  currentPage: string,
+  maxPanels: number,
+  keepPageFiles?: string | readonly string[],
 ): { pageFile: string; expanded: boolean }[] {
-  return enforceExpandedLimit(panels, currentPage);
-}
+  let result = panels.map((panel) => ({ ...panel, expanded: true }));
+  const keep = new Set(
+    keepPageFiles == null
+      ? []
+      : typeof keepPageFiles === 'string'
+        ? [keepPageFiles]
+        : keepPageFiles.filter(Boolean),
+  );
 
-/** Shrink panels past the expanded limit, starting from the farthest slot. */
-export function enforceExpandedLimit(
-  panels: { pageFile: string; expanded: boolean }[],
-  _currentPage: string,
-  keepExpanded?: string,
-): { pageFile: string; expanded: boolean }[] {
-  let result = panels.map((panel) => ({ ...panel }));
-
-  let expandedCount = result.filter((panel) => panel.expanded).length;
-  while (expandedCount > MAX_EXPANDED_PANELS) {
-    const toShrink = [...result]
+  while (result.length > maxPanels) {
+    const toRemove = [...result]
       .reverse()
-      .find((panel) => panel.expanded && panel.pageFile !== keepExpanded);
-    if (!toShrink) break;
-
-    result = result.map((panel) =>
-      panel.pageFile === toShrink.pageFile ? { ...panel, expanded: false } : panel,
-    );
-    expandedCount -= 1;
+      .find((panel) => !keep.has(panel.pageFile));
+    if (!toRemove) break;
+    result = result.filter((panel) => panel.pageFile !== toRemove.pageFile);
   }
 
   return result;
+}
+
+/** @deprecated Use enforcePanelLimit */
+export function enforceExpandedLimit(
+  panels: { pageFile: string; expanded: boolean }[],
+  _currentPage: string,
+  keepPageFile?: string,
+  maxPanels = 3,
+): { pageFile: string; expanded: boolean }[] {
+  return enforcePanelLimit(panels, maxPanels, keepPageFile);
 }
 
 export function movePanelToFront(
@@ -340,25 +354,27 @@ export function ensurePanelsForPages(
   panels: { pageFile: string; expanded: boolean }[],
   pageFiles: string[],
   currentPage: string,
+  maxPanels: number,
 ): { pageFile: string; expanded: boolean }[] {
-  let result = [...panels.map((p) => ({ ...p }))];
+  let result = [...panels.map((p) => ({ ...p, expanded: true }))];
   for (const pageFile of pageFiles) {
     if (!result.some((p) => p.pageFile === pageFile)) {
-      result.push({ pageFile, expanded: false });
+      result.push({ pageFile, expanded: true });
     }
   }
-  return applyExpandLimits(result, pageFiles, currentPage);
+  return enforcePanelLimit(result, maxPanels, currentPage);
 }
 
 export function buildPanelsForPages(
   orderedPages: string[],
   currentPage: string,
+  maxPanels: number,
 ): { pageFile: string; expanded: boolean }[] {
   const panels = orderedPages.map((pageFile) => ({
     pageFile,
-    expanded: false,
+    expanded: true,
   }));
-  return applyExpandLimits(panels, orderedPages, currentPage);
+  return enforcePanelLimit(panels, maxPanels, currentPage);
 }
 
 /** Keep the main page at its current panel index when possible; fill other slots from selection order. */
@@ -366,9 +382,9 @@ export function buildPanelsPreservingMainPosition(
   existingPanels: { pageFile: string; expanded: boolean }[],
   orderedPages: string[],
   currentPage: string,
+  maxPanels: number,
 ): { pageFile: string; expanded: boolean }[] {
   const otherPages = orderedPages.filter((p) => p !== currentPage);
-  const existingMap = new Map(existingPanels.map((p) => [p.pageFile, p]));
 
   const mainIndex = existingPanels.findIndex((p) => p.pageFile === currentPage);
   const resolvedMainIndex =
@@ -400,45 +416,12 @@ export function buildPanelsPreservingMainPosition(
     pageOrder.push(otherPages[otherIdx++]);
   }
 
-  const panels = pageOrder.map((pageFile) => {
-    const existing = existingMap.get(pageFile);
-    if (existing) {
-      return { pageFile, expanded: existing.expanded };
-    }
-    return { pageFile, expanded: false };
-  });
+  const panels = pageOrder.map((pageFile) => ({
+    pageFile,
+    expanded: true,
+  }));
 
-  return enforceExpandedLimit(panels, currentPage);
-}
-
-export function shrinkFarthestExpanded(
-  panels: { pageFile: string; expanded: boolean }[],
-  _currentPage: string,
-  expandingPage: string,
-): { pageFile: string; expanded: boolean }[] {
-  const expandedCount = panels.filter((p) => p.expanded).length;
-
-  if (expandedCount < MAX_EXPANDED_PANELS) {
-    return panels.map((p) =>
-      p.pageFile === expandingPage ? { ...p, expanded: true } : p,
-    );
-  }
-
-  const toShrink = [...panels]
-    .reverse()
-    .find((p) => p.expanded && p.pageFile !== expandingPage);
-
-  if (!toShrink) {
-    return panels.map((p) =>
-      p.pageFile === expandingPage ? { ...p, expanded: true } : p,
-    );
-  }
-
-  return panels.map((p) => {
-    if (p.pageFile === expandingPage) return { ...p, expanded: true };
-    if (p.pageFile === toShrink.pageFile) return { ...p, expanded: false };
-    return p;
-  });
+  return enforcePanelLimit(panels, maxPanels, currentPage);
 }
 
 export { getGroupIndicesForComponent };

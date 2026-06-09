@@ -3,6 +3,7 @@ import {
   getLinkedComponentIds,
   getGroupIndicesForComponent,
 } from './index';
+import { getDisplayGroups } from './mdVirtualGroups';
 
 export const MAX_SELECTION_HISTORY = 20;
 
@@ -44,8 +45,9 @@ export function buildSelectionStateForComponent(
   if (!state.project) return null;
 
   const { index } = state.project;
-  const matchingGroupIndices = getGroupIndicesForComponent(index.groups, componentId);
-  const { links: relatedIds } = getLinkedComponentIds(componentId, index.groups);
+  const displayGroups = getDisplayGroups(index);
+  const matchingGroupIndices = getGroupIndicesForComponent(displayGroups, componentId);
+  const { links: relatedIds } = getLinkedComponentIds(componentId, displayGroups);
 
   return {
     currentPage: pageFile,
