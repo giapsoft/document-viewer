@@ -36,7 +36,7 @@ Remote documents are stored as separate files under `{docId}/` (`relations.json`
 1. **New document** — in-memory draft with one starter page. Use **Export** to link a local folder or publish to remote storage.
 2. **Select folder** — Chrome/Edge folder picker; loads a local doc-tree and enables auto-save to disk.
 3. **Saved documents** — list on the welcome screen when Supabase is configured; click to open.
-4. **Deep link** — friendly path `/LinkId` (letters and numbers), or legacy `?doc=DOCUMENT_ID`.
+4. **Deep link** — `?id=DOCUMENT_ID` (e.g. `https://giapsoft.github.io/document-viewer/?id=UserStories`).
 
 ### Edit and save
 

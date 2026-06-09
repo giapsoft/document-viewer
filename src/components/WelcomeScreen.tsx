@@ -277,7 +277,7 @@ export function WelcomeScreen({
             )}
             <p className="welcome-hint">
               New documents stay in memory until you <strong>Export</strong> to a local folder or
-              remote storage. Deep link: <code>?doc=DOCUMENT_ID</code> (also <code>?page=</code>).
+              remote storage. Deep link: <code>?id=DOCUMENT_ID</code>.
             </p>
           </footer>
         </main>

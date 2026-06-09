@@ -121,7 +121,7 @@ Per-user read tracking uses `{username}.reads.json` (local folder) or remote sto
 | **Draft** (no folder, no remote) | Stays in memory until **Export**. |
 | **Local folder** | Auto-saves to disk every **3 seconds** after changes. |
 | **Remote (Supabase)** | Auto-saves every **3 seconds** (paused while the full-screen editor is open). Only changed files upload. |
-| **Export dialog** | Choose local folder or remote; set title; copy share link (`?doc=ID`). |
+| **Export dialog** | Choose local folder or remote; set title; copy share link (`?id=ID`). |
 
 **Reload** re-reads from disk (local) or re-fetches from the server (remote). If someone else saved a newer remote version, a banner offers **Reload** or **Overwrite**.
 

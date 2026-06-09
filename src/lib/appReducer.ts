@@ -65,7 +65,7 @@ import {
   getStoredMaxOpenPages,
   persistMaxOpenPages,
 } from './maxOpenPagesStorage';
-import { enforcePanelLimit, orderPagesForSelection } from './index';
+import { enforcePanelLimit } from './index';
 import { bumpComponentVersion, getComponentVersion } from './componentVersion';
 import {
   isComponentRead,
@@ -339,20 +339,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ? pickComponentAnchorCommentId(state.project.relations.comments ?? [], componentId)
         : null;
 
-      const pagesToShow = orderPagesForSelection(
-        pageFile,
-        applied.selection.relatedIds,
-        state.project.index,
-      );
-      let panels = state.panels;
-      for (const openPageFile of pagesToShow) {
-        panels = addPageToPanels(panels, openPageFile, state.maxOpenPages, pageFile);
-      }
-
       return {
         ...state,
         ...applied,
-        panels,
         selectionHistory: history,
         selectionHistoryIndex: index,
         scrollToComponent: action.scrollIntoView

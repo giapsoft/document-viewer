@@ -268,7 +268,7 @@ export function SaveDestinationDialog({
                         </p>
                       ) : null}
                       <p className="save-destination-option-hint">
-                        Required for first publish. Letters and numbers only (e.g. /UserStories).
+                        Required for first publish. Letters and numbers only (e.g. ?id=UserStories).
                       </p>
                       {shareUrl ? (
                         <div className="save-destination-link-field">
