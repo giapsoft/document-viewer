@@ -6,6 +6,7 @@ import { setStoredCommentUsername } from '../lib/commentSession';
 import { queueFocusComponentBlock } from '../lib/keyboard';
 import {
   normalizeReadUsername,
+  readStateMapsEqual,
   toggleAllComponentsReadOnPage,
 } from '../lib/readState';
 import { toggleAllForeignCommentsRead } from '../lib/commentReadState';
@@ -247,8 +248,8 @@ export function useAppStore() {
     const nextComponentReadState = appStateRef.current.componentReadState;
     const nextCommentReadState = appStateRef.current.commentReadState;
     if (
-      nextComponentReadState !== prevComponentReadState ||
-      nextCommentReadState !== prevCommentReadState
+      !readStateMapsEqual(nextComponentReadState, prevComponentReadState) ||
+      !readStateMapsEqual(nextCommentReadState, prevCommentReadState)
     ) {
       const project = projectRef.current;
       const username = appStateRef.current.commentUsername;

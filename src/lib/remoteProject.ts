@@ -619,7 +619,7 @@ async function uploadStorageFile(path: string, body: Blob | string): Promise<voi
     upsert: true,
     contentType: payload.type || undefined,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(`Storage upload failed (${path}): ${error.message}`);
 }
 
 function isRemoteImageStoragePath(path: string, docId: string): boolean {

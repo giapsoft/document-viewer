@@ -125,7 +125,7 @@ export async function uploadRemoteReadState(
     upsert: true,
     contentType: 'application/json',
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(`Storage upload failed (${path}): ${error.message}`);
 }
 
 export async function loadReadStateForUser(

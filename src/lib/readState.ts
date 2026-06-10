@@ -5,6 +5,20 @@ export const READ_USERNAME_PATTERN = /^[A-Za-z0-9]{1,20}$/;
 
 export type ComponentReadState = Record<string, number>;
 
+/** Shallow value equality — avoids false changes when reducers assign fresh `{}` objects. */
+export function readStateMapsEqual(
+  a: ComponentReadState,
+  b: ComponentReadState,
+): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) {
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
+
 export function normalizeReadUsername(input: string): string | null {
   const trimmed = input.trim();
   if (!READ_USERNAME_PATTERN.test(trimmed)) return null;
