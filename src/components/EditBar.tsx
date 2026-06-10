@@ -25,6 +25,7 @@ function EditBarIconButton({
   onClick,
   disabled,
   danger,
+  className,
   children,
 }: {
   title: string;
@@ -32,12 +33,13 @@ function EditBarIconButton({
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
   return (
     <button
       type="button"
-      className={`edit-bar-tool-btn${danger ? ' edit-bar-tool-btn-danger' : ''}`}
+      className={`edit-bar-tool-btn${danger ? ' edit-bar-tool-btn-danger' : ''}${className ? ` ${className}` : ''}`}
       onClick={onClick}
       disabled={disabled}
       title={`${title} (${shortcut})`}
@@ -319,7 +321,7 @@ function EditBarForm({
           </div>
 
           <div className="edit-bar-properties">
-            <label className="edit-bar-field">
+            <label className="edit-bar-field edit-bar-field-type">
               <span className="edit-bar-field-label">Type</span>
               <select
                 className="edit-bar-select edit-bar-select-type"
@@ -358,7 +360,7 @@ function EditBarForm({
             </label>
 
             {component.type === 'img' && (
-              <label className="edit-bar-field edit-bar-field-grow">
+              <label className="edit-bar-field edit-bar-field-grow edit-bar-field-img">
                 <span className="edit-bar-field-label">Image</span>
                 <button
                   type="button"
@@ -372,7 +374,7 @@ function EditBarForm({
             )}
 
             {isAction && (
-              <label className="edit-bar-field">
+              <label className="edit-bar-field edit-bar-field-action">
                 <span className="edit-bar-field-label">Action</span>
                 <button
                   type="button"
@@ -391,11 +393,12 @@ function EditBarForm({
             <EditBarIconButton title="Full screen editor" shortcut="E" onClick={openFullscreen}>
               ⛶
             </EditBarIconButton>
-            <span className="edit-bar-actions-divider" aria-hidden />
+            <span className="edit-bar-actions-divider edit-bar-actions-secondary" aria-hidden />
             <EditBarIconButton
               title="Insert above"
               shortcut="Alt+↑"
               onClick={() => onInsertAbove(pageFile, component.id)}
+              className="edit-bar-actions-secondary"
             >
               ↑
             </EditBarIconButton>
@@ -403,16 +406,18 @@ function EditBarForm({
               title="Insert below"
               shortcut="Alt+↓"
               onClick={() => onInsertBelow(pageFile, component.id)}
+              className="edit-bar-actions-secondary"
             >
               ↓
             </EditBarIconButton>
-            <span className="edit-bar-actions-divider" aria-hidden />
+            <span className="edit-bar-actions-divider edit-bar-actions-secondary" aria-hidden />
             <EditBarIconButton
               title="Delete component"
               shortcut="Del"
               onClick={() => setConfirmDelete(true)}
               disabled={!canDelete}
               danger
+              className="edit-bar-actions-secondary"
             >
               ×
             </EditBarIconButton>

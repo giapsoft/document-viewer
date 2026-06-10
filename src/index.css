@@ -3595,30 +3595,212 @@ code {
 @media (max-width: 1100px) {
   .edit-bar-toolbar {
     flex-wrap: wrap;
-    align-items: stretch;
+    row-gap: 0.4rem;
+    align-items: center;
   }
 
   .edit-bar-identity {
-    flex: 1 1 100%;
+    flex: 1 1 12rem;
     max-width: none;
   }
 
   .edit-bar-properties {
     flex: 1 1 auto;
     flex-wrap: wrap;
+    min-width: 0;
   }
 
   .edit-bar-actions {
-    margin-left: 0;
+    margin-left: auto;
     flex: 0 0 auto;
-    justify-content: flex-end;
+  }
+}
+
+/* Compact edit bar — minimal footprint; full controls live in fullscreen editor (E) */
+@media (max-width: 720px) {
+  .edit-bar {
+    padding: 0.28rem 0.45rem;
   }
 
-  .edit-bar-select-type,
-  .edit-bar-select-status,
-  .edit-bar-field-grow .edit-bar-aux-btn {
-    width: 100%;
+  .edit-bar-inner {
+    gap: 0.35rem;
+  }
+
+  .edit-bar-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: 'identity properties actions';
+    align-items: center;
+    column-gap: 0.35rem;
+    row-gap: 0;
+    flex-wrap: nowrap;
+    padding-left: 0.35rem;
+  }
+
+  .edit-bar-identity {
+    grid-area: identity;
+    flex: none;
     max-width: none;
+    min-width: 0;
+  }
+
+  .edit-bar-identity-text {
+    min-width: 0;
+  }
+
+  .edit-bar-identity-label,
+  .edit-bar-field-label,
+  .edit-bar-key-hint,
+  .edit-bar-tool-key {
+    display: none;
+  }
+
+  .edit-bar-component-id {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+    font-size: 0.72rem;
+  }
+
+  .edit-bar-properties {
+    grid-area: properties;
+    flex: none;
+    flex-wrap: nowrap;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+
+  .edit-bar-field {
+    gap: 0;
+  }
+
+  .edit-bar-select-type {
+    width: 4.75rem;
+    font-size: 0.72rem;
+    height: 1.65rem;
+    padding-right: 1.35rem;
+  }
+
+  .edit-bar-select-status {
+    width: 4.5rem;
+    font-size: 0.72rem;
+    height: 1.65rem;
+    padding-right: 1.35rem;
+  }
+
+  .edit-bar-field-grow .edit-bar-aux-btn {
+    max-width: 6.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    height: 1.65rem;
+    font-size: 0.72rem;
+  }
+
+  .edit-bar-field-action .edit-bar-aux-btn {
+    height: 1.65rem;
+    padding: 0 0.45rem;
+    font-size: 0.72rem;
+  }
+
+  .edit-bar-field-action .edit-bar-aux-btn span {
+    display: none;
+  }
+
+  .edit-bar-field-action .edit-bar-aux-btn::before {
+    content: 'Edit';
+  }
+
+  .edit-bar-actions {
+    grid-area: actions;
+    margin-left: 0;
+    padding: 0.08rem;
+    border-radius: 6px;
+  }
+
+  .edit-bar-actions-secondary {
+    display: none;
+  }
+
+  .edit-bar-tool-btn {
+    height: 1.65rem;
+    padding: 0 0.38rem;
+  }
+
+  .edit-bar-toggle {
+    width: 1.35rem;
+    height: 1.35rem;
+    font-size: 0.58rem;
+  }
+
+  .edit-bar-body-pane {
+    padding: 0.4rem;
+  }
+
+  .edit-bar-textarea {
+    min-height: 3.5rem;
+    font-size: 0.84rem;
+  }
+
+  .edit-bar-textarea-md {
+    min-height: 7rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .edit-bar-list-badge {
+    display: none;
+  }
+
+  .edit-bar-field-type {
+    display: none;
+  }
+
+  .edit-bar-field-row {
+    gap: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .content-editor-header {
+    flex-wrap: wrap;
+    padding: 0.55rem 0.65rem;
+    gap: 0.45rem;
+  }
+
+  .content-editor-header-start {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .content-editor-title {
+    font-size: 0.95rem;
+  }
+
+  .content-editor-main {
+    flex-direction: column;
+  }
+
+  .content-editor-sidebar {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.65rem 1rem;
+    padding: 0.55rem 0.65rem;
+    border-right: none;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .content-editor-option-group {
+    flex: 1 1 8rem;
+    min-width: 0;
+  }
+
+  .content-editor-body-split {
+    flex-direction: column;
   }
 }
 
