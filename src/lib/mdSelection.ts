@@ -421,6 +421,58 @@ function wrapWithOffset(text: string, offset: number | undefined): string {
   return `<span data-md-offset-start="${offset}">${escaped}</span>`;
 }
 
+/** Map marked token.raw (LF) onto source text that may use CRLF; returns source indices. */
+function findTokenRawBoundsInSource(
+  source: string,
+  raw: string,
+  from: number,
+  limit: number,
+): { start: number; end: number } | null {
+  for (let i = from; i <= limit - raw.length; i++) {
+    if (source.startsWith(raw, i)) {
+      return { start: i, end: i + raw.length };
+    }
+  }
+
+  const exact = source.indexOf(raw, from);
+  if (exact >= 0 && exact + raw.length <= limit) {
+    return { start: exact, end: exact + raw.length };
+  }
+
+  // marked normalizes token.raw to \n; Windows-saved markdown often uses \r\n.
+  for (let si = from; si < limit; si++) {
+    let ri = 0;
+    let matched = si;
+    while (ri < raw.length && matched < limit) {
+      const rc = raw[ri];
+      if (rc === '\n') {
+        if (source[matched] === '\r' && source[matched + 1] === '\n') {
+          matched += 2;
+          ri++;
+          continue;
+        }
+        if (source[matched] === '\n') {
+          matched++;
+          ri++;
+          continue;
+        }
+        break;
+      }
+      if (source[matched] === rc) {
+        matched++;
+        ri++;
+        continue;
+      }
+      break;
+    }
+    if (ri === raw.length) {
+      return { start: si, end: matched };
+    }
+  }
+
+  return null;
+}
+
 function annotateTokens(
   source: string,
   tokens: Token[],
@@ -444,20 +496,13 @@ function annotateToken(
   if (!raw) return from;
 
   const limit = max ?? source.length;
-  let idx = -1;
-  for (let i = from; i <= limit - raw.length; i++) {
-    if (source.startsWith(raw, i)) {
-      idx = i;
-      break;
-    }
-  }
-  if (idx < 0) {
-    idx = source.indexOf(raw, from);
-    if (idx < 0 || idx + raw.length > limit) return from;
-  }
+  const bounds = findTokenRawBoundsInSource(source, raw, from, limit);
+  if (!bounds) return from;
+
+  const idx = bounds.start;
+  const end = bounds.end;
 
   (token as AnnotatedToken).mdOffset = idx;
-  const end = idx + raw.length;
 
   if (token.type === 'table') {
     const table = token as Tokens.Table;
