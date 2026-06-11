@@ -6,7 +6,7 @@ import { listRemoteDocuments, type RemoteDocumentMeta } from '../lib/remoteProje
 import { getDocIdFromUrl } from '../lib/docUrl';
 import { getHelpRequestFromUrl, HELP_ABOUT_PAGE, HELP_GUIDE_PAGE } from '../lib/helpUrl';
 
-const WELCOME_TUTORIAL_VIDEO_ID = 'qgN7L5gL2n4';
+const WELCOME_TUTORIAL_VIDEO_ID = '7pGrLKt3kuw';
 
 interface WelcomeScreenProps {
   onLoaded: (project: import('../types').LoadedProject) => void;
