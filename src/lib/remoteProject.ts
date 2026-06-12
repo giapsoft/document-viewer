@@ -345,12 +345,33 @@ export async function fetchRemoteRelations(docId: string): Promise<RelationsFile
   return normalizeRelations({ ...meta, groups, comments });
 }
 
+function normalizeRemoteDocumentListRow(
+  entry: RemoteDocumentMeta & { password_protected?: boolean | null },
+): RemoteDocumentMeta {
+  return {
+    id: entry.id,
+    title: entry.title,
+    updated_at: entry.updated_at,
+    password_protected: Boolean(entry.password_protected),
+  };
+}
+
+/** Published remote docs shown on the welcome screen (excludes password-protected). */
+function publicSavedRemoteDocuments(
+  entries: Array<RemoteDocumentMeta & { password_protected?: boolean | null }>,
+): RemoteDocumentMeta[] {
+  return entries
+    .map(normalizeRemoteDocumentListRow)
+    .filter((entry) => !entry.password_protected);
+}
+
 export async function listRemoteDocuments(): Promise<RemoteDocumentMeta[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('documents')
     .select('id, title, updated_at, password_protected')
     .eq('is_published', true)
+    .eq('password_protected', false)
     .order('updated_at', { ascending: false });
 
   if (error) {
@@ -373,14 +394,9 @@ export async function listRemoteDocuments(): Promise<RemoteDocumentMeta[]> {
         }
         throw new Error(fallback.error.message);
       }
-      return (
-        (fallback.data ?? []) as Array<RemoteDocumentMeta & { password_protected?: boolean | null }>
-      ).map((entry) => ({
-        id: entry.id,
-        title: entry.title,
-        updated_at: entry.updated_at,
-        password_protected: Boolean(entry.password_protected),
-      }));
+      return publicSavedRemoteDocuments(
+        (fallback.data ?? []) as Array<RemoteDocumentMeta & { password_protected?: boolean | null }>,
+      );
     }
     if (error.message.includes('password_protected')) {
       const fallback = await supabase
@@ -409,13 +425,8 @@ export async function listRemoteDocuments(): Promise<RemoteDocumentMeta[]> {
     }
     throw new Error(error.message);
   }
-  return ((data ?? []) as Array<RemoteDocumentMeta & { password_protected?: boolean | null }>).map(
-    (entry) => ({
-      id: entry.id,
-      title: entry.title,
-      updated_at: entry.updated_at,
-      password_protected: Boolean(entry.password_protected),
-    }),
+  return publicSavedRemoteDocuments(
+    (data ?? []) as Array<RemoteDocumentMeta & { password_protected?: boolean | null }>,
   );
 }
 

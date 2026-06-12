@@ -147,6 +147,8 @@ export interface LoadedProject {
 export interface PanelState {
   pageFile: string;
   expanded: boolean;
+  /** Custom width in px when set by the user (drag resize). */
+  widthPx?: number;
 }
 
 export interface SelectionState {
@@ -232,6 +234,13 @@ export type AppAction =
     }
   | { type: 'CLEAR_SELECTION' }
   | { type: 'SET_MAX_OPEN_PAGES'; maxOpenPages: number }
+  | {
+      type: 'RESIZE_PANEL_SPLIT';
+      leftPageFile: string;
+      rightPageFile: string;
+      leftWidthPx: number;
+      rightWidthPx: number;
+    }
   | { type: 'REORDER_PANELS'; orderedPageFiles: string[] }
   | { type: 'REORDER_PAGES'; orderedPageFiles: string[] }
   | {

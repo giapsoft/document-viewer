@@ -18,7 +18,14 @@ import { GroupMembershipDialog } from './GroupMembershipDialog';
 import { activeComments, canOwnComment, resolveCommentAnchorHighlightId } from '../lib/comments';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { isSaveInProgress } from '../lib/saveProject';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PanelResizeHandle } from './PanelResizeHandle';
+import { usePagePanelResize } from '../hooks/usePagePanelResize';
+import {
+  loadPanelWidths,
+  resolvePanelWidthProjectKey,
+} from '../lib/panelWidthStorage';
+import type { PanelState } from '../types';
 import { pageHasHighlightedComponents, getMainGroupPageFiles } from '../lib/selectionHighlight';
 import { countUnreadComponentsOnPage } from '../lib/readState';
 import { getAdjacentComponentId } from '../lib/componentNavigation';
@@ -50,6 +57,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     jumpToComponent,
     clearSelection,
     setMaxOpenPages,
+    resizePanelSplit,
     updateComponent,
     updateMdContent,
     insertComponentAbove,
@@ -101,6 +109,28 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   } = store;
 
   const project = state.project!;
+  const panelSlotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const panelWidthProjectKey = useMemo(
+    () => resolvePanelWidthProjectKey(project),
+    [project],
+  );
+  const storedPanelWidths = useMemo(
+    () => loadPanelWidths(panelWidthProjectKey),
+    [panelWidthProjectKey, state.panels],
+  );
+  const { startResize } = usePagePanelResize(panelSlotRefs, resizePanelSplit);
+
+  const resolvePanelWidth = useCallback(
+    (panel: PanelState): number | undefined =>
+      panel.widthPx ?? storedPanelWidths[panel.pageFile],
+    [storedPanelWidths],
+  );
+
+  const registerPanelSlot = useCallback((pageFile: string, el: HTMLDivElement | null) => {
+    if (el) panelSlotRefs.current.set(pageFile, el);
+    else panelSlotRefs.current.delete(pageFile);
+  }, []);
+
   const readShortcutsEnabled = Boolean(state.commentUsername);
   const [groupPanelOpen, setGroupPanelOpen] = useState(false);
   const [groupPanelActiveIndex, setGroupPanelActiveIndex] = useState<number | null>(null);
@@ -655,44 +685,69 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                   : 'Select a page from the sidebar to get started.'}
               </div>
             )}
-            {state.panels.map((panel) => (
-              <PagePanel
-                key={panel.pageFile}
-                pageFile={panel.pageFile}
-                project={project}
-                isCurrent={state.currentPage === panel.pageFile}
-                selection={state.selection}
-                linkMode={state.linkMode}
-                linkGroupMembers={linkGroupMembers}
-                pendingImageNames={pendingRemoteImages}
-                pendingMdComponentIds={pendingRemoteMd}
-                onClose={() => openPage(panel.pageFile)}
-                onSelect={handleComponentClick}
-                onClearSelection={clearSelection}
-                scrollToComponentId={state.scrollToComponent?.componentId ?? null}
-                scrollNonce={state.scrollToComponent?.nonce ?? 0}
-                scrollColdOpen={state.scrollToComponent?.coldOpen ?? false}
-                scrollImmediate={state.scrollToComponent?.immediate ?? false}
-                scrollSmooth={state.scrollToComponent?.smooth ?? false}
-                flashedComponentId={state.flashedComponent?.componentId ?? null}
-                flashNonce={state.flashedComponent?.nonce ?? 0}
-                selectionScrollNonce={state.selectionScrollNonce}
-                commentLinkMode={commentLinkMode}
-                commentLinkPreviewAnchor={commentLinkPreviewAnchor}
-                commentAnchorHighlightId={commentAnchorHighlightId}
-                outstandingCommentId={state.outstandingCommentId}
-                onCommentLinkComponent={handleCommentLinkComponent}
-                onCommentLinkMdRange={handleCommentLinkMdRange}
-                onCommentMarkClick={handleCommentMarkClick}
-                onNavigateToComponent={jumpToComponent}
-                commentUsername={state.commentUsername}
-                componentReadState={state.componentReadState}
-                onToggleComponentRead={toggleComponentRead}
-                onTogglePageReadAll={togglePageReadAll}
-                onOpenGroupDialog={toggleGroupPanel}
-                linkedListPanelOpen={groupPanelOpen}
-              />
-            ))}
+            {state.panels.map((panel, panelIndex) => {
+              const widthPx = resolvePanelWidth(panel);
+              const nextPanel = state.panels[panelIndex + 1];
+              const pageMeta = project.pages.find((p) => p.fileName === panel.pageFile);
+              const nextPageMeta = nextPanel
+                ? project.pages.find((p) => p.fileName === nextPanel.pageFile)
+                : null;
+              return (
+                <Fragment key={panel.pageFile}>
+                  <div
+                    ref={(el) => registerPanelSlot(panel.pageFile, el)}
+                    className={`page-panel-slot${widthPx != null ? ' page-panel-slot-sized' : ''}`}
+                    style={widthPx != null ? { width: widthPx } : undefined}
+                    data-page={panel.pageFile}
+                  >
+                    <PagePanel
+                      pageFile={panel.pageFile}
+                      project={project}
+                      isCurrent={state.currentPage === panel.pageFile}
+                      selection={state.selection}
+                      linkMode={state.linkMode}
+                      linkGroupMembers={linkGroupMembers}
+                      pendingImageNames={pendingRemoteImages}
+                      pendingMdComponentIds={pendingRemoteMd}
+                      onClose={() => openPage(panel.pageFile)}
+                      onSelect={handleComponentClick}
+                      onClearSelection={clearSelection}
+                      scrollToComponentId={state.scrollToComponent?.componentId ?? null}
+                      scrollNonce={state.scrollToComponent?.nonce ?? 0}
+                      scrollColdOpen={state.scrollToComponent?.coldOpen ?? false}
+                      scrollImmediate={state.scrollToComponent?.immediate ?? false}
+                      scrollSmooth={state.scrollToComponent?.smooth ?? false}
+                      flashedComponentId={state.flashedComponent?.componentId ?? null}
+                      flashNonce={state.flashedComponent?.nonce ?? 0}
+                      selectionScrollNonce={state.selectionScrollNonce}
+                      commentLinkMode={commentLinkMode}
+                      commentLinkPreviewAnchor={commentLinkPreviewAnchor}
+                      commentAnchorHighlightId={commentAnchorHighlightId}
+                      outstandingCommentId={state.outstandingCommentId}
+                      onCommentLinkComponent={handleCommentLinkComponent}
+                      onCommentLinkMdRange={handleCommentLinkMdRange}
+                      onCommentMarkClick={handleCommentMarkClick}
+                      onNavigateToComponent={jumpToComponent}
+                      commentUsername={state.commentUsername}
+                      componentReadState={state.componentReadState}
+                      onToggleComponentRead={toggleComponentRead}
+                      onTogglePageReadAll={togglePageReadAll}
+                      onOpenGroupDialog={toggleGroupPanel}
+                      linkedListPanelOpen={groupPanelOpen}
+                    />
+                  </div>
+                  {nextPanel ? (
+                    <PanelResizeHandle
+                      leftPageLabel={pageMeta?.pageName ?? panel.pageFile}
+                      rightPageLabel={nextPageMeta?.pageName ?? nextPanel.pageFile}
+                      onPointerDown={(event) =>
+                        startResize(event, panel.pageFile, nextPanel.pageFile)
+                      }
+                    />
+                  ) : null}
+                </Fragment>
+              );
+            })}
             <CommentPanel
               expanded={state.commentPanelExpanded}
               project={project}

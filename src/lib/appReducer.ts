@@ -65,6 +65,7 @@ import {
   getStoredMaxOpenPages,
   persistMaxOpenPages,
 } from './maxOpenPagesStorage';
+import { MIN_PAGE_PANEL_WIDTH } from './panelWidthStorage';
 import { enforcePanelLimit } from './index';
 import { bumpComponentVersion, getComponentVersion } from './componentVersion';
 import {
@@ -447,6 +448,21 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         currentPage = panels[0]?.pageFile ?? null;
       }
       return { ...state, maxOpenPages, panels, currentPage };
+    }
+
+    case 'RESIZE_PANEL_SPLIT': {
+      const leftW = Math.max(MIN_PAGE_PANEL_WIDTH, Math.round(action.leftWidthPx));
+      const rightW = Math.max(MIN_PAGE_PANEL_WIDTH, Math.round(action.rightWidthPx));
+      const panels = state.panels.map((panel) => {
+        if (panel.pageFile === action.leftPageFile) {
+          return { ...panel, widthPx: leftW };
+        }
+        if (panel.pageFile === action.rightPageFile) {
+          return { ...panel, widthPx: rightW };
+        }
+        return panel;
+      });
+      return { ...state, panels };
     }
 
     case 'REORDER_PANELS':

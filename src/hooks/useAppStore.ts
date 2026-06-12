@@ -23,6 +23,11 @@ import {
 import { findComponent } from '../lib/projectMutations';
 import { findUnreadComponentGlobally } from '../lib/componentNavigation';
 import { getStoredPageOrder } from '../lib/pageOrder';
+import {
+  loadPanelWidths,
+  persistPanelWidths,
+  resolvePanelWidthProjectKey,
+} from '../lib/panelWidthStorage';
 import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus, ExportProtection } from '../lib/saveProject';
 import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave, cancelAutoSave, setSaveStatusListener, isSaveInProgress } from '../lib/saveProject';
@@ -565,6 +570,32 @@ export function useAppStore() {
   const setMaxOpenPages = useCallback(
     (maxOpenPages: number) => {
       dispatch({ type: 'SET_MAX_OPEN_PAGES', maxOpenPages });
+    },
+    [dispatch],
+  );
+
+  const resizePanelSplit = useCallback(
+    (
+      leftPageFile: string,
+      rightPageFile: string,
+      leftWidthPx: number,
+      rightWidthPx: number,
+    ) => {
+      dispatch({
+        type: 'RESIZE_PANEL_SPLIT',
+        leftPageFile,
+        rightPageFile,
+        leftWidthPx,
+        rightWidthPx,
+      });
+      const project = projectRef.current;
+      if (!project) return;
+      const key = resolvePanelWidthProjectKey(project);
+      persistPanelWidths(key, {
+        ...loadPanelWidths(key),
+        [leftPageFile]: leftWidthPx,
+        [rightPageFile]: rightWidthPx,
+      });
     },
     [dispatch],
   );
@@ -1729,6 +1760,7 @@ export function useAppStore() {
     jumpToComponent,
     clearSelection,
     setMaxOpenPages,
+    resizePanelSplit,
     updateComponent,
     updateMdContent,
     insertComponentAbove,

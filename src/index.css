@@ -1689,6 +1689,73 @@ code {
   align-items: stretch;
 }
 
+.page-panel-slot {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.page-panel-slot-sized {
+  flex: 0 0 auto;
+  min-width: 200px;
+}
+
+.page-panel-slot > .page-panel.expanded {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+.page-panel-resize-handle {
+  flex: 0 0 6px;
+  width: 6px;
+  align-self: stretch;
+  margin: 0 -1px;
+  cursor: col-resize;
+  touch-action: none;
+  position: relative;
+  z-index: 3;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+.page-panel-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: #dee2e6;
+  transition: background 0.12s ease, width 0.12s ease;
+}
+
+.page-panel-resize-handle:hover::before,
+.page-panel-resize-handle:focus-visible::before {
+  width: 3px;
+  background: #86b7fe;
+}
+
+body.page-panel-resize-active {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+body.page-panel-resize-active .page-panel-slot {
+  transition: none;
+}
+
+body.page-panel-resize-active .page-panel {
+  transition: none;
+}
+
 .empty-panels {
   flex: 1;
   display: flex;

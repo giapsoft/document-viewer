@@ -243,15 +243,7 @@ export function WelcomeScreen({
                           disabled={loading}
                           onClick={() => void handleOpenRemote(doc.id)}
                         >
-                          <span className="welcome-doc-title">
-                            {doc.title}
-                            {doc.password_protected ? (
-                              <span className="welcome-doc-protected" title="Password protected">
-                                {' '}
-                                🔒
-                              </span>
-                            ) : null}
-                          </span>
+                          <span className="welcome-doc-title">{doc.title}</span>
                           <span className="welcome-doc-meta">{formatUpdatedAt(doc.updated_at)}</span>
                         </button>
                       </li>
