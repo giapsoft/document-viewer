@@ -21,10 +21,12 @@ import { isSaveInProgress } from '../lib/saveProject';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelResizeHandle } from './PanelResizeHandle';
 import { usePagePanelResize } from '../hooks/usePagePanelResize';
+import { usePagePanelsTrackRef } from '../hooks/usePagePanelsTrackRef';
 import {
   loadPanelWidths,
   resolvePanelWidthProjectKey,
 } from '../lib/panelWidthStorage';
+import { setPanelSlotElement } from '../lib/panelSlotRegistry';
 import type { PanelState } from '../types';
 import { pageHasHighlightedComponents, getMainGroupPageFiles } from '../lib/selectionHighlight';
 import { countUnreadComponentsOnPage } from '../lib/readState';
@@ -126,7 +128,10 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     [storedPanelWidths],
   );
 
+  const panelTrackRef = usePagePanelsTrackRef();
+
   const registerPanelSlot = useCallback((pageFile: string, el: HTMLDivElement | null) => {
+    setPanelSlotElement(pageFile, el);
     if (el) panelSlotRefs.current.set(pageFile, el);
     else panelSlotRefs.current.delete(pageFile);
   }, []);
@@ -678,6 +683,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
           </div>
 
           <div className="panel-row">
+            <div className="page-panels-track" ref={panelTrackRef}>
             {state.panels.length === 0 && (
               <div className="empty-panels">
                 {project.pages.length === 0
@@ -686,8 +692,11 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               </div>
             )}
             {state.panels.map((panel, panelIndex) => {
-              const widthPx = resolvePanelWidth(panel);
+              const isFlexSlot = panelIndex === state.panels.length - 1;
+              const widthPx = isFlexSlot ? undefined : resolvePanelWidth(panel);
               const nextPanel = state.panels[panelIndex + 1];
+              const nextIsFlexSlot =
+                nextPanel != null && panelIndex + 1 === state.panels.length - 1;
               const pageMeta = project.pages.find((p) => p.fileName === panel.pageFile);
               const nextPageMeta = nextPanel
                 ? project.pages.find((p) => p.fileName === nextPanel.pageFile)
@@ -696,8 +705,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                 <Fragment key={panel.pageFile}>
                   <div
                     ref={(el) => registerPanelSlot(panel.pageFile, el)}
-                    className={`page-panel-slot${widthPx != null ? ' page-panel-slot-sized' : ''}`}
-                    style={widthPx != null ? { width: widthPx } : undefined}
+                    className={`page-panel-slot${isFlexSlot ? ' page-panel-slot-fill' : ''}${!isFlexSlot && widthPx != null ? ' page-panel-slot-sized' : ''}`}
+                    style={!isFlexSlot && widthPx != null ? { width: widthPx } : undefined}
                     data-page={panel.pageFile}
                   >
                     <PagePanel
@@ -741,13 +750,19 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                       leftPageLabel={pageMeta?.pageName ?? panel.pageFile}
                       rightPageLabel={nextPageMeta?.pageName ?? nextPanel.pageFile}
                       onPointerDown={(event) =>
-                        startResize(event, panel.pageFile, nextPanel.pageFile)
+                        startResize(
+                          event,
+                          panel.pageFile,
+                          nextPanel.pageFile,
+                          nextIsFlexSlot,
+                        )
                       }
                     />
                   ) : null}
                 </Fragment>
               );
             })}
+            </div>
             <CommentPanel
               expanded={state.commentPanelExpanded}
               project={project}

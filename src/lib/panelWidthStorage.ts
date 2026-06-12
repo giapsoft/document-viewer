@@ -4,6 +4,9 @@ const STORAGE_KEY_PREFIX = 'docs-viewer-panel-widths-';
 
 export const MIN_PAGE_PANEL_WIDTH = 200;
 
+/** Must match `.page-panel-resize-handle { width: 6px }` in CSS. */
+export const PANEL_RESIZE_HANDLE_WIDTH = 6;
+
 export function resolvePanelWidthProjectKey(project: LoadedProject): string {
   if (project.remoteDocId) return project.remoteDocId;
   const pageKey = project.pages

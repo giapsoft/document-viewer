@@ -1,6 +1,6 @@
 import { useReducer, useCallback, useRef, useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
-import type { AppAction, CommentAnchor, Component, LoadedProject } from '../types';
+import type { AppAction, CommentAnchor, Component, LoadedProject, PanelState } from '../types';
 import { activeComments, stripCommentTombstones } from '../lib/comments';
 import { setStoredCommentUsername } from '../lib/commentSession';
 import { queueFocusComponentBlock } from '../lib/keyboard';
@@ -28,6 +28,13 @@ import {
   persistPanelWidths,
   resolvePanelWidthProjectKey,
 } from '../lib/panelWidthStorage';
+import {
+  addLinkedPageToPanels,
+  applyOpenPage,
+  ensureFlexLastPanel,
+  preparePanelsForOpen,
+} from '../lib/pagePanels';
+import { measurePanelSlotWidth } from '../lib/panelSlotRegistry';
 import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus, ExportProtection } from '../lib/saveProject';
 import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave, cancelAutoSave, setSaveStatusListener, isSaveInProgress } from '../lib/saveProject';
@@ -524,7 +531,27 @@ export function useAppStore() {
 
   const openPage = useCallback(
     (pageFile: string) => {
-      dispatch({ type: 'OPEN_PAGE', pageFile });
+      const appState = appStateRef.current;
+      const project = projectRef.current;
+      if (!project) {
+        dispatch({ type: 'OPEN_PAGE', pageFile });
+        return;
+      }
+
+      if (appState.panels.some((panel) => panel.pageFile === pageFile)) {
+        const opened = applyOpenPage(appState, pageFile);
+        const panels = ensureFlexLastPanel(opened.panels ?? []);
+        dispatch({ type: 'OPEN_PAGE', pageFile, panels });
+        return;
+      }
+
+      const prevPanels = appState.panels;
+      const projectKey = resolvePanelWidthProjectKey(project);
+      const opened = applyOpenPage(appState, pageFile);
+      const rawPanels = opened.panels ?? prevPanels;
+      const panels = preparePanelsForOpen(prevPanels, rawPanels, projectKey);
+
+      dispatch({ type: 'OPEN_PAGE', pageFile, panels });
     },
     [dispatch],
   );
@@ -554,7 +581,30 @@ export function useAppStore() {
       if (jumpFlashTimerRef.current) {
         window.clearTimeout(jumpFlashTimerRef.current);
       }
-      dispatch({ type: 'JUMP_TO_COMPONENT', componentId, anchorPageFile });
+
+      const appState = appStateRef.current;
+      const project = projectRef.current;
+      let panels: PanelState[] | undefined;
+
+      if (project) {
+        const pageFile = project.index.componentToPage.get(componentId);
+        if (pageFile) {
+          const prevPanels = appState.panels;
+          const projectKey = resolvePanelWidthProjectKey(project);
+          const storedWidths = loadPanelWidths(projectKey);
+          const rawPanels = addLinkedPageToPanels(
+            prevPanels,
+            pageFile,
+            anchorPageFile ?? appState.currentPage,
+            appState.maxOpenPages,
+            storedWidths,
+            measurePanelSlotWidth,
+          );
+          panels = preparePanelsForOpen(prevPanels, rawPanels, projectKey);
+        }
+      }
+
+      dispatch({ type: 'JUMP_TO_COMPONENT', componentId, anchorPageFile, panels });
       jumpFlashTimerRef.current = window.setTimeout(() => {
         dispatch({ type: 'CLEAR_FLASHED_COMPONENT' });
         jumpFlashTimerRef.current = null;
@@ -579,22 +629,40 @@ export function useAppStore() {
       leftPageFile: string,
       rightPageFile: string,
       leftWidthPx: number,
-      rightWidthPx: number,
+      rightWidthPx: number | null,
+      rightIsFlex: boolean,
     ) => {
       dispatch({
         type: 'RESIZE_PANEL_SPLIT',
         leftPageFile,
         rightPageFile,
         leftWidthPx,
-        rightWidthPx,
+        rightWidthPx: rightWidthPx ?? undefined,
+        rightIsFlex,
       });
+      const project = projectRef.current;
+      if (!project) return;
+      const key = resolvePanelWidthProjectKey(project);
+      const stored = { ...loadPanelWidths(key), [leftPageFile]: leftWidthPx };
+      if (rightIsFlex) {
+        delete stored[rightPageFile];
+      } else if (rightWidthPx != null) {
+        stored[rightPageFile] = rightWidthPx;
+      }
+      persistPanelWidths(key, stored);
+    },
+    [dispatch],
+  );
+
+  const setPanelWidths = useCallback(
+    (widths: Record<string, number>) => {
+      dispatch({ type: 'SET_PANEL_WIDTHS', widths });
       const project = projectRef.current;
       if (!project) return;
       const key = resolvePanelWidthProjectKey(project);
       persistPanelWidths(key, {
         ...loadPanelWidths(key),
-        [leftPageFile]: leftWidthPx,
-        [rightPageFile]: rightWidthPx,
+        ...widths,
       });
     },
     [dispatch],
@@ -1761,6 +1829,7 @@ export function useAppStore() {
     clearSelection,
     setMaxOpenPages,
     resizePanelSplit,
+    setPanelWidths,
     updateComponent,
     updateMdContent,
     insertComponentAbove,

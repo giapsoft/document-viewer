@@ -34,7 +34,13 @@ import {
   applyRenamePageState,
   reorderPagesInProject,
 } from './pageMutations';
-import { addLinkedPageToPanels, addPageToPanels, applyOpenPage, getMainSelectionPageFile } from './pagePanels';
+import {
+  addLinkedPageToPanels,
+  addPageToPanels,
+  applyOpenPage,
+  ensureFlexLastPanel,
+  getMainSelectionPageFile,
+} from './pagePanels';
 import { getPersistedGroupIndicesForComponent } from './mdVirtualGroups';
 import { getFirstHighlightedComponentId } from './selectionHighlight';
 import { applyWorkspaceRestore } from './workspaceUrl';
@@ -296,7 +302,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'OPEN_PAGE': {
       const opened = applyOpenPage(state, action.pageFile);
-      const nextState: AppState = { ...state, ...opened };
+      const panels = ensureFlexLastPanel(action.panels ?? opened.panels ?? state.panels);
+      const nextState: AppState = {
+        ...state,
+        ...opened,
+        panels,
+      };
 
       if (!state.linkMode && state.selection && nextState.currentPage === action.pageFile) {
         const page = state.project?.pages.find((p) => p.fileName === action.pageFile);
@@ -452,15 +463,31 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'RESIZE_PANEL_SPLIT': {
       const leftW = Math.max(MIN_PAGE_PANEL_WIDTH, Math.round(action.leftWidthPx));
-      const rightW = Math.max(MIN_PAGE_PANEL_WIDTH, Math.round(action.rightWidthPx));
+      const rightW =
+        action.rightIsFlex || action.rightWidthPx == null
+          ? null
+          : Math.max(MIN_PAGE_PANEL_WIDTH, Math.round(action.rightWidthPx));
       const panels = state.panels.map((panel) => {
         if (panel.pageFile === action.leftPageFile) {
           return { ...panel, widthPx: leftW };
         }
         if (panel.pageFile === action.rightPageFile) {
+          if (action.rightIsFlex || rightW == null) {
+            const { widthPx: _widthPx, ...rest } = panel;
+            return rest;
+          }
           return { ...panel, widthPx: rightW };
         }
         return panel;
+      });
+      return { ...state, panels };
+    }
+
+    case 'SET_PANEL_WIDTHS': {
+      const panels = state.panels.map((panel) => {
+        const widthPx = action.widths[panel.pageFile];
+        if (widthPx == null || !Number.isFinite(widthPx)) return panel;
+        return { ...panel, widthPx: Math.round(widthPx) };
       });
       return { ...state, panels };
     }
@@ -1271,11 +1298,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       const targetWasOpen = state.panels.some((panel) => panel.pageFile === pageFile);
       const anchorPageFile = action.anchorPageFile ?? state.currentPage;
-      const panels = addLinkedPageToPanels(
-        state.panels,
-        pageFile,
-        anchorPageFile,
-        state.maxOpenPages,
+      const panels = ensureFlexLastPanel(
+        action.panels ??
+          addLinkedPageToPanels(
+            state.panels,
+            pageFile,
+            anchorPageFile,
+            state.maxOpenPages,
+          ),
       );
 
       const keepCurrentPage =

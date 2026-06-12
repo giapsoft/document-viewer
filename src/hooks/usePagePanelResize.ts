@@ -4,6 +4,7 @@ import { MIN_PAGE_PANEL_WIDTH } from '../lib/panelWidthStorage';
 type DragState = {
   leftPageFile: string;
   rightPageFile: string;
+  rightIsFlex: boolean;
   startX: number;
   startLeftW: number;
   startRightW: number;
@@ -15,7 +16,8 @@ export function usePagePanelResize(
     leftPageFile: string,
     rightPageFile: string,
     leftWidthPx: number,
-    rightWidthPx: number,
+    rightWidthPx: number | null,
+    rightIsFlex: boolean,
   ) => void,
 ) {
   const dragRef = useRef<DragState | null>(null);
@@ -25,6 +27,7 @@ export function usePagePanelResize(
       event: React.PointerEvent<HTMLDivElement>,
       leftPageFile: string,
       rightPageFile: string,
+      rightIsFlex: boolean,
     ) => {
       const leftEl = slotRefs.current.get(leftPageFile);
       const rightEl = slotRefs.current.get(rightPageFile);
@@ -36,6 +39,7 @@ export function usePagePanelResize(
       dragRef.current = {
         leftPageFile,
         rightPageFile,
+        rightIsFlex,
         startX: event.clientX,
         startLeftW: leftEl.getBoundingClientRect().width,
         startRightW: rightEl.getBoundingClientRect().width,
@@ -51,8 +55,13 @@ export function usePagePanelResize(
         if (!left || !right) return;
         left.style.width = `${leftW}px`;
         left.style.flex = '0 0 auto';
-        right.style.width = `${rightW}px`;
-        right.style.flex = '0 0 auto';
+        if (drag.rightIsFlex) {
+          right.style.width = '';
+          right.style.flex = '';
+        } else {
+          right.style.width = `${rightW}px`;
+          right.style.flex = '0 0 auto';
+        }
       };
 
       const onMove = (ev: PointerEvent) => {
@@ -60,6 +69,13 @@ export function usePagePanelResize(
         if (!drag) return;
 
         const delta = ev.clientX - drag.startX;
+
+        if (drag.rightIsFlex) {
+          const leftW = Math.max(MIN_PAGE_PANEL_WIDTH, drag.startLeftW + delta);
+          applyWidths(leftW, 0);
+          return;
+        }
+
         let leftW = drag.startLeftW + delta;
         let rightW = drag.startRightW - delta;
 
@@ -91,13 +107,18 @@ export function usePagePanelResize(
         if (!leftEl || !rightEl) return;
 
         const leftW = leftEl.getBoundingClientRect().width;
-        const rightW = rightEl.getBoundingClientRect().width;
         leftEl.style.width = '';
         leftEl.style.flex = '';
         rightEl.style.width = '';
         rightEl.style.flex = '';
 
-        onCommit(drag.leftPageFile, drag.rightPageFile, leftW, rightW);
+        if (drag.rightIsFlex) {
+          onCommit(drag.leftPageFile, drag.rightPageFile, leftW, null, true);
+          return;
+        }
+
+        const rightW = rightEl.getBoundingClientRect().width;
+        onCommit(drag.leftPageFile, drag.rightPageFile, leftW, rightW, false);
       };
 
       document.addEventListener('pointermove', onMove);

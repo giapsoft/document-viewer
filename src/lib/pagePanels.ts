@@ -1,5 +1,11 @@
 import type { AppState, PanelState } from '../types';
 import { enforcePanelLimit } from './index';
+import { measurePagePanelsTrackWidth, measurePanelSlotWidth } from './panelSlotRegistry';
+import {
+  loadPanelWidths,
+  PANEL_RESIZE_HANDLE_WIDTH,
+  persistPanelWidths,
+} from './panelWidthStorage';
 import { getStoredPageOrder } from './pageOrder';
 
 export function getMainSelectionPageFile(state: AppState): string | null {
@@ -29,11 +35,234 @@ export function getSidebarOrder(state: AppState): string[] {
   );
 }
 
+/** One page swapped for another at the same open-panel count (not a new slot). */
+export function getPanelReplacementDelta(
+  prevPageFiles: string[],
+  nextPageFiles: string[],
+): { removed: string; added: string } | null {
+  if (prevPageFiles.length !== nextPageFiles.length) return null;
+  const prevSet = new Set(prevPageFiles);
+  const removed = prevPageFiles.filter((pageFile) => !nextPageFiles.includes(pageFile));
+  const added = nextPageFiles.filter((pageFile) => !prevSet.has(pageFile));
+  if (removed.length !== 1 || added.length !== 1) return null;
+  return { removed: removed[0], added: added[0] };
+}
+
+export function resolveReplacedPanelWidth(
+  replaced: PanelState,
+  storedWidths: Record<string, number>,
+  measuredWidthPx?: number,
+): number | undefined {
+  for (const value of [
+    measuredWidthPx,
+    replaced.widthPx,
+    storedWidths[replaced.pageFile],
+  ]) {
+    if (value != null && Number.isFinite(value) && value > 0) {
+      return Math.round(value);
+    }
+  }
+  return undefined;
+}
+
+function panelReplacing(
+  pageFile: string,
+  replaced: PanelState | undefined,
+  storedWidths: Record<string, number>,
+  measuredWidthPx?: number,
+): PanelState {
+  const widthPx =
+    replaced != null
+      ? resolveReplacedPanelWidth(replaced, storedWidths, measuredWidthPx)
+      : undefined;
+  return {
+    pageFile,
+    expanded: true,
+    ...(widthPx != null ? { widthPx } : {}),
+  };
+}
+
+export function applyPanelReplacementWidth(
+  prevPanels: PanelState[],
+  nextPanels: PanelState[],
+  storedWidths: Record<string, number>,
+  measureSlotWidth: (pageFile: string) => number | undefined = () => undefined,
+): PanelState[] {
+  const delta = getPanelReplacementDelta(
+    prevPanels.map((panel) => panel.pageFile),
+    nextPanels.map((panel) => panel.pageFile),
+  );
+  if (!delta) return nextPanels;
+
+  const replaced = prevPanels.find((panel) => panel.pageFile === delta.removed);
+  if (!replaced) return nextPanels;
+
+  const widthPx = resolveReplacedPanelWidth(
+    replaced,
+    storedWidths,
+    measureSlotWidth(delta.removed),
+  );
+  const replacedIndex = prevPanels.findIndex((panel) => panel.pageFile === delta.removed);
+  const replacedWasLast = replacedIndex === prevPanels.length - 1;
+
+  if (replacedWasLast) {
+    return nextPanels.map((panel) => {
+      if (panel.pageFile === delta.added) {
+        const { widthPx: _removed, ...rest } = panel;
+        return rest;
+      }
+      const prev = prevPanels.find((entry) => entry.pageFile === panel.pageFile);
+      if (!prev) return panel;
+      const preservedWidth = prev.widthPx ?? storedWidths[prev.pageFile];
+      return preservedWidth != null ? { ...panel, widthPx: preservedWidth } : panel;
+    });
+  }
+
+  if (widthPx == null) return nextPanels;
+
+  return nextPanels.map((panel) => {
+    if (panel.pageFile === delta.added) {
+      return { ...panel, widthPx };
+    }
+    const prev = prevPanels.find((entry) => entry.pageFile === panel.pageFile);
+    if (!prev) return panel;
+    const preservedWidth = prev.widthPx ?? storedWidths[prev.pageFile];
+    return preservedWidth != null ? { ...panel, widthPx: preservedWidth } : panel;
+  });
+}
+
+export function ensureFlexLastPanel(panels: PanelState[]): PanelState[] {
+  if (panels.length === 0) return panels;
+  const lastPageFile = panels[panels.length - 1]?.pageFile;
+  return panels.map((panel) => {
+    if (panel.pageFile !== lastPageFile || panel.widthPx == null) return panel;
+    const { widthPx: _widthPx, ...rest } = panel;
+    return rest;
+  });
+}
+
+export function fixedPanelWidthForCount(trackWidth: number, pageCount: number): number {
+  if (pageCount <= 1) return 0;
+  const handles = Math.max(0, pageCount - 1) * PANEL_RESIZE_HANDLE_WIDTH;
+  const available = Math.max(0, trackWidth - handles);
+  return Math.floor(available / pageCount);
+}
+
+function applyPanelCountIncrease(
+  prevPanels: PanelState[],
+  nextPanels: PanelState[],
+): PanelState[] {
+  if (nextPanels.length <= prevPanels.length || nextPanels.length <= 1) {
+    return nextPanels;
+  }
+
+  const trackWidth = measurePagePanelsTrackWidth();
+  if (trackWidth == null) {
+    return ensureFlexLastPanel(nextPanels);
+  }
+
+  const pageCount = nextPanels.length;
+  const fixedWidth = fixedPanelWidthForCount(trackWidth, pageCount);
+
+  return nextPanels.map((panel, index) => {
+    const isLast = index === pageCount - 1;
+    if (isLast) {
+      const { widthPx: _widthPx, ...rest } = panel;
+      return rest;
+    }
+    return { ...panel, widthPx: fixedWidth };
+  });
+}
+
+function persistFixedPanelWidths(
+  panels: PanelState[],
+  projectKey: string,
+  storedWidths: Record<string, number>,
+): void {
+  if (panels.length <= 1) return;
+  const widths: Record<string, number> = { ...storedWidths };
+  for (let index = 0; index < panels.length - 1; index += 1) {
+    const panel = panels[index];
+    const widthPx = panel?.widthPx;
+    if (panel && widthPx != null) {
+      widths[panel.pageFile] = widthPx;
+    }
+  }
+  const lastPageFile = panels[panels.length - 1]?.pageFile;
+  if (lastPageFile) delete widths[lastPageFile];
+  persistPanelWidths(projectKey, widths);
+}
+
+export function finalizePanelChange(
+  prevPanels: PanelState[],
+  nextPanels: PanelState[],
+  storedWidths: Record<string, number>,
+): PanelState[] {
+  const delta = getPanelReplacementDelta(
+    prevPanels.map((panel) => panel.pageFile),
+    nextPanels.map((panel) => panel.pageFile),
+  );
+  if (!delta) return nextPanels;
+
+  return applyPanelReplacementWidth(
+    prevPanels,
+    nextPanels,
+    storedWidths,
+    measurePanelSlotWidth,
+  );
+}
+
+export function persistReplacementPanelWidth(
+  prevPanels: PanelState[],
+  nextPanels: PanelState[],
+  projectKey: string,
+  storedWidths: Record<string, number>,
+): void {
+  const delta = getPanelReplacementDelta(
+    prevPanels.map((panel) => panel.pageFile),
+    nextPanels.map((panel) => panel.pageFile),
+  );
+  if (!delta) return;
+  const inherited = nextPanels.find((panel) => panel.pageFile === delta.added)?.widthPx;
+  if (inherited == null) return;
+  persistPanelWidths(projectKey, {
+    ...storedWidths,
+    [delta.added]: inherited,
+  });
+}
+
+/** Apply width rules before dispatching a panel-list change. */
+export function preparePanelsForOpen(
+  prevPanels: PanelState[],
+  nextPanels: PanelState[],
+  projectKey: string,
+): PanelState[] {
+  const storedWidths = loadPanelWidths(projectKey);
+  const delta = getPanelReplacementDelta(
+    prevPanels.map((panel) => panel.pageFile),
+    nextPanels.map((panel) => panel.pageFile),
+  );
+
+  let panels = nextPanels;
+
+  if (delta) {
+    panels = finalizePanelChange(prevPanels, nextPanels, storedWidths);
+    persistReplacementPanelWidth(prevPanels, panels, projectKey, storedWidths);
+  } else if (nextPanels.length > prevPanels.length) {
+    panels = applyPanelCountIncrease(prevPanels, nextPanels);
+    persistFixedPanelWidths(panels, projectKey, storedWidths);
+  }
+
+  return ensureFlexLastPanel(panels);
+}
+
 export function addPageToPanels(
   panels: PanelState[],
   pageFile: string,
   maxOpenPages: number,
   protectedPageFile?: string | null,
+  storedWidths: Record<string, number> = {},
+  measureSlotWidth: (pageFile: string) => number | undefined = () => undefined,
 ): PanelState[] {
   const keepPages = protectedPageFilesForLimit(maxOpenPages, protectedPageFile, pageFile);
 
@@ -61,11 +290,21 @@ export function addPageToPanels(
   );
 
   if (replaceIndex < 0) {
-    return [...result.slice(1), { pageFile, expanded: true }];
+    const removed = result[0];
+    return [
+      ...result.slice(1),
+      panelReplacing(pageFile, removed, storedWidths, measureSlotWidth(removed.pageFile)),
+    ];
   }
 
   const next = [...result];
-  next[replaceIndex] = { pageFile, expanded: true };
+  const replaced = next[replaceIndex];
+  next[replaceIndex] = panelReplacing(
+    pageFile,
+    replaced,
+    storedWidths,
+    measureSlotWidth(replaced.pageFile),
+  );
   return next;
 }
 
@@ -82,6 +321,8 @@ function insertOrReplaceBesideAnchor(
   targetPageFile: string,
   anchorPageFile: string | null,
   maxOpenPages: number,
+  storedWidths: Record<string, number> = {},
+  measureSlotWidth: (pageFile: string) => number | undefined = () => undefined,
 ): PanelState[] {
   if (targetPageFile === anchorPageFile) {
     return panels.map((panel) => ({ ...panel, expanded: true }));
@@ -94,7 +335,14 @@ function insertOrReplaceBesideAnchor(
       : -1;
 
   if (anchorIndex < 0) {
-    return addPageToPanels(result, targetPageFile, maxOpenPages, anchorPageFile);
+    return addPageToPanels(
+      result,
+      targetPageFile,
+      maxOpenPages,
+      anchorPageFile,
+      storedWidths,
+      measureSlotWidth,
+    );
   }
 
   const targetIndex = result.findIndex((panel) => panel.pageFile === targetPageFile);
@@ -131,24 +379,34 @@ function insertOrReplaceBesideAnchor(
     return result;
   }
 
-  const targetPanel: PanelState = { pageFile: targetPageFile, expanded: true };
-
   if (result.length < maxOpenPages) {
     const next = [...result];
-    next.splice(insertIndex, 0, targetPanel);
+    next.splice(insertIndex, 0, panelReplacing(targetPageFile, undefined, storedWidths));
     return next;
   }
 
   if (insertIndex < result.length) {
     const next = [...result];
-    next[insertIndex] = targetPanel;
+    const replaced = next[insertIndex];
+    next[insertIndex] = panelReplacing(
+      targetPageFile,
+      replaced,
+      storedWidths,
+      measureSlotWidth(replaced.pageFile),
+    );
     return next;
   }
 
   const replaceIndex = result.findIndex((_panel, index) => index !== anchorIndex);
   if (replaceIndex >= 0) {
     const next = [...result];
-    next[replaceIndex] = targetPanel;
+    const replaced = next[replaceIndex];
+    next[replaceIndex] = panelReplacing(
+      targetPageFile,
+      replaced,
+      storedWidths,
+      measureSlotWidth(replaced.pageFile),
+    );
     return next;
   }
 
@@ -164,12 +422,16 @@ export function addLinkedPageToPanels(
   targetPageFile: string,
   anchorPageFile: string | null,
   maxOpenPages: number,
+  storedWidths: Record<string, number> = {},
+  measureSlotWidth: (pageFile: string) => number | undefined = () => undefined,
 ): PanelState[] {
   return insertOrReplaceBesideAnchor(
     panels,
     targetPageFile,
     anchorPageFile,
     maxOpenPages,
+    storedWidths,
+    measureSlotWidth,
   );
 }
 

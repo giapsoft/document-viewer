@@ -225,7 +225,7 @@ export type AppAction =
   | { type: 'PATCH_PROJECT'; project: LoadedProject }
   | { type: 'TOGGLE_SIDEBAR' }
   | { type: 'EXPAND_SIDEBAR' }
-  | { type: 'OPEN_PAGE'; pageFile: string }
+  | { type: 'OPEN_PAGE'; pageFile: string; panels?: PanelState[] }
   | {
       type: 'SELECT_COMPONENT';
       componentId: string;
@@ -239,8 +239,10 @@ export type AppAction =
       leftPageFile: string;
       rightPageFile: string;
       leftWidthPx: number;
-      rightWidthPx: number;
+      rightWidthPx?: number;
+      rightIsFlex?: boolean;
     }
+  | { type: 'SET_PANEL_WIDTHS'; widths: Record<string, number> }
   | { type: 'REORDER_PANELS'; orderedPageFiles: string[] }
   | { type: 'REORDER_PAGES'; orderedPageFiles: string[] }
   | {
@@ -310,7 +312,12 @@ export type AppAction =
   | { type: 'UPDATE_COMMENT'; commentId: string; body: string }
   | { type: 'DELETE_COMMENT'; commentId: string }
   | { type: 'FOCUS_COMMENT'; commentId: string | null }
-  | { type: 'JUMP_TO_COMPONENT'; componentId: string; anchorPageFile?: string | null }
+  | {
+      type: 'JUMP_TO_COMPONENT';
+      componentId: string;
+      anchorPageFile?: string | null;
+      panels?: PanelState[];
+    }
   | { type: 'CLEAR_FLASHED_COMPONENT' }
   | { type: 'OUTSTANDING_COMMENT'; commentId: string | null }
   | { type: 'SET_CONTENT_EDITOR_OPEN'; open: boolean }
