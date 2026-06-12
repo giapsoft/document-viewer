@@ -238,6 +238,17 @@ function ComponentGroupLinkIcon() {
   );
 }
 
+function mdContainsActiveSelection(shell: HTMLElement): boolean {
+  const md = shell.querySelector('.component-md');
+  if (!md) return false;
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false;
+  return (
+    md.contains(selection.anchorNode) &&
+    md.contains(selection.focusNode)
+  );
+}
+
 function ComponentShell({
   component,
   highlightKind,
@@ -258,6 +269,8 @@ function ComponentShell({
   children,
 }: ComponentShellProps) {
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const draggedRef = useRef(false);
 
   useEffect(() => {
     const el = shellRef.current;
@@ -280,12 +293,32 @@ function ComponentShell({
       data-component-id={component.id}
       className={`component-block ${className} ${highlightKind !== 'none' ? 'selected' : ''} ${highlightKind === 'primary' ? 'selected-primary' : ''} ${highlightKind === 'related' ? 'selected-related' : ''} ${highlightKind === 'related-transitive' ? 'selected-related-transitive' : ''} ${highlightKind === 'link' ? 'link-selected' : ''} ${highlightKind === 'comment-link' ? 'comment-link-preview' : ''} ${isDimmed ? 'dimmed' : ''}`}
       style={style}
+      onMouseDown={(e) => {
+        pointerStartRef.current = { x: e.clientX, y: e.clientY };
+        draggedRef.current = false;
+      }}
+      onMouseMove={(e) => {
+        const start = pointerStartRef.current;
+        if (!start) return;
+        const dx = e.clientX - start.x;
+        const dy = e.clientY - start.y;
+        if (dx * dx + dy * dy > 16) draggedRef.current = true;
+      }}
+      onMouseUp={() => {
+        pointerStartRef.current = null;
+      }}
       onClick={(e) => {
         e.stopPropagation();
         if (commentLinkMode && onCommentLinkComponent) {
           onCommentLinkComponent(component.id, pageFile);
           return;
         }
+        // Drag-select in markdown fires click on mouseup; focusing the shell clears the highlight.
+        if (draggedRef.current) {
+          draggedRef.current = false;
+          return;
+        }
+        if (mdContainsActiveSelection(e.currentTarget)) return;
         onSelect(component.id, pageFile);
         e.currentTarget.focus({ preventScroll: true });
       }}
