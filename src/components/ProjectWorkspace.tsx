@@ -694,6 +694,12 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             {state.panels.map((panel, panelIndex) => {
               const isFlexSlot = panelIndex === state.panels.length - 1;
               const widthPx = isFlexSlot ? undefined : resolvePanelWidth(panel);
+              const panelScrollTarget =
+                state.scrollToComponent &&
+                (state.scrollToComponent.pageFile == null ||
+                  state.scrollToComponent.pageFile === panel.pageFile)
+                  ? state.scrollToComponent
+                  : null;
               const nextPanel = state.panels[panelIndex + 1];
               const nextIsFlexSlot =
                 nextPanel != null && panelIndex + 1 === state.panels.length - 1;
@@ -721,11 +727,11 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                       onClose={() => openPage(panel.pageFile)}
                       onSelect={handleComponentClick}
                       onClearSelection={clearSelection}
-                      scrollToComponentId={state.scrollToComponent?.componentId ?? null}
-                      scrollNonce={state.scrollToComponent?.nonce ?? 0}
-                      scrollColdOpen={state.scrollToComponent?.coldOpen ?? false}
-                      scrollImmediate={state.scrollToComponent?.immediate ?? false}
-                      scrollSmooth={state.scrollToComponent?.smooth ?? false}
+                      scrollToComponentId={panelScrollTarget?.componentId ?? null}
+                      scrollNonce={panelScrollTarget?.nonce ?? 0}
+                      scrollColdOpen={panelScrollTarget?.coldOpen ?? false}
+                      scrollImmediate={panelScrollTarget?.immediate ?? false}
+                      scrollSmooth={panelScrollTarget?.smooth ?? false}
                       flashedComponentId={state.flashedComponent?.componentId ?? null}
                       flashNonce={state.flashedComponent?.nonce ?? 0}
                       selectionScrollNonce={state.selectionScrollNonce}

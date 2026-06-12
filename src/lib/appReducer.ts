@@ -315,12 +315,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           ? getFirstHighlightedComponentId(page, state.selection, true)
           : null;
         if (scrollTarget) {
+          const isNewPanel = !state.panels.some((panel) => panel.pageFile === action.pageFile);
           return {
             ...nextState,
-            selectionScrollNonce: state.selectionScrollNonce + 1,
             scrollToComponent: {
               componentId: scrollTarget,
+              pageFile: action.pageFile,
               nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
+              coldOpen: isNewPanel,
             },
           };
         }
@@ -361,6 +363,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         scrollToComponent: shouldScrollToComponent
           ? {
               componentId,
+              pageFile,
               nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
               ...(isAction ? { smooth: true } : {}),
             }
@@ -1319,6 +1322,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         panels,
         scrollToComponent: {
           componentId: action.componentId,
+          pageFile,
           nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
           coldOpen: !targetWasOpen,
           immediate: true,

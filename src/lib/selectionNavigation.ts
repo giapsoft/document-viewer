@@ -80,9 +80,10 @@ export function remapSelectionHistoryId(
 export function scrollToHistoryEntry(
   state: AppState,
   entry: SelectionHistoryEntry,
-): { componentId: string; nonce: number } {
+): { componentId: string; pageFile: string; nonce: number } {
   return {
     componentId: entry.componentId,
+    pageFile: entry.pageFile,
     nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
   };
 }

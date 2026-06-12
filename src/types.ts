@@ -181,6 +181,8 @@ export interface AppState {
   selectionHistoryIndex: number;
   scrollToComponent: {
     componentId: string;
+    /** When set, only this page panel handles the scroll request. */
+    pageFile?: string;
     nonce: number;
     coldOpen?: boolean;
     immediate?: boolean;
