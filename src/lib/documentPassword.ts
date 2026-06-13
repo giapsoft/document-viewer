@@ -22,6 +22,12 @@ export function payloadStoragePath(docId: string): string {
   return `${docId}/${PAYLOAD_FILE_NAME}`;
 }
 
+export const PUBLIC_SNAPSHOT_FILE_NAME = 'public.snapshot';
+
+export function publicSnapshotStoragePath(docId: string): string {
+  return `${docId}/${PUBLIC_SNAPSHOT_FILE_NAME}`;
+}
+
 export function isDocumentLockFile(value: unknown): value is DocumentLockFile {
   if (!value || typeof value !== 'object') return false;
   const lock = value as DocumentLockFile;

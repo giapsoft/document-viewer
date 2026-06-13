@@ -1,6 +1,6 @@
 import { useReducer, useCallback, useRef, useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
-import type { AppAction, CommentAnchor, Component, LoadedProject, PanelState } from '../types';
+import type { AppAction, CommentAnchor, Component, LoadedProject, PanelState, PublishMode } from '../types';
 import { activeComments, stripCommentTombstones } from '../lib/comments';
 import { setStoredCommentUsername } from '../lib/commentSession';
 import { queueFocusComponentBlock } from '../lib/keyboard';
@@ -61,6 +61,7 @@ import {
   revokeProjectImageUrls,
 } from '../lib/loadProject';
 import type { PendingDocumentUnlock } from '../components/DocumentPasswordDialog';
+import type { ImportLocalToRemoteParams } from '../components/SaveDestinationDialog';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import {
   createRemoteDocument,
@@ -72,6 +73,8 @@ import {
   syncRemoteComments,
   syncRemoteRelations,
   unlockRemoteDocumentDeferred,
+  fetchRemoteDocumentLock,
+  verifyRemoteDocumentPassword,
   type DeferredRemoteLoad,
 } from '../lib/remoteProject';
 import {
@@ -80,6 +83,7 @@ import {
   setRemoteSaveStatusListener,
 } from '../lib/remoteAutoSave';
 import { isRemoteVersionStale } from '../lib/remoteConflict';
+import { DEFAULT_PUBLISH_MODE } from '../lib/publishMode';
 import {
   defaultRemoteTitle,
   collectReferencedImageNames,
@@ -105,6 +109,31 @@ export type PageActionResult = { ok: true } | { ok: false; error: string };
 export type SaveResult =
   | { ok: true; docId?: string }
   | { ok: false; error: string; cancelled?: boolean; conflict?: boolean };
+
+function mergeLocalImportForRemote(
+  current: LoadedProject,
+  imported: LoadedProject,
+  params: ImportLocalToRemoteParams,
+): LoadedProject {
+  const nextTitle =
+    params.remoteTitle?.trim() || current.remoteTitle || defaultRemoteTitle(imported);
+  let passwordProtected = imported.passwordProtected;
+  if (params.protection?.mode === 'protect') passwordProtected = true;
+  if (params.protection?.mode === 'remove') passwordProtected = false;
+
+  return {
+    ...imported,
+    source: 'remote',
+    remoteDocId: current.remoteDocId ?? null,
+    remoteTitle: nextTitle,
+    remotePublishMode:
+      params.remotePublishMode ?? current.remotePublishMode ?? DEFAULT_PUBLISH_MODE,
+    folderHandle: imported.folderHandle ?? null,
+    remoteSync: current.remoteDocId ? (current.remoteSync ?? { fileHashes: new Map() }) : null,
+    remoteUpdatedAt: current.remoteUpdatedAt ?? null,
+    passwordProtected,
+  };
+}
 
 const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'UPDATE_COMPONENT',
@@ -147,7 +176,11 @@ export function useAppStore() {
   const [pendingUnlock, setPendingUnlock] = useState<PendingDocumentUnlock | null>(null);
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [unlockBusy, setUnlockBusy] = useState(false);
+  const [editUnlocked, setEditUnlocked] = useState(false);
   const sessionExportPasswordRef = useRef<string | null>(null);
+  const applyLocalImportAndSaveRemoteRef = useRef<
+    ((imported: LoadedProject, params: ImportLocalToRemoteParams) => Promise<SaveResult>) | null
+  >(null);
 
   const resolveExportProtection = useCallback(
     (explicit: ExportProtection | undefined, project: LoadedProject): ExportProtection => {
@@ -163,10 +196,12 @@ export function useAppStore() {
   const rememberExportPassword = useCallback((protection: ExportProtection | undefined) => {
     if (protection?.mode === 'protect') {
       sessionExportPasswordRef.current = protection.password;
+      setEditUnlocked(true);
       return;
     }
     if (protection?.mode === 'remove') {
       sessionExportPasswordRef.current = null;
+      setEditUnlocked(false);
     }
   }, []);
 
@@ -246,6 +281,14 @@ export function useAppStore() {
     if (
       appStateRef.current.commentLinkCtrlActive &&
       (action.type === 'SET_COMMENT_ANCHOR' || action.type === 'CLEAR_COMMENT_ANCHOR')
+    ) {
+      return;
+    }
+
+    if (
+      projectRef.current?.passwordProtected &&
+      !sessionExportPasswordRef.current &&
+      DIRTY_ACTIONS.has(action.type)
     ) {
       return;
     }
@@ -512,6 +555,7 @@ export function useAppStore() {
     setSaveStatus('idle');
     setSaveError(null);
     sessionExportPasswordRef.current = null;
+    setEditUnlocked(false);
     setPendingUnlock(null);
     setUnlockError(null);
     skipWorkspaceUrlSyncRef.current = true;
@@ -1137,14 +1181,14 @@ export function useAppStore() {
               docId: result.docId,
               title: result.title,
               lock: result.lock,
-              isPublished: result.isPublished,
+              publishMode: result.publishMode,
             });
             return { ok: false, error: 'Enter the document password to reload.' };
           }
           const load = await unlockRemoteDocumentDeferred(result.docId, password, {
             id: result.docId,
             title: result.title,
-            is_published: result.isPublished === false ? false : true,
+            publish_mode: result.publishMode,
           });
           dispatch({ type: 'RELOAD_PROJECT', project: load.project });
           startRemoteBackgroundLoad(load, dispatchRemoteMd, dispatchRemoteImage);
@@ -1230,6 +1274,27 @@ export function useAppStore() {
     setUnlockBusy(false);
   }, []);
 
+  const requestEditUnlock = useCallback(async (): Promise<PageActionResult> => {
+    const project = projectRef.current;
+    if (!project?.remoteDocId || !project.passwordProtected || editUnlocked) {
+      return { ok: false, error: 'Editing is not locked.' };
+    }
+    if (project.remoteHasEditLock === false) {
+      return {
+        ok: false,
+        error:
+          'Edit password is not configured on the server. Use Export, enable password protection, and save again.',
+      };
+    }
+    setPendingUnlock({
+      source: 'remote-edit',
+      docId: project.remoteDocId,
+      title: project.remoteTitle ?? 'Document',
+    });
+    setUnlockError(null);
+    return { ok: true };
+  }, [editUnlocked]);
+
   const unlockPendingDocument = useCallback(
     async (password: string): Promise<PageActionResult> => {
       const pending = pendingUnlock;
@@ -1238,14 +1303,49 @@ export function useAppStore() {
       setUnlockBusy(true);
       setUnlockError(null);
       try {
+        if (pending.source === 'remote-edit') {
+          const lock = await fetchRemoteDocumentLock(pending.docId);
+          if (!lock) {
+            throw new Error('This document has no edit password on the server.');
+          }
+          const valid = await verifyRemoteDocumentPassword(pending.docId, password);
+          if (!valid) {
+            throw new Error('Incorrect password.');
+          }
+          sessionExportPasswordRef.current = password;
+          setEditUnlocked(true);
+          setPendingUnlock(null);
+          return { ok: true };
+        }
+
         if (pending.source === 'local') {
           const project = await loadPasswordProtectedProjectFromFolder(
             pending.folderHandle,
             password,
           );
           sessionExportPasswordRef.current = password;
+          setEditUnlocked(true);
           setPendingUnlock(null);
           setProject(project);
+          return { ok: true };
+        }
+
+        if (pending.source === 'local-import-remote') {
+          const imported = await loadPasswordProtectedProjectFromFolder(
+            pending.folderHandle,
+            password,
+          );
+          sessionExportPasswordRef.current = password;
+          setEditUnlocked(true);
+          setPendingUnlock(null);
+          const apply = applyLocalImportAndSaveRemoteRef.current;
+          if (!apply) {
+            throw new Error('Import is not ready.');
+          }
+          const saveResult = await apply(imported, pending.save);
+          if (!saveResult.ok) {
+            throw new Error(saveResult.error ?? 'Could not save imported document to remote.');
+          }
           return { ok: true };
         }
 
@@ -1253,9 +1353,10 @@ export function useAppStore() {
         const load = await unlockRemoteDocumentDeferred(pending.docId, password, {
           id: pending.docId,
           title: pending.title,
-          is_published: pending.isPublished === false ? false : true,
+          publish_mode: pending.publishMode,
         });
         sessionExportPasswordRef.current = password;
+        setEditUnlocked(true);
         setPendingUnlock(null);
         applyRemoteDocumentLoad(load);
         return { ok: true };
@@ -1352,7 +1453,12 @@ export function useAppStore() {
   const saveToRemote = useCallback(
     async (
       title?: string,
-      options?: { force?: boolean; protection?: ExportProtection; docId?: string; isPublished?: boolean },
+      options?: {
+        force?: boolean;
+        protection?: ExportProtection;
+        docId?: string;
+        publishMode?: PublishMode;
+      },
     ): Promise<SaveResult> => {
     const project = projectRef.current;
     if (!project) {
@@ -1406,7 +1512,7 @@ export function useAppStore() {
         sessionPassword: sessionExportPasswordRef.current,
         readStatesByUsername: readStates,
         commentReadStatesByUsername: commentReadStates,
-        isPublished: options?.isPublished,
+        publishMode: options?.publishMode,
       };
 
       if (project.remoteDocId && !options?.force) {
@@ -1447,16 +1553,22 @@ export function useAppStore() {
           remoteTitle: title?.trim() || project.remoteTitle || defaultRemoteTitle(project),
           remoteSync: saveResult.remoteSync,
           remoteUpdatedAt: saveResult.remoteUpdatedAt,
-          remotePublished:
-            options?.isPublished ??
-            saveResult.mergedProject.remotePublished ??
-            project.remotePublished,
+          remotePublishMode:
+            options?.publishMode ??
+            saveResult.mergedProject.remotePublishMode ??
+            project.remotePublishMode,
           passwordProtected:
             protection?.mode === 'protect'
               ? true
               : protection?.mode === 'remove'
                 ? false
                 : project.passwordProtected,
+          remoteHasEditLock:
+            protection?.mode === 'protect'
+              ? true
+              : protection?.mode === 'remove'
+                ? false
+                : project.remoteHasEditLock,
         });
         projectRef.current = nextProject;
         dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
@@ -1489,11 +1601,12 @@ export function useAppStore() {
         ...project,
         remoteDocId: created.docId,
         remoteTitle: nextTitle,
-        remotePublished: options?.isPublished ?? true,
+        remotePublishMode: options?.publishMode ?? DEFAULT_PUBLISH_MODE,
         remoteSync: created.remoteSync,
         remoteUpdatedAt: created.remoteUpdatedAt,
         folderHandle: project.folderHandle ?? null,
         passwordProtected: protection?.mode === 'protect',
+        remoteHasEditLock: protection?.mode === 'protect' ? true : undefined,
       };
       projectRef.current = savedProject;
       dispatch({ type: 'RELOAD_PROJECT', project: savedProject });
@@ -1510,6 +1623,101 @@ export function useAppStore() {
     }
   },
     [dispatch, flushRemoteBackgroundLoad, resolveExportProtection, rememberExportPassword],
+  );
+
+  const applyLocalImportAndSaveRemote = useCallback(
+    async (
+      imported: LoadedProject,
+      params: ImportLocalToRemoteParams,
+    ): Promise<SaveResult> => {
+      const current = projectRef.current;
+      if (!current) return { ok: false, error: 'No project is open.' };
+      if (!isSupabaseConfigured()) {
+        return { ok: false, error: 'Remote storage is not available on this site.' };
+      }
+
+      revokeProjectImageUrls(current);
+      clearPageScrollMemory();
+      cancelRemoteBackgroundLoad();
+
+      const merged = mergeLocalImportForRemote(current, imported, params);
+      dispatch({ type: 'RELOAD_PROJECT', project: merged });
+      projectRef.current = merged;
+
+      if (params.protection?.mode === 'protect') {
+        rememberExportPassword(params.protection);
+        sessionExportPasswordRef.current = params.protection.password;
+        setEditUnlocked(true);
+      } else if (params.protection?.mode === 'remove') {
+        setEditUnlocked(true);
+      } else if (!merged.passwordProtected) {
+        setEditUnlocked(true);
+      } else {
+        setEditUnlocked(false);
+      }
+
+      void hydrateReadStateRef.current();
+
+      return saveToRemote(params.remoteTitle, {
+        force: true,
+        protection: params.protection,
+        docId: params.remoteDocId,
+        publishMode: params.remotePublishMode,
+      });
+    },
+    [dispatch, cancelRemoteBackgroundLoad, rememberExportPassword, saveToRemote],
+  );
+  applyLocalImportAndSaveRemoteRef.current = applyLocalImportAndSaveRemote;
+
+  const importLocalToRemote = useCallback(
+    async (params: ImportLocalToRemoteParams): Promise<SaveResult> => {
+      const project = projectRef.current;
+      if (!project) return { ok: false, error: 'No project is open.' };
+      if (!window.showDirectoryPicker) {
+        return {
+          ok: false,
+          error: 'Folder selection is not supported in this browser. Please use Chrome or Edge.',
+        };
+      }
+      if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
+        return { ok: false, error: 'Release Ctrl to finish linking before importing.' };
+      }
+      if (appStateRef.current.contentEditorOpen) {
+        return { ok: false, error: 'Close the content editor before importing.' };
+      }
+      if (dirtyRef.current) {
+        const proceed = window.confirm(
+          'Replace the current document with the selected local folder and save to remote? Unsaved changes in the browser will be lost.',
+        );
+        if (!proceed) return { ok: false, error: '', cancelled: true };
+      }
+
+      try {
+        const result = await pickProjectFolder();
+        if (!result) return { ok: false, error: '', cancelled: true };
+        if (result.status === 'password') {
+          setPendingUnlock({
+            source: 'local-import-remote',
+            title: result.folderHandle.name,
+            folderHandle: result.folderHandle,
+            lock: result.lock,
+            save: params,
+          });
+          setUnlockError(null);
+          return { ok: true };
+        }
+        return applyLocalImportAndSaveRemote(result.project, params);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return { ok: false, error: '', cancelled: true };
+        }
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : 'Could not import from local folder.',
+        };
+      }
+    },
+    [applyLocalImportAndSaveRemote],
   );
 
   const saveProject = saveToRemote;
@@ -1563,6 +1771,8 @@ export function useAppStore() {
       }
       try {
         beginRemoteDocumentSession();
+        sessionExportPasswordRef.current = null;
+        setEditUnlocked(false);
         const result = await loadRemoteDocumentSession(docId);
         if (result.status === 'password') {
           setPendingUnlock({
@@ -1570,7 +1780,7 @@ export function useAppStore() {
             docId: result.docId,
             title: result.title,
             lock: result.lock,
-            isPublished: result.isPublished,
+            publishMode: result.publishMode,
           });
           setUnlockError(null);
           return { ok: true };
@@ -1805,8 +2015,15 @@ export function useAppStore() {
     pendingUnlock,
     unlockError,
     unlockBusy,
+    editUnlocked,
+    isEditLocked: Boolean(
+      state.project?.passwordProtected &&
+        !editUnlocked &&
+        (state.project?.remoteDocId ? state.project.remoteHasEditLock !== false : true),
+    ),
     unlockPendingDocument,
     cancelDocumentUnlock,
+    requestEditUnlock,
     setProject,
     createNewDocument,
     closeProject,
@@ -1816,6 +2033,7 @@ export function useAppStore() {
     loadBundledHelpForWelcome,
     saveToLocal,
     saveToRemote,
+    importLocalToRemote,
     checkRemoteDocumentStale,
     deleteRemoteLink,
     saveProject,

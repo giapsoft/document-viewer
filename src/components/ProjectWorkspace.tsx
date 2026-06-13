@@ -3,7 +3,7 @@ import { PagePanel } from './PagePanel';
 import { EditBar } from './EditBar';
 import { WorkspaceTopBar } from './WorkspaceTopBar';
 import { ProjectToolbar } from './ProjectToolbar';
-import { SaveDestinationDialog, type SaveDestinationChoice } from './SaveDestinationDialog';
+import { SaveDestinationDialog, type SaveDestinationChoice, type ImportLocalToRemoteParams } from './SaveDestinationDialog';
 import { RemoteConflictDialog } from './RemoteConflictDialog';
 import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
@@ -103,11 +103,14 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     reloadProject,
     saveToLocal,
     saveToRemote,
+    importLocalToRemote,
     checkRemoteDocumentStale,
     deleteRemoteLink,
     closeProject,
     suggestNewPageName,
     normalizePageName,
+    isEditLocked,
+    requestEditUnlock,
   } = store;
 
   const project = state.project!;
@@ -274,17 +277,23 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const selectedComment = state.selectedCommentId
     ? comments.find((c) => c.id === state.selectedCommentId)
     : null;
-  const canLinkSelectedComment = Boolean(
-    selectedComment &&
-      canOwnComment(selectedComment, state.commentAuthorId, state.commentUsername),
-  );
+  const canLinkSelectedComment =
+    !isEditLocked &&
+    Boolean(
+      selectedComment &&
+        canOwnComment(selectedComment, state.commentAuthorId, state.commentUsername),
+    );
 
   const activateLinkMode = useCallback(() => {
     setLinkCtrlActive(true, groupPanelOpen ? groupPanelActiveIndex : undefined);
   }, [setLinkCtrlActive, groupPanelOpen, groupPanelActiveIndex]);
 
   useCtrlLinkModeHold({
-    enabled: !state.contentEditorOpen && !state.commentLinkCtrlActive && !canLinkSelectedComment,
+    enabled:
+      !isEditLocked &&
+      !state.contentEditorOpen &&
+      !state.commentLinkCtrlActive &&
+      !canLinkSelectedComment,
     ctrlActive: state.linkCtrlActive,
     setCtrlActive: (active) => {
       if (active) activateLinkMode();
@@ -381,7 +390,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
       })),
     [project.pages, state.commentUsername, state.componentReadState],
   );
-  const canManagePages = true;
+  const canManagePages = !isEditLocked;
   const panelPageFiles = useMemo(
     () => new Set(state.panels.map((panel) => panel.pageFile)),
     [state.panels],
@@ -476,9 +485,9 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
       force = false,
       protection?: import('../lib/saveProject').ExportProtection,
       docId?: string,
-      isPublished?: boolean,
+      publishMode?: import('../types').PublishMode,
     ) => {
-      const result = await saveToRemote(title, { force, protection, docId, isPublished });
+      const result = await saveToRemote(title, { force, protection, docId, publishMode });
       if (result.ok) return { ok: true as const };
       if (result.conflict) {
         setPendingRemoteTitle(title);
@@ -492,7 +501,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
 
   const canSaveLocal = Boolean(window.showDirectoryPicker);
   const canSaveRemote = remoteStorageReady && isSupabaseConfigured();
-  const canSave = canSaveLocal || canSaveRemote;
+  const canSave = !isEditLocked && (canSaveLocal || canSaveRemote);
 
   const runToolbarAction = async (action: () => Promise<{ ok: boolean; error?: string }>) => {
     setToolbarError(null);
@@ -537,9 +546,21 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
         false,
         choice.protection,
         choice.remoteDocId,
-        choice.remotePublished,
+        choice.remotePublishMode,
       ),
     );
+  };
+
+  const handleImportLocalToRemote = (params: ImportLocalToRemoteParams) => {
+    setSaveDestinationOpen(false);
+    void runToolbarAction(async () => {
+      const result = await importLocalToRemote(params);
+      if (!result.ok) {
+        if (result.cancelled) return { ok: true };
+        return { ok: false, error: result.error };
+      }
+      return { ok: true };
+    });
   };
 
   const handleClose = () => {
@@ -632,6 +653,24 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             </div>
           )}
 
+          {isEditLocked && (
+            <div className="edit-locked-banner" role="status">
+              <span>View-only — enter the password to edit this document.</span>
+            </div>
+          )}
+
+          {project.passwordProtected &&
+            project.remoteDocId &&
+            project.remoteHasEditLock === false && (
+              <div className="edit-locked-banner edit-password-missing-banner" role="status">
+                <span>
+                  This document is marked password-protected, but no edit password is stored on
+                  the server. You can edit freely — use Export with password protection to set
+                  one.
+                </span>
+              </div>
+            )}
+
           {remoteStaleOnServer && !dirty && project.remoteDocId && (
             <div className="remote-stale-banner" role="status">
               <span>
@@ -671,6 +710,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               dirty={dirty}
               canSave={canSave}
               canReloadFromLocal={canReloadFromLocal}
+              editLocked={isEditLocked}
               loading={toolbarLoading}
               error={toolbarError}
               saveStatus={saveStatus}
@@ -678,6 +718,12 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               sourceLabel={sourceLabel}
               onSave={handleSave}
               onReload={handleReloadFromLocal}
+              onUnlockEditing={() => {
+                void runToolbarAction(async () => {
+                  const result = await requestEditUnlock();
+                  return result.ok ? { ok: true } : { ok: false, error: result.error };
+                });
+              }}
               onClose={handleClose}
             />
           </div>
@@ -779,6 +825,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               commentPanelScrollNonce={state.commentPanelScrollNonce}
               commentLinkCtrlActive={state.commentLinkCtrlActive}
               canLinkSelectedComment={canLinkSelectedComment}
+              canEdit={!isEditLocked}
               onSelectComment={selectComment}
               onToggle={toggleCommentPanel}
               onSetUsername={setCommentUsername}
@@ -797,7 +844,10 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             project={project}
             selection={state.selection}
             shortcutsEnabled={
-              !state.linkMode && !state.commentLinkCtrlActive && !state.contentEditorOpen
+              !isEditLocked &&
+              !state.linkMode &&
+              !state.commentLinkCtrlActive &&
+              !state.contentEditorOpen
             }
             onUpdate={updateComponent}
             onUpdateMdContent={updateMdContent}
@@ -821,6 +871,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
           dirty={dirty}
           onClose={() => setSaveDestinationOpen(false)}
           onChoose={handleChooseDestination}
+          onImportLocalToRemote={handleImportLocalToRemote}
           onDeleteRemote={() => {
             setSaveDestinationOpen(false);
             void runToolbarAction(deleteRemoteLink);

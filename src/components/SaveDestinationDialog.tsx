@@ -9,6 +9,13 @@ import { defaultRemoteTitle, normalizeDocumentTitle } from '../lib/projectBundle
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 
 import type { ExportProtection } from '../lib/saveProject';
+import {
+  DEFAULT_PUBLISH_MODE,
+  PUBLISH_MODE_HINTS,
+  PUBLISH_MODE_LABELS,
+  PUBLISH_MODES,
+  type PublishMode,
+} from '../lib/publishMode';
 
 export type SaveDestination = 'local' | 'remote';
 
@@ -16,7 +23,14 @@ export type SaveDestinationChoice = {
   destination: SaveDestination;
   remoteTitle?: string;
   remoteDocId?: string;
-  remotePublished?: boolean;
+  remotePublishMode?: PublishMode;
+  protection?: ExportProtection;
+};
+
+export type ImportLocalToRemoteParams = {
+  remoteTitle?: string;
+  remoteDocId?: string;
+  remotePublishMode?: PublishMode;
   protection?: ExportProtection;
 };
 
@@ -25,6 +39,7 @@ interface SaveDestinationDialogProps {
   dirty: boolean;
   onClose: () => void;
   onChoose: (choice: SaveDestinationChoice) => void;
+  onImportLocalToRemote: (params: ImportLocalToRemoteParams) => void;
   onDeleteRemote?: () => void;
 }
 
@@ -33,6 +48,7 @@ export function SaveDestinationDialog({
   dirty,
   onClose,
   onChoose,
+  onImportLocalToRemote,
   onDeleteRemote,
 }: SaveDestinationDialogProps) {
   const remoteStorageReady = isSupabaseConfigured();
@@ -46,8 +62,8 @@ export function SaveDestinationDialog({
   );
   const [linkIdDraft, setLinkIdDraft] = useState('');
   const [linkIdError, setLinkIdError] = useState<string | null>(null);
-  const [listOnWelcomeDraft, setListOnWelcomeDraft] = useState(
-    () => project.remotePublished !== false,
+  const [publishModeDraft, setPublishModeDraft] = useState<PublishMode>(
+    () => project.remotePublishMode ?? DEFAULT_PUBLISH_MODE,
   );
   const [protectWithPassword, setProtectWithPassword] = useState(
     () => Boolean(project.passwordProtected),
@@ -90,14 +106,20 @@ export function SaveDestinationDialog({
   const normalizedLinkId = normalizeFriendlyDocId(linkIdDraft);
   const linkIdValidation = validateFriendlyDocId(normalizedLinkId);
   const titleChanged = hasRemoteDoc && normalizedDraft !== normalizedCurrent;
-  const listOnWelcomeCurrent = project.remotePublished !== false;
-  const publishedChanged = hasRemoteDoc && listOnWelcomeDraft !== listOnWelcomeCurrent;
+  const publishModeCurrent = project.remotePublishMode ?? DEFAULT_PUBLISH_MODE;
+  const publishModeChanged = hasRemoteDoc && publishModeDraft !== publishModeCurrent;
   const canPublishRemote = !hasRemoteDoc;
   const canChooseRemote =
     remoteStorageReady &&
     normalizedDraft.length > 0 &&
     (hasRemoteDoc || linkIdValidation.ok) &&
-    (dirty || canPublishRemote || titleChanged || publishedChanged);
+    (dirty || canPublishRemote || titleChanged || publishModeChanged);
+
+  const canImportLocalToRemote =
+    remoteStorageReady &&
+    canPickLocal &&
+    normalizedDraft.length > 0 &&
+    (hasRemoteDoc || linkIdValidation.ok);
 
   const remoteHint = !remoteStorageReady
     ? 'Remote storage is not available on this site.'
@@ -111,8 +133,8 @@ export function SaveDestinationDialog({
           ? dirty
             ? 'Publish your changes to remote storage for the first time.'
             : 'Publish this document to remote storage for the first time.'
-          : publishedChanged && !dirty && !titleChanged
-            ? 'Update whether this document appears on the welcome screen.'
+          : publishModeChanged && !dirty && !titleChanged
+            ? 'Update how this document is published on remote storage.'
             : titleChanged && !dirty
               ? 'Rename the remote document (no other unsaved changes).'
               : dirty
@@ -170,10 +192,52 @@ export function SaveDestinationDialog({
       destination,
       remoteTitle: destination === 'remote' ? normalizedDraft : undefined,
       remoteDocId: destination === 'remote' && canPublishRemote ? normalizedLinkId : undefined,
-      remotePublished: destination === 'remote' ? listOnWelcomeDraft : undefined,
+      remotePublishMode: destination === 'remote' ? publishModeDraft : undefined,
       protection,
     });
   };
+
+  const buildImportParams = (): ImportLocalToRemoteParams | null => {
+    setPasswordError(null);
+    setLinkIdError(null);
+    const protection = buildProtection();
+    if (protectWithPassword && !removePassword && !protection && !project.passwordProtected) {
+      return null;
+    }
+    if (canPublishRemote) {
+      const validation = validateFriendlyDocId(normalizedLinkId);
+      if (!validation.ok) {
+        setLinkIdError(validation.error);
+        return null;
+      }
+    }
+    return {
+      remoteTitle: normalizedDraft,
+      remoteDocId: canPublishRemote ? normalizedLinkId : undefined,
+      remotePublishMode: publishModeDraft,
+      protection,
+    };
+  };
+
+  const handleImportFromLocal = () => {
+    const params = buildImportParams();
+    if (!params) return;
+    onImportLocalToRemote(params);
+  };
+
+  const importLocalHint = !canPickLocal
+    ? 'Requires Chrome or Edge.'
+    : !remoteStorageReady
+      ? 'Remote storage is not available on this site.'
+      : normalizedDraft.length === 0
+        ? 'Enter a document title above.'
+        : canPublishRemote && !linkIdValidation.ok
+          ? linkIdDraft.trim()
+            ? (linkIdValidation.error ?? 'Enter a valid link ID.')
+            : 'Enter a link ID before importing to remote storage.'
+          : hasRemoteDoc
+            ? 'Replace the open document with a local folder and upload to remote storage.'
+            : 'Pick a local folder, then publish its contents to remote storage.';
 
   const selectLinkInput = (event: { currentTarget: HTMLInputElement }) => {
     event.currentTarget.select();
@@ -285,18 +349,26 @@ export function SaveDestinationDialog({
                       ) : null}
                     </>
                   ) : null}
-                  <label className="save-destination-checkbox-field">
-                    <input
-                      type="checkbox"
-                      checked={listOnWelcomeDraft}
-                      onChange={(event) => setListOnWelcomeDraft(event.target.checked)}
-                    />
-                    <span>Show in saved documents on the welcome screen</span>
-                  </label>
-                  <p className="save-destination-option-hint">
-                    When off, the document stays on remote storage but is hidden from the public
-                    list. Direct links still work.
-                  </p>
+                  <fieldset className="save-destination-publish-mode">
+                    <legend className="save-destination-title-label">Publish mode</legend>
+                    {PUBLISH_MODES.map((mode) => (
+                      <label key={mode} className="save-destination-radio-field">
+                        <input
+                          type="radio"
+                          name="publish-mode"
+                          value={mode}
+                          checked={publishModeDraft === mode}
+                          onChange={() => setPublishModeDraft(mode)}
+                        />
+                        <span className="save-destination-radio-label">
+                          <strong>{PUBLISH_MODE_LABELS[mode]}</strong>
+                          <span className="save-destination-option-hint">
+                            {PUBLISH_MODE_HINTS[mode]}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
                   {hasRemoteDoc && (
                     <div className="save-destination-link-field">
                       <input
@@ -317,6 +389,17 @@ export function SaveDestinationDialog({
                       </button>
                     </div>
                   )}
+                  <div className="save-destination-import-local">
+                    <button
+                      type="button"
+                      className="save-destination-import-local-btn"
+                      disabled={!canImportLocalToRemote}
+                      onClick={handleImportFromLocal}
+                    >
+                      Import from local → remote
+                    </button>
+                    <p className="save-destination-option-hint">{importLocalHint}</p>
+                  </div>
                 </section>
               )}
 
@@ -332,7 +415,7 @@ export function SaveDestinationDialog({
                       setPasswordError(null);
                     }}
                   />
-                  <span>Require a password to open this export</span>
+                  <span>Require a password to edit (or open private documents)</span>
                 </label>
                 {project.passwordProtected && protectWithPassword ? (
                   <label className="save-destination-checkbox-field">
@@ -377,8 +460,8 @@ export function SaveDestinationDialog({
                   </p>
                 ) : null}
                 <p className="save-destination-option-hint">
-                  Protected exports store encrypted data. Viewers must enter the password before
-                  any document content loads.
+                  Public and protected documents stay readable via link or welcome list. Private
+                  documents require the password before any content loads.
                 </p>
               </section>
 

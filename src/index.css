@@ -261,6 +261,14 @@ code {
   font-weight: 600;
   font-size: 0.85rem;
   color: #212529;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.welcome-doc-lock {
+  font-size: 0.85em;
+  opacity: 0.75;
 }
 
 .welcome-doc-meta {
@@ -1135,6 +1143,42 @@ code {
   margin-top: 0.15rem;
 }
 
+.save-destination-publish-mode {
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.save-destination-publish-mode > legend {
+  margin-bottom: 0.35rem;
+}
+
+.save-destination-radio-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: #343a40;
+}
+
+.save-destination-radio-field input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+.save-destination-radio-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.save-destination-radio-label strong {
+  font-weight: 600;
+}
+
 .document-password-body {
   display: flex;
   flex-direction: column;
@@ -1245,6 +1289,36 @@ code {
 .save-destination-option-hint {
   font-size: 0.85rem;
   color: #6c757d;
+}
+
+.save-destination-import-local {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e9ecef;
+}
+
+.save-destination-import-local-btn {
+  align-self: flex-start;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  background: #fff;
+  color: #212529;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.save-destination-import-local-btn:hover:not(:disabled) {
+  background: #e9ecef;
+}
+
+.save-destination-import-local-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 
@@ -1433,6 +1507,33 @@ code {
   color: #d9480f;
   font-size: 0.78rem;
   line-height: 1.35;
+}
+
+.edit-locked-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0.5rem 0.35rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 6px;
+  background: #e7f5ff;
+  border: 1px solid #a5d8ff;
+  color: #1864ab;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.edit-password-missing-banner {
+  background: #fff3cd;
+  border-color: #ffe69c;
+  color: #856404;
+}
+
+.comment-readonly-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #868e96;
+  font-style: italic;
 }
 
 .remote-stale-banner-btn {

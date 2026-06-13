@@ -4,6 +4,7 @@ interface ProjectToolbarProps {
   dirty: boolean;
   canSave: boolean;
   canReloadFromLocal?: boolean;
+  editLocked?: boolean;
   loading: boolean;
   error: string | null;
   saveStatus: SaveStatus;
@@ -11,6 +12,7 @@ interface ProjectToolbarProps {
   sourceLabel: string | null;
   onSave: () => void;
   onReload?: () => void;
+  onUnlockEditing?: () => void;
   onClose: () => void;
 }
 
@@ -32,6 +34,7 @@ export function ProjectToolbar({
   dirty,
   canSave,
   canReloadFromLocal = false,
+  editLocked = false,
   loading,
   error,
   saveStatus,
@@ -39,6 +42,7 @@ export function ProjectToolbar({
   sourceLabel,
   onSave,
   onReload,
+  onUnlockEditing,
   onClose,
 }: ProjectToolbarProps) {
   const saveLabel =
@@ -71,6 +75,17 @@ export function ProjectToolbar({
           title="Reload document from local folder"
         >
           Reload
+        </button>
+      )}
+      {editLocked && onUnlockEditing && (
+        <button
+          type="button"
+          className="project-folder-btn project-folder-btn-primary"
+          onClick={onUnlockEditing}
+          disabled={loading}
+          title="Enter password to enable editing"
+        >
+          Unlock editing
         </button>
       )}
       <button

@@ -24,7 +24,23 @@ function App() {
       {store.pendingUnlock ? (
         <DocumentPasswordDialog
           title={store.pendingUnlock.title}
-          description="This document is password-protected. Enter the password to load its content."
+          description={
+            store.pendingUnlock.source === 'remote-edit'
+              ? 'This document is view-only. Enter the password to enable editing.'
+              : store.pendingUnlock.source === 'local-import-remote'
+                ? 'The selected local folder is password-protected. Enter its password to import and save to remote storage.'
+              : store.pendingUnlock.source === 'remote' &&
+                  store.pendingUnlock.publishMode === 'private'
+                ? 'This private document requires the password before any content loads.'
+                : 'This document is password-protected. Enter the password to load its content.'
+          }
+          confirmLabel={
+            store.pendingUnlock.source === 'remote-edit'
+              ? 'Unlock editing'
+              : store.pendingUnlock.source === 'local-import-remote'
+                ? 'Import and save'
+                : 'Unlock'
+          }
           error={store.unlockError}
           busy={store.unlockBusy}
           onSubmit={(password) => {

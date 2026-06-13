@@ -31,6 +31,7 @@ interface CommentPanelProps {
   commentPanelScrollNonce?: number;
   commentLinkCtrlActive?: boolean;
   canLinkSelectedComment?: boolean;
+  canEdit?: boolean;
   onToggle: () => void;
   onSetUsername: (username: string) => boolean;
   onSelectComment: (commentId: string) => void;
@@ -78,6 +79,7 @@ function CommentTreeItem({
   outstandingCommentId,
   commentLinkCtrlActive,
   canLinkSelectedComment,
+  canEdit = true,
   appStyles,
   componentLabels,
   authorId,
@@ -97,6 +99,7 @@ function CommentTreeItem({
   outstandingCommentId: string | null;
   commentLinkCtrlActive: boolean;
   canLinkSelectedComment: boolean;
+  canEdit?: boolean;
   appStyles: AppStyles;
   componentLabels: Map<string, string>;
   authorId: string;
@@ -264,7 +267,7 @@ function CommentTreeItem({
                       {isRead ? <Eye size={14} aria-hidden /> : <EyeOff size={14} aria-hidden />}
                     </button>
                   )}
-                  {hasUsername && (
+                  {hasUsername && canEdit && (
                     <button
                       type="button"
                       className="comment-text-btn"
@@ -273,7 +276,7 @@ function CommentTreeItem({
                       {replyOpen ? 'Cancel' : 'Reply'}
                     </button>
                   )}
-                  {isOwner && (
+                  {isOwner && canEdit && (
                     <>
                       <button
                         type="button"
@@ -306,7 +309,7 @@ function CommentTreeItem({
               )}
             </footer>
 
-            {replyOpen && hasUsername && (
+            {replyOpen && hasUsername && canEdit && (
               <form
                 className="comment-inline-form"
                 onClick={stopCardClick}
@@ -359,6 +362,7 @@ function CommentTreeItem({
               outstandingCommentId={outstandingCommentId}
               commentLinkCtrlActive={commentLinkCtrlActive}
               canLinkSelectedComment={canLinkSelectedComment}
+              canEdit={canEdit}
               appStyles={appStyles}
               componentLabels={componentLabels}
               authorId={authorId}
@@ -389,6 +393,7 @@ export function CommentPanel({
   commentPanelScrollNonce = 0,
   commentLinkCtrlActive = false,
   canLinkSelectedComment = false,
+  canEdit = true,
   onToggle,
   onSetUsername,
   onSelectComment,
@@ -612,6 +617,7 @@ export function CommentPanel({
                 )}
               </div>
 
+              {canEdit ? (
               <form
                 className="comment-compose-form"
                 onSubmit={(event) => {
@@ -638,6 +644,9 @@ export function CommentPanel({
                   </button>
                 </div>
               </form>
+              ) : (
+                <p className="comment-readonly-hint">Unlock editing to add comments.</p>
+              )}
             </div>
           )}
 
@@ -654,6 +663,7 @@ export function CommentPanel({
                     outstandingCommentId={outstandingCommentId}
                     commentLinkCtrlActive={commentLinkCtrlActive}
                     canLinkSelectedComment={canLinkSelectedComment}
+                    canEdit={canEdit}
                     appStyles={appStyles}
                     componentLabels={componentLabels}
                     authorId={authorId}

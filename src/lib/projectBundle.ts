@@ -1,4 +1,4 @@
-import type { LoadedProject, RelationsFile } from '../types';
+import type { LoadedProject, PublishMode, RelationsFile } from '../types';
 import { collectActionImageFilenamesFromProject, parseActionData } from './actionComponent';
 import { serializePageComponents } from './pageIds';
 import { mdSidecarFileName } from './mdFiles';
@@ -86,7 +86,7 @@ export function assembleLoadedProject(
     folderHandle?: FileSystemDirectoryHandle | null;
     remoteSync?: LoadedProject['remoteSync'];
     remoteUpdatedAt?: string | null;
-    remotePublished?: boolean | null;
+    remotePublishMode?: PublishMode | null;
   },
 ): LoadedProject {
   const project = assembleProject(input);
@@ -98,7 +98,7 @@ export function assembleLoadedProject(
     folderHandle: meta.folderHandle ?? null,
     remoteSync: meta.remoteSync ?? null,
     remoteUpdatedAt: meta.remoteUpdatedAt ?? null,
-    remotePublished: meta.remotePublished ?? undefined,
+    remotePublishMode: meta.remotePublishMode ?? undefined,
   };
 }
 

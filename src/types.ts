@@ -1,3 +1,6 @@
+export type { PublishMode } from './lib/publishMode';
+import type { PublishMode } from './lib/publishMode';
+
 export type ComponentType = 'header' | 'title' | 'body' | 'listItem' | 'img' | 'md' | 'action';
 export type ComponentStatus = 'pending' | 'working' | 'done' | 'blocked' | 'undefined';
 
@@ -140,8 +143,10 @@ export interface LoadedProject {
   bundledHelp?: boolean;
   /** Opened from an encrypted export; saves re-encrypt with session password. */
   passwordProtected?: boolean;
-  /** When false, hidden from the welcome screen list (remote documents only). */
-  remotePublished?: boolean;
+  /** Remote `lock.json` exists — required to verify edit password. */
+  remoteHasEditLock?: boolean;
+  /** Remote visibility and access level (public / protected / private). */
+  remotePublishMode?: PublishMode;
 }
 
 export interface PanelState {

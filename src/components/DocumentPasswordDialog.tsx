@@ -91,6 +91,8 @@ export function DocumentPasswordDialog({
   );
 }
 
+import type { ImportLocalToRemoteParams } from './SaveDestinationDialog';
+
 export type PendingDocumentUnlock =
   | {
       source: 'local';
@@ -99,9 +101,21 @@ export type PendingDocumentUnlock =
       lock: DocumentLockFile;
     }
   | {
+      source: 'local-import-remote';
+      title: string;
+      folderHandle: FileSystemDirectoryHandle;
+      lock: DocumentLockFile;
+      save: ImportLocalToRemoteParams;
+    }
+  | {
       source: 'remote';
       title: string;
       docId: string;
       lock: DocumentLockFile;
-      isPublished?: boolean;
+      publishMode?: import('../types').PublishMode;
+    }
+  | {
+      source: 'remote-edit';
+      title: string;
+      docId: string;
     };
