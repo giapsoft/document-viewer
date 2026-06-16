@@ -2470,6 +2470,7 @@ body.page-panel-resize-active .page-panel {
   padding: 0.1em 0.35em;
   border-radius: 3px;
   font-size: 0.9em;
+  color: #68696b;
 }
 
 .component-md pre {

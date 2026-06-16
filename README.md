@@ -96,3 +96,4 @@ npm run deploy
 - Run via HTTP (`npm run dev` / `npm run preview`); do not open `index.html` directly (`file://`).
 - Folder picker requires Chrome or Edge (File System Access API).
 - Hold **Alt** to edit component link groups; release to persist. In `md` components, select preview text and hold **Alt** while clicking a target to insert an in-app link; **Ctrl+click** a link to remove it. Comments and read state require a username (1–20 alphanumeric characters).
+- **AI agents** editing doc-tree projects: see [docs/AGENT-DOC-TREE.md](docs/AGENT-DOC-TREE.md) and [AGENTS.md](AGENTS.md).

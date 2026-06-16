@@ -1,6 +1,10 @@
 # Document Authoring Guide
 
-Short spec for agents creating or editing Document Viewer projects. Optional `styles.json` is read on load but not required for hand-authored data.
+Short spec for the Document Viewer **doc-tree** format.
+
+**AI agents:** start with [AGENT-DOC-TREE.md](./AGENT-DOC-TREE.md) (workflows & checklist). This file is the canonical field reference.
+
+Optional `styles.json` is read on load but not required for hand-authored data.
 
 ## ID terminology
 
@@ -132,10 +136,14 @@ Array of groups. Each group is an array of **global ids**. Selecting a component
 These rules match `src/lib/groupRelations.ts` (`MAX_PAGES_PER_GROUP = 2`, `MIN_GROUP_MEMBER_COUNT = 2`):
 
 1. **At least 2 members** per group. Smaller groups are **removed on save**.
-2. **At least 2 different pages** — groups where every member shares the same pageId prefix are **removed on save** (same-page-only groups are not kept).
-3. **At most 2 pages** per group. Link mode in the app blocks adding a member from a third page.
+2. **At least 2 different pageIds** — a group is removed only when **every** member shares the same pageId prefix (**same-page-only**).  
+   - **Invalid (removed):** `["intro.c1", "intro.c2"]` — both on `intro`, no other page.  
+   - **Valid (kept):** `["intro.c1", "intro.c2", "detail.c1"]` — three members, but **two** pageIds (`intro` + `detail`). Multiple members on one page are **not** a violation.
+3. **At most 2 pageIds** per group. Link mode blocks adding a member from a third page.
 4. A global id **may appear in multiple groups**.
 5. Use **full global ids** in JSON (`pageId.localId`), especially for cross-page links.
+
+**Agent note:** “Members share a pageId” is fine if the group **also** has members on a **second** pageId. The forbidden case is **same-page-only** (100% of members on one page).
 
 ### Link mode (UI)
 
@@ -286,7 +294,7 @@ Remote storage layout: `{docId}/relations.json`, `{docId}/groups.json`, `{docId}
 - **local id** unique per `.p` file; **global id** unique project-wide.
 - `groups.json` uses **global ids** only.
 - Link components across pages by putting their global ids in the **same group** — do not duplicate components on another page.
-- One persisted group: **≥ 2 members**, **≥ 2 pages**, **≤ 2 pages**.
+- One persisted group: **≥ 2 members**, **≥ 2 distinct pageIds**, **≤ 2 pageIds**. Several members may share one pageId (e.g. `intro.c1` + `intro.c2` + `detail.c1`). Only **same-page-only** groups (all members on one page) are removed on save.
 - Renaming a `.p` file requires updating `pageNames`, `pageOrder`, and any global id prefixes in `groups.json`, comments, and `.md` sidecars if links must be preserved.
 - In the app (local folder): **+ New page**, rename **pageName**, delete page, drag to reorder. Filename and pageId do not change when renaming pageName.
 - **New document** (not exported): data stays in memory until you link a local folder or publish to remote storage.
