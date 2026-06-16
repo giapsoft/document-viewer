@@ -316,7 +316,6 @@ function EditBarForm({
               </button>
             )}
             <div className="edit-bar-identity-text">
-              <span className="edit-bar-identity-label">Component</span>
               <ComponentIdHeader componentId={component.id} listBadge={listBadge} />
             </div>
           </div>
