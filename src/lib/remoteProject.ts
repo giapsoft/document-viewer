@@ -150,6 +150,8 @@ export type SaveRemoteResult = {
   remoteUpdatedAt: string | null;
   /** Project with merged remote comments applied before save. */
   mergedProject: LoadedProject;
+  /** Per-file conflicts detected — paths changed by someone else since last load. */
+  conflictPaths?: string[];
 };
 
 export type RemoteDocumentLoadResult =
@@ -1438,6 +1440,46 @@ export async function syncRemoteRelations(
   }
 }
 
+/**
+ * Detect which of the candidate upload paths have been modified on the server
+ * since this session last saw them (by comparing server entry.updatedAt against
+ * the locally-cached storageUpdatedAt). Returns conflicting paths and a
+ * human-readable label for each (e.g. the page file name).
+ */
+async function detectPerFileConflicts(
+  uploadPaths: string[],
+  serverEntries: RemoteStorageEntry[],
+): Promise<string[]> {
+  if (uploadPaths.length === 0) return [];
+  const serverUpdatedAt = new Map(serverEntries.map((e) => [e.path, e.updatedAt]));
+  const conflicts: string[] = [];
+  await mapWithConcurrency(
+    uploadPaths,
+    async (path) => {
+      const serverAt = serverUpdatedAt.get(path);
+      if (!serverAt) return; // file is new on our side — no conflict
+      const cached = await getRemoteCachedFile(path);
+      // If we have no cache record the file was never loaded — skip
+      if (!cached) return;
+      // If server timestamp differs from what we cached, someone else changed it
+      if (cached.storageUpdatedAt !== serverAt) {
+        conflicts.push(path);
+      }
+    },
+    DEFAULT_CONCURRENCY,
+  );
+  return conflicts;
+}
+
+/** Turn a storage path like "docId/docs/intro.p" into a readable label. */
+function conflictPathLabel(docId: string, path: string): string {
+  const docsPrefix = `${docId}/docs/`;
+  if (path.startsWith(docsPrefix)) return path.slice(docsPrefix.length);
+  const rootPrefix = `${docId}/`;
+  if (path.startsWith(rootPrefix)) return path.slice(rootPrefix.length);
+  return path;
+}
+
 export async function saveRemoteDocument(
   docId: string,
   project: LoadedProject,
@@ -1561,6 +1603,18 @@ export async function saveRemoteDocument(
 
   const skippedUpload = uploadPaths.length === 0 && removePaths.length === 0;
 
+  // Per-file conflict detection: fetch current server entries and check which
+  // files we're about to overwrite have been changed by someone else since we
+  // last loaded them.
+  let conflictPaths: string[] | undefined;
+  if (uploadPaths.length > 0) {
+    const serverEntries = await listRemoteDocEntries(docId);
+    const rawConflicts = await detectPerFileConflicts(uploadPaths, serverEntries);
+    if (rawConflicts.length > 0) {
+      conflictPaths = rawConflicts.map((p) => conflictPathLabel(docId, p));
+    }
+  }
+
   if (uploadPaths.length > 0) {
     await mapWithConcurrency(
       uploadPaths,
@@ -1606,6 +1660,7 @@ export async function saveRemoteDocument(
       ...mergedBase,
       remotePublishMode: nextPublishMode,
     },
+    conflictPaths,
   };
 }
 

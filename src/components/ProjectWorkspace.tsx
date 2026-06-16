@@ -471,10 +471,15 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     ) => {
       const result = await saveToRemote(title, { force, protection, docId, publishMode });
       if (result.ok) return { ok: true as const };
-      if (result.conflict) {
+      if (result.conflict && !result.conflictPaths) {
+        // Version-level conflict (old mechanism): offer Reload or Overwrite
         setPendingRemoteTitle(title);
         setRemoteConflictOpen(true);
         return { ok: true as const };
+      }
+      if (result.conflict && result.conflictPaths) {
+        // Per-file conflict: changes were saved, but some files were also modified by someone else
+        return { ok: false as const, error: result.error ?? 'Conflict detected.' };
       }
       return { ok: false as const, error: result.error };
     },

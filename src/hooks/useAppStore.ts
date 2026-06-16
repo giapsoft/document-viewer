@@ -107,7 +107,7 @@ import {
 export type PageActionResult = { ok: true } | { ok: false; error: string };
 export type SaveResult =
   | { ok: true; docId?: string }
-  | { ok: false; error: string; cancelled?: boolean; conflict?: boolean };
+  | { ok: false; error: string; cancelled?: boolean; conflict?: boolean; conflictPaths?: string[] };
 
 function mergeLocalImportForRemote(
   current: LoadedProject,
@@ -1563,6 +1563,14 @@ export function useAppStore() {
         setDirty(false);
         setSaveStatus('saved');
         window.setTimeout(() => setSaveStatus('idle'), 2000);
+        if (saveResult.conflictPaths && saveResult.conflictPaths.length > 0) {
+          return {
+            ok: false,
+            conflict: true,
+            conflictPaths: saveResult.conflictPaths,
+            error: `Your changes were saved, but the following files were also modified by someone else: ${saveResult.conflictPaths.join(', ')}. Consider reloading to review their changes.`,
+          };
+        }
         return { ok: true, docId: project.remoteDocId };
       }
 
