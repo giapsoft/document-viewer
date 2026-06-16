@@ -11,6 +11,13 @@ import { useUnreadNavigationShortcuts } from '../hooks/useUnreadNavigationShortc
 import { useLinkedListPanelShortcuts } from '../hooks/useLinkedListPanelShortcuts';
 import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
 import { useCtrlCommentLinkHold } from '../hooks/useCtrlCommentLinkHold';
+import { useMdLinkHold } from '../hooks/useMdLinkHold';
+import {
+  getMdSelectionForComponent,
+  unwrapMdComponentLinkAtOffset,
+  wrapMdRangeWithComponentLink,
+} from '../lib/mdComponentLinkInsert';
+import type { MdTextRange } from '../lib/mdSelection';
 import { CommentPanel } from './CommentPanel';
 import { Toast } from './Toast';
 import { GroupMembershipDialog } from './GroupMembershipDialog';
@@ -281,6 +288,57 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
         canOwnComment(selectedComment, state.commentAuthorId, state.commentUsername),
     );
 
+  const selectedLocated = state.selection
+    ? findComponent(project, state.selection.componentId)
+    : null;
+  const selectedIsMd = selectedLocated?.component.type === 'md';
+
+  const [mdLinkCtrlActive, setMdLinkCtrlActive] = useState(false);
+  const [mdLinkCapturedRange, setMdLinkCapturedRange] = useState<MdTextRange | null>(null);
+  const [mdLinkToast, setMdLinkToast] = useState<string | null>(null);
+
+  const canMdLink =
+    !isEditLocked && !state.contentEditorOpen && !canLinkSelectedComment && selectedIsMd;
+
+  const finishMdLinkSession = useCallback(() => {
+    setMdLinkCtrlActive(false);
+    setMdLinkCapturedRange(null);
+  }, []);
+
+  const tryActivateMdLink = useCallback(() => {
+    if (!state.selection || !selectedIsMd) return false;
+    const componentId = state.selection.componentId;
+    const source = project.mdFiles.get(componentId) ?? '';
+    const range = getMdSelectionForComponent(componentId, source);
+    if (!range) return false;
+    setMdLinkCapturedRange(range);
+    return true;
+  }, [state.selection, selectedIsMd, project.mdFiles]);
+
+  const shouldDeferGroupLinkToMdText = useCallback(() => {
+    if (!state.selection || !selectedIsMd) return false;
+    const componentId = state.selection.componentId;
+    const source = project.mdFiles.get(componentId) ?? '';
+    return getMdSelectionForComponent(componentId, source) !== null;
+  }, [state.selection, selectedIsMd, project.mdFiles]);
+
+  useMdLinkHold({
+    enabled: canMdLink,
+    ctrlActive: mdLinkCtrlActive,
+    setCtrlActive: setMdLinkCtrlActive,
+    onActivate: tryActivateMdLink,
+    onRelease: finishMdLinkSession,
+  });
+
+  const mdLinkMode = mdLinkCtrlActive && mdLinkCapturedRange !== null;
+  const mdLinkSourceComponentId = mdLinkMode ? state.selection?.componentId ?? null : null;
+
+  useEffect(() => {
+    if (!mdLinkToast) return;
+    const timer = window.setTimeout(() => setMdLinkToast(null), APP_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [mdLinkToast]);
+
   const activateLinkMode = useCallback(() => {
     setLinkCtrlActive(true, groupPanelOpen ? groupPanelActiveIndex : undefined);
   }, [setLinkCtrlActive, groupPanelOpen, groupPanelActiveIndex]);
@@ -295,6 +353,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     setCtrlActive: (active) => {
       if (active) activateLinkMode();
     },
+    shouldDeferActivate: shouldDeferGroupLinkToMdText,
     onRelease: finishLinkSession,
   });
 
@@ -346,7 +405,46 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     });
   };
 
+  const handleMdLinkTarget = (targetId: string, _pageFile: string) => {
+    if (!mdLinkMode || !mdLinkCapturedRange || !state.selection) return;
+    const sourceId = state.selection.componentId;
+    if (targetId === sourceId) return;
+
+    const source = project.mdFiles.get(sourceId) ?? '';
+    const result = wrapMdRangeWithComponentLink(source, mdLinkCapturedRange, targetId);
+    if (!result.ok) {
+      setMdLinkToast(result.reason);
+      finishMdLinkSession();
+      return;
+    }
+
+    updateMdContent(sourceId, result.content);
+    finishMdLinkSession();
+    window.getSelection()?.removeAllRanges();
+    setMdLinkToast(`Linked to ${targetId}`);
+  };
+
+  const handleUnlinkMdComponentLink = (
+    componentId: string,
+    pageFile: string,
+    sourceOffset: number,
+  ) => {
+    if (isEditLocked) return;
+    const source = project.mdFiles.get(componentId) ?? '';
+    const result = unwrapMdComponentLinkAtOffset(source, sourceOffset, pageFile, project);
+    if (!result.ok) {
+      setMdLinkToast(result.reason);
+      return;
+    }
+    updateMdContent(componentId, result.content);
+    setMdLinkToast('Link removed');
+  };
+
   const handleComponentClick = (componentId: string, pageFile: string) => {
+    if (mdLinkMode) {
+      handleMdLinkTarget(componentId, pageFile);
+      return;
+    }
     if (commentLinkMode) {
       handleCommentLinkComponent(componentId, pageFile);
       return;
@@ -439,6 +537,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const workspaceShortcutsBlocked =
     state.linkMode ||
     state.commentLinkCtrlActive ||
+    mdLinkCtrlActive ||
     state.contentEditorOpen ||
     saveDestinationOpen ||
     remoteConflictOpen;
@@ -795,12 +894,17 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                       selectionScrollNonce={state.selectionScrollNonce}
                       commentLinkMode={commentLinkMode}
                       commentLinkPreviewAnchor={commentLinkPreviewAnchor}
+                      mdLinkMode={mdLinkMode}
+                      mdLinkSourceComponentId={mdLinkSourceComponentId}
+                      mdLinkPreviewRange={mdLinkCapturedRange}
                       commentAnchorHighlightId={commentAnchorHighlightId}
                       outstandingCommentId={state.outstandingCommentId}
                       onCommentLinkComponent={handleCommentLinkComponent}
+                      onMdLinkTarget={handleMdLinkTarget}
                       onCommentLinkMdRange={handleCommentLinkMdRange}
                       onCommentMarkClick={handleCommentMarkClick}
                       onNavigateToComponent={jumpToComponent}
+                      onUnlinkMdComponentLink={handleUnlinkMdComponentLink}
                       commentUsername={state.commentUsername}
                       componentReadState={state.componentReadState}
                       onToggleComponentRead={toggleComponentRead}
@@ -906,6 +1010,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
       )}
 
       {state.appToast ? <Toast message={state.appToast.message} /> : null}
+      {mdLinkToast ? <Toast message={mdLinkToast} /> : null}
     </>
   );
 }

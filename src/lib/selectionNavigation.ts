@@ -1,4 +1,4 @@
-import type { AppState, SelectionState, SelectionHistoryEntry } from '../types';
+import type { AppState, LoadedProject, SelectionState, SelectionHistoryEntry } from '../types';
 import {
   getLinkedComponentIds,
 } from './index';
@@ -65,6 +65,38 @@ export function applyComponentSelection(
   pageFile: string,
 ): { currentPage: string; selection: SelectionState } | null {
   return buildSelectionStateForComponent(state, componentId, pageFile);
+}
+
+/** Recompute selection.relatedIds after project index / md virtual groups change. */
+export function applySelectionRefreshAfterProjectChange(
+  state: AppState,
+  project: LoadedProject,
+): Partial<Pick<AppState, 'selection' | 'selectionScrollNonce'>> {
+  if (!state.selection) return {};
+  const pageFile = project.index.componentToPage.get(state.selection.componentId);
+  if (!pageFile) return {};
+
+  const next = buildSelectionStateForComponent(
+    { ...state, project },
+    state.selection.componentId,
+    pageFile,
+  );
+  if (!next) return {};
+
+  const prevRelated = state.selection.relatedIds.size;
+  const nextRelated = next.selection.relatedIds.size;
+  const relatedIdsChanged =
+    prevRelated !== nextRelated ||
+    [...state.selection.relatedIds].some((id) => !next.selection.relatedIds.has(id));
+
+  if (!relatedIdsChanged) return {};
+
+  return {
+    selection: next.selection,
+    ...(nextRelated > 1 && nextRelated > prevRelated
+      ? { selectionScrollNonce: state.selectionScrollNonce + 1 }
+      : {}),
+  };
 }
 
 export function remapSelectionHistoryId(

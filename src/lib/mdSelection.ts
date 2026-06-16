@@ -615,6 +615,13 @@ export function parseMarkdownWithOffsets(
   }) as string;
 }
 
+/** Markdown lexer tokens annotated with `mdOffset` (source index of each token's raw span). */
+export function lexerWithSourceOffsets(source: string): Token[] {
+  const tokens = marked.lexer(source);
+  annotateTokens(source, [...tokens], 0);
+  return tokens;
+}
+
 function expandHighlightParts(range: MdHighlightRange): MdSourceSegment[] {
   if (range.segments?.length) return range.segments;
   if (range.start >= 0 && range.end > range.start) {

@@ -1,38 +1,37 @@
 import { useEffect, useRef } from 'react';
 import { isTypingTarget } from '../lib/keyboard';
 
-interface UseCtrlLinkModeHoldOptions {
+interface UseMdLinkHoldOptions {
   enabled: boolean;
   ctrlActive: boolean;
   setCtrlActive: (active: boolean) => void;
-  /** When true, Alt-hold defers to another mode (e.g. md text link). */
-  shouldDeferActivate?: () => boolean;
-  /** End Ctrl session — persist only when preview changed. */
+  /** Return true when Alt-hold should enter md link mode (e.g. range captured). */
+  onActivate: () => boolean;
   onRelease: () => void;
 }
 
-/** Hold Control to preview component links in temp state; release to persist if changed. */
-export function useCtrlLinkModeHold({
+/** Hold Alt to link the current md text selection to another component. */
+export function useMdLinkHold({
   enabled,
   ctrlActive,
   setCtrlActive,
-  shouldDeferActivate,
+  onActivate,
   onRelease,
-}: UseCtrlLinkModeHoldOptions) {
-  const heldViaCtrlRef = useRef(false);
+}: UseMdLinkHoldOptions) {
+  const heldViaAltRef = useRef(false);
   const endingSessionRef = useRef(false);
   const ctrlActiveRef = useRef(ctrlActive);
   ctrlActiveRef.current = ctrlActive;
-  const shouldDeferActivateRef = useRef(shouldDeferActivate);
-  shouldDeferActivateRef.current = shouldDeferActivate;
+  const onActivateRef = useRef(onActivate);
+  onActivateRef.current = onActivate;
 
   useEffect(() => {
     if (!enabled) return;
 
     const endSession = () => {
-      if (!heldViaCtrlRef.current || endingSessionRef.current) return;
+      if (!heldViaAltRef.current || endingSessionRef.current) return;
       endingSessionRef.current = true;
-      heldViaCtrlRef.current = false;
+      heldViaAltRef.current = false;
       try {
         onRelease();
       } finally {
@@ -44,14 +43,13 @@ export function useCtrlLinkModeHold({
       if (e.key === 'Alt' && !e.repeat) {
         if (e.ctrlKey || e.metaKey || e.shiftKey) return;
         if (isTypingTarget(e.target)) return;
-        if (ctrlActiveRef.current && !heldViaCtrlRef.current) return;
-        if (shouldDeferActivateRef.current?.()) return;
-        heldViaCtrlRef.current = true;
+        if (ctrlActiveRef.current && !heldViaAltRef.current) return;
+        if (!onActivateRef.current()) return;
+        heldViaAltRef.current = true;
         setCtrlActive(true);
         return;
       }
-      // Any other key pressed while Alt is held → cancel the session
-      if (heldViaCtrlRef.current && e.key !== 'Alt') {
+      if (heldViaAltRef.current && e.key !== 'Alt') {
         endSession();
       }
     };

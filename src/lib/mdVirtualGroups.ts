@@ -7,7 +7,33 @@ function collectLinkHrefs(tokens: Token[], hrefs: string[]): void {
   for (const token of tokens) {
     if (token.type === 'link') {
       hrefs.push((token as Tokens.Link).href);
+      continue;
     }
+
+    if (token.type === 'list') {
+      for (const item of (token as Tokens.List).items) {
+        if (item.tokens?.length) {
+          collectLinkHrefs(item.tokens, hrefs);
+        }
+      }
+    }
+
+    if (token.type === 'table') {
+      const table = token as Tokens.Table;
+      for (const cell of table.header) {
+        if (cell.tokens?.length) {
+          collectLinkHrefs(cell.tokens, hrefs);
+        }
+      }
+      for (const row of table.rows) {
+        for (const cell of row) {
+          if (cell.tokens?.length) {
+            collectLinkHrefs(cell.tokens, hrefs);
+          }
+        }
+      }
+    }
+
     const nested = (token as { tokens?: Token[] }).tokens;
     if (nested?.length) {
       collectLinkHrefs(nested, hrefs);

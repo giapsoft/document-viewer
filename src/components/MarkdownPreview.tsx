@@ -6,6 +6,7 @@ import {
   renderSelectableMarkdown,
   type MdHighlightRange,
 } from '../lib/mdSelection';
+import { getComponentLinkLabelStartOffset } from '../lib/mdComponentLinkInsert';
 
 interface MarkdownPreviewProps {
   source: string;
@@ -16,6 +17,7 @@ interface MarkdownPreviewProps {
   onTextSelect?: (range: import('../lib/mdSelection').MdTextRange) => void;
   onCommentMarkClick?: (commentId: string) => void;
   onComponentLinkClick?: (componentId: string) => void;
+  onComponentLinkUnlink?: (sourceOffset: number) => void;
 }
 
 export function MarkdownPreview({
@@ -27,6 +29,7 @@ export function MarkdownPreview({
   onTextSelect,
   onCommentMarkClick,
   onComponentLinkClick,
+  onComponentLinkUnlink,
 }: MarkdownPreviewProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -81,6 +84,11 @@ export function MarkdownPreview({
       if (componentLink && root.contains(componentLink)) {
         event.preventDefault();
         event.stopPropagation();
+        if ((event.ctrlKey || event.metaKey) && onComponentLinkUnlink) {
+          const offset = getComponentLinkLabelStartOffset(componentLink);
+          if (offset != null) onComponentLinkUnlink(offset);
+          return;
+        }
         const componentId = componentLink.getAttribute('data-component-id');
         if (componentId && onComponentLinkClick) {
           onComponentLinkClick(componentId);
@@ -98,7 +106,7 @@ export function MarkdownPreview({
 
     root.addEventListener('click', handleClick);
     return () => root.removeEventListener('click', handleClick);
-  }, [onComponentLinkClick, onCommentMarkClick]);
+  }, [onComponentLinkClick, onComponentLinkUnlink, onCommentMarkClick]);
 
   return (
     <div

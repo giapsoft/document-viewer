@@ -2630,6 +2630,14 @@ body.page-panel-resize-active .page-panel {
   min-width: 0;
 }
 
+.edit-bar-md-selection-wrap {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
 .edit-bar-md-selection {
   flex: 1 1 0;
   min-width: 0;
@@ -2640,6 +2648,13 @@ body.page-panel-resize-active .page-panel {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: default;
+}
+
+.edit-bar-md-link-hint {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: #0d6efd;
+  white-space: nowrap;
 }
 
 .edit-bar-component-id {
@@ -4537,7 +4552,9 @@ body.page-panel-resize-active .page-panel {
 .component-md mark.md-comment-highlight-focused,
 .component-md .md-comment-highlight-focused,
 .component-md mark.md-comment-highlight-preview,
-.component-md .md-comment-highlight-preview {
+.component-md .md-comment-highlight-preview,
+.component-md mark.md-md-link-preview,
+.component-md .md-md-link-preview {
   background: rgba(255, 192, 120, 0.38);
   color: inherit;
   padding: 0.05em 0;
@@ -4552,7 +4569,9 @@ body.page-panel-resize-active .page-panel {
 .component-md pre mark.md-comment-highlight-focused,
 .component-md pre .md-comment-highlight-focused,
 .component-md pre mark.md-comment-highlight-preview,
-.component-md pre .md-comment-highlight-preview {
+.component-md pre .md-comment-highlight-preview,
+.component-md pre mark.md-md-link-preview,
+.component-md pre .md-md-link-preview {
   display: inline;
   background: rgba(255, 192, 120, 0.22);
   padding: 0;

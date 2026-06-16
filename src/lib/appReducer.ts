@@ -24,6 +24,7 @@ import {
 import {
   appendSelectionHistory,
   applyComponentSelection,
+  applySelectionRefreshAfterProjectChange,
   buildSelectionStateForComponent,
   remapSelectionHistoryId,
   scrollToHistoryEntry,
@@ -583,10 +584,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         bumpedVersion,
       );
 
+      const rebuilt = rebuildProject({ ...state.project, pages, mdFiles });
+
       return {
         ...state,
-        project: rebuildProject({ ...state.project, pages, mdFiles }),
+        project: rebuilt,
         componentReadState,
+        ...applySelectionRefreshAfterProjectChange(state, rebuilt),
       };
     }
 
@@ -953,12 +957,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         fileHashes.set(action.storagePath, action.fileHash);
         remoteSync = { fileHashes };
       }
+      const rebuilt = rebuildProject({ ...state.project, mdFiles, remoteSync });
       const shouldScrollToMd =
         state.scrollToComponent?.componentId === action.componentId ||
         state.selection?.componentId === action.componentId;
       return {
         ...state,
-        project: { ...state.project, mdFiles, remoteSync },
+        project: rebuilt,
+        ...applySelectionRefreshAfterProjectChange(state, rebuilt),
         ...(shouldScrollToMd
           ? {
               scrollToComponent: {

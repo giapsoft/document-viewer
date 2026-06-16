@@ -73,6 +73,25 @@ function getPreviewMdHighlightRanges(
   );
 }
 
+function getMdLinkPreviewHighlightRanges(
+  preview: MdTextRange | null | undefined,
+  componentId: string,
+  sourceComponentId: string | null | undefined,
+  mdSource: string,
+): MdHighlightRange[] {
+  if (!preview || sourceComponentId !== componentId) return [];
+  const segments = resolveMdHighlightSegments(mdSource, preview);
+  if (segments.length === 0) return [];
+  return [
+    {
+      start: Math.min(...segments.map((segment) => segment.start)),
+      end: Math.max(...segments.map((segment) => segment.end)),
+      segments,
+      className: 'md-comment-highlight md-md-link-preview',
+    },
+  ];
+}
+
 function mdHighlightClassName(
   commentId: string,
   highlightCommentId: string | null,
@@ -185,10 +204,13 @@ interface ComponentBlockProps {
   linkGroupMembers?: Set<string>;
   commentLinkMode?: boolean;
   commentLinkPreviewAnchor?: CommentAnchor | null;
+  mdLinkMode?: boolean;
+  mdLinkSourceComponentId?: string | null;
   mdHighlightRanges?: MdHighlightRange[];
   hasComponentCommentAnchor?: boolean;
   onSelect: (componentId: string, pageFile: string) => void;
   onCommentLinkComponent?: (componentId: string, pageFile: string) => void;
+  onMdLinkTarget?: (componentId: string, pageFile: string) => void;
   onCommentLinkMdRange?: (
     componentId: string,
     pageFile: string,
@@ -196,6 +218,11 @@ interface ComponentBlockProps {
   ) => void;
   onCommentMarkClick?: (commentId: string, componentId: string, pageFile: string) => void;
   onNavigateToComponent?: (componentId: string, sourcePageFile: string) => void;
+  onUnlinkMdComponentLink?: (
+    componentId: string,
+    pageFile: string,
+    sourceOffset: number,
+  ) => void;
   flashedComponentId?: string | null;
   flashNonce?: number;
   registerRef: (id: string, el: HTMLElement | null) => void;
@@ -221,6 +248,9 @@ interface ComponentShellProps {
   onSelect: (componentId: string, pageFile: string) => void;
   onOpenGroupDialog?: () => void;
   onCommentLinkComponent?: (componentId: string, pageFile: string) => void;
+  onMdLinkTarget?: (componentId: string, pageFile: string) => void;
+  mdLinkMode?: boolean;
+  mdLinkSourceComponentId?: string | null;
   commentLinkMode?: boolean;
   pageFile: string;
   registerRef: (id: string, el: HTMLElement | null) => void;
@@ -263,7 +293,10 @@ function ComponentShell({
   onSelect,
   onOpenGroupDialog,
   onCommentLinkComponent,
+  onMdLinkTarget,
   commentLinkMode = false,
+  mdLinkMode = false,
+  mdLinkSourceComponentId = null,
   pageFile,
   registerRef,
   children,
@@ -313,6 +346,10 @@ function ComponentShell({
           onCommentLinkComponent(component.id, pageFile);
           return;
         }
+        if (mdLinkMode && onMdLinkTarget && component.id !== mdLinkSourceComponentId) {
+          onMdLinkTarget(component.id, pageFile);
+          return;
+        }
         // Drag-select in markdown fires click on mouseup; focusing the shell clears the highlight.
         if (draggedRef.current) {
           draggedRef.current = false;
@@ -331,6 +368,8 @@ function ComponentShell({
           e.preventDefault();
           if (commentLinkMode && onCommentLinkComponent) {
             onCommentLinkComponent(component.id, pageFile);
+          } else if (mdLinkMode && onMdLinkTarget && component.id !== mdLinkSourceComponentId) {
+            onMdLinkTarget(component.id, pageFile);
           } else {
             onSelect(component.id, pageFile);
           }
@@ -372,13 +411,17 @@ export function ComponentBlock({
   pendingMdComponentIds,
   commentLinkMode = false,
   commentLinkPreviewAnchor = null,
+  mdLinkMode = false,
+  mdLinkSourceComponentId = null,
   mdHighlightRanges = [],
   hasComponentCommentAnchor = false,
   onSelect,
   onCommentLinkComponent,
+  onMdLinkTarget,
   onCommentLinkMdRange,
   onCommentMarkClick,
   onNavigateToComponent,
+  onUnlinkMdComponentLink,
   flashedComponentId = null,
   flashNonce = 0,
   registerRef,
@@ -417,25 +460,34 @@ export function ComponentBlock({
       (commentLinkPreviewAnchor?.kind === 'md-range' &&
         commentLinkPreviewAnchor.componentId === component.id));
 
+  const isMdLinkSource = mdLinkMode && mdLinkSourceComponentId === component.id;
+
   const isLinkSelected = linkMode && (linkGroupMembers?.has(component.id) ?? false);
   const isPrimarySelected =
-    !linkMode && !commentLinkMode && selection?.componentId === component.id;
+    !linkMode && !commentLinkMode && !mdLinkMode && selection?.componentId === component.id;
   const hasPersistedGroups =
     getPersistedGroupIndicesForComponent(project.index, component.id).length > 0;
   const showGroupLink =
     isPrimarySelected && (hasPersistedGroups || linkedListPanelOpen);
-  const isHighlighted = !linkMode && !commentLinkMode && (highlightedIds?.has(component.id) ?? false);
+  const isHighlighted =
+    !linkMode && !commentLinkMode && !mdLinkMode && (highlightedIds?.has(component.id) ?? false);
   const isRelatedSelected = isHighlighted && !isPrimarySelected;
   const isDimmed = commentLinkMode
     ? commentLinkPreviewAnchor != null && !isCommentLinkPreview
-    : linkMode
-      ? linkGroupMembers != null && linkGroupMembers.size > 0 && !isLinkSelected
-      : selection !== null && !isHighlighted;
+    : mdLinkMode
+      ? false
+      : linkMode
+        ? linkGroupMembers != null && linkGroupMembers.size > 0 && !isLinkSelected
+        : selection !== null && !isHighlighted;
 
   const highlightKind: ComponentShellProps['highlightKind'] = commentLinkMode
     ? isCommentLinkPreview
       ? 'comment-link'
       : 'none'
+    : mdLinkMode
+      ? isMdLinkSource
+        ? 'comment-link'
+        : 'none'
     : linkMode
       ? isLinkSelected
         ? 'link'
@@ -495,7 +547,10 @@ export function ComponentBlock({
             onCommentLinkComponent?.(componentId, file);
           }
         : onCommentLinkComponent,
+    onMdLinkTarget,
     commentLinkMode,
+    mdLinkMode,
+    mdLinkSourceComponentId,
     pageFile,
     registerRef,
   };
@@ -559,14 +614,20 @@ export function ComponentBlock({
               onCommentLinkMdRange?.(component.id, pageFile, range);
             }}
             onCommentMarkClick={
-              commentLinkMode || linkMode
+              commentLinkMode || linkMode || mdLinkMode
                 ? undefined
                 : (commentId) => onCommentMarkClick?.(commentId, component.id, pageFile)
             }
             onComponentLinkClick={
-              commentLinkMode || linkMode
+              commentLinkMode || linkMode || mdLinkMode
                 ? undefined
                 : (componentId) => onNavigateToComponent?.(componentId, pageFile)
+            }
+            onComponentLinkUnlink={
+              commentLinkMode || linkMode || mdLinkMode
+                ? undefined
+                : (sourceOffset) =>
+                    onUnlinkMdComponentLink?.(component.id, pageFile, sourceOffset)
             }
           />
         ) : isMdPending ? (
@@ -676,9 +737,13 @@ interface PagePanelProps {
   selectionScrollNonce?: number;
   commentLinkMode?: boolean;
   commentLinkPreviewAnchor?: CommentAnchor | null;
+  mdLinkMode?: boolean;
+  mdLinkSourceComponentId?: string | null;
+  mdLinkPreviewRange?: MdTextRange | null;
   commentAnchorHighlightId?: string | null;
   outstandingCommentId?: string | null;
   onCommentLinkComponent?: (componentId: string, pageFile: string) => void;
+  onMdLinkTarget?: (componentId: string, pageFile: string) => void;
   onCommentLinkMdRange?: (
     componentId: string,
     pageFile: string,
@@ -686,6 +751,11 @@ interface PagePanelProps {
   ) => void;
   onCommentMarkClick?: (commentId: string, componentId: string, pageFile: string) => void;
   onNavigateToComponent?: (componentId: string, sourcePageFile: string) => void;
+  onUnlinkMdComponentLink?: (
+    componentId: string,
+    pageFile: string,
+    sourceOffset: number,
+  ) => void;
   flashedComponentId?: string | null;
   flashNonce?: number;
   commentUsername?: string | null;
@@ -710,12 +780,17 @@ export function PagePanel({
   onClearSelection,
   commentLinkMode = false,
   commentLinkPreviewAnchor = null,
+  mdLinkMode = false,
+  mdLinkSourceComponentId = null,
+  mdLinkPreviewRange = null,
   commentAnchorHighlightId = null,
   outstandingCommentId = null,
   onCommentLinkComponent,
+  onMdLinkTarget,
   onCommentLinkMdRange,
   onCommentMarkClick,
   onNavigateToComponent,
+  onUnlinkMdComponentLink,
   flashedComponentId = null,
   flashNonce = 0,
   scrollToComponentId = null,
@@ -1038,6 +1113,8 @@ export function PagePanel({
                   pendingMdComponentIds={pendingMdComponentIds}
                   commentLinkMode={commentLinkMode}
                   commentLinkPreviewAnchor={commentLinkPreviewAnchor}
+                  mdLinkMode={mdLinkMode}
+                  mdLinkSourceComponentId={mdLinkSourceComponentId}
                   mdHighlightRanges={
                     commentLinkMode
                       ? getPreviewMdHighlightRanges(
@@ -1045,7 +1122,14 @@ export function PagePanel({
                           component.id,
                           mdSource,
                         )
-                      : getMdHighlightRanges(
+                      : mdLinkMode
+                        ? getMdLinkPreviewHighlightRanges(
+                            mdLinkPreviewRange,
+                            component.id,
+                            mdLinkSourceComponentId,
+                            mdSource,
+                          )
+                        : getMdHighlightRanges(
                           comments,
                           component.id,
                           mdSource,
@@ -1064,9 +1148,11 @@ export function PagePanel({
                   }
                   onSelect={onSelect}
                   onCommentLinkComponent={onCommentLinkComponent}
+                  onMdLinkTarget={onMdLinkTarget}
                   onCommentLinkMdRange={onCommentLinkMdRange}
                   onCommentMarkClick={onCommentMarkClick}
                   onNavigateToComponent={onNavigateToComponent}
+                  onUnlinkMdComponentLink={onUnlinkMdComponentLink}
                   flashedComponentId={flashedComponentId}
                   flashNonce={flashNonce}
                   registerRef={registerRef}
