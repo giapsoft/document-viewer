@@ -139,28 +139,49 @@ These rules match `src/lib/groupRelations.ts` (`MAX_PAGES_PER_GROUP = 2`, `MIN_G
 
 ### Link mode (UI)
 
-- Hold **Ctrl** to enter link mode; release Ctrl to commit (or discard if unchanged).
+- Hold **Alt** to enter link mode; release Alt to commit (or discard if unchanged).
 - **With a selection**: edit groups that contain the selected component, or create a new group containing it.
 - **Without a selection**: first click starts a new group; further clicks add/remove members.
 - **Unlink** (toolbar): delete the active group or all groups containing the selected component.
+
+### Markdown in-app links (`md` → component)
+
+Markdown body lives in sidecar `docs/{globalId}.md`. In-app links use normal Markdown syntax:
+
+```markdown
+See [luồng xử lý](flows.c1) for details.
+```
+
+| `href` | Resolved as |
+|--------|-------------|
+| `flows.c1` | Global id |
+| `c1` | Local id on the **same page** → `pageId.c1` |
+
+Ignored for component linking: `https://…`, `mailto:`, `#…`, `/…`.
+
+**Create a link in the UI**
+
+1. Select the source `md` component.
+2. Select text in the **preview** (not only the edit-bar textarea).
+3. Hold **Alt** and click the target component → the app inserts `[selected text](targetId)` into the sidecar.
+4. Selection must not contain `[` or `]` (add those links manually in Markdown if needed).
+
+**Remove a link:** **Ctrl+click** the link in the preview (Cmd+click on Mac) → unwraps to plain text in the sidecar.
+
+**When reading:** click a component link in the preview to jump to the target (opens its page if needed; target flashes briefly).
+
+You can also type or edit `[text](componentId)` directly in the sidecar or full-screen Markdown editor.
 
 ### Markdown virtual groups (not saved)
 
 For each `md` component, the app builds a **display-only** group: the md component plus in-app targets of Markdown links in its sidecar. These groups:
 
-- Affect **selection highlight / trace** only
+- Affect **selection highlight / trace** only (same visual rules as persisted groups)
 - Are **not** written to `groups.json`
 - Do **not** appear in the Linked lists panel
-- Are rebuilt on every project load / index rebuild
+- Are rebuilt on every project load / index rebuild (including after remote MD files finish loading)
 
-**Markdown in-app links** in `docs/{globalId}.md`:
-
-```markdown
-See [flows.c1](flows.c1) for the flow.
-```
-
-- `href` may be a **global id** (`flows.c1`) or a **local id on the same page** (`c1` → resolved to `pageId.c1`).
-- External URLs, `mailto:`, `#`, and `/` paths are ignored for component linking.
+**Trace behaviour:** selecting the `md` component highlights linked targets on open panels, and selecting a target highlights the `md` source. Cross-page links participate fully in trace. Links to components on the **same page** as the `md` component still work for preview navigation but are omitted from cross-page trace (same rule as persisted groups).
 
 ### `comments.json`
 

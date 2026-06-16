@@ -72,7 +72,27 @@ Rules:
 - Maximum **2 pages** per group when editing in the app.
 - **Unlink** in the top bar removes the active group or all groups for the selected component.
 
-**Markdown virtual groups** (not saved): each `md` component automatically links to in-app targets in its sidecar. They affect highlight/trace only — not `groups.json` and not the Linked lists panel.
+**Markdown virtual groups** (not saved): each `md` component automatically links to in-app targets in its sidecar. They affect highlight/trace only — not `groups.json` and not the Linked lists panel. Cross-page targets trace when you select the `md` component or a linked target; same-page targets still work as clickable links in the preview but do not join cross-page trace.
+
+**Markdown in-app links** in sidecar `docs/{globalId}.md`:
+
+```markdown
+See [flow overview](flows.c1) for details.
+```
+
+| `href` | Resolved as |
+|--------|-------------|
+| `flows.c1` | Global id |
+| `c1` | Local id on the same page |
+
+| Action | How |
+|--------|-----|
+| Create link | Select `md` component → select text in preview → hold **Alt** → click target component |
+| Remove link | **Ctrl+click** link in preview (Cmd+click on Mac) |
+| Navigate | Click link in preview (opens page if needed; target flashes) |
+| Edit manually | Type `[text](componentId)` in sidecar or full-screen editor (`E`) |
+
+External URLs, `mailto:`, `#`, and `/` paths are not treated as component links. UI link creation fails if the selected text contains `[` or `]`.
 
 ---
 
@@ -83,6 +103,7 @@ With a component selected, use the **edit bar** at the bottom:
 | Action | Shortcut |
 |--------|----------|
 | Full-screen editor | `E` |
+| Save & close editor | `Ctrl+S` (in full-screen editor only) |
 | Cycle status | `←` / `→` |
 | Delete component | `Delete` |
 | Insert above / below | `Alt+↑` / `Alt+↓` |
@@ -92,7 +113,7 @@ With a component selected, use the **edit bar** at the bottom:
 
 **Status values:** `undefined`, `pending`, `working`, `done`, `blocked` — shown as background colours.
 
-- **Markdown (`md`)** — body lives in a sidecar file `docs/{globalId}.md`. Use `[text](flows.c1)` (global id) or `[text](c1)` (local id on the same page) for in-app links.
+- **Markdown (`md`)** — body in sidecar `docs/{globalId}.md`. See **Component linking** above for `[text](componentId)` syntax and Alt/Ctrl shortcuts to create or remove in-app links.
 - **Action** — before/after images with an animated interaction zone; edit visually in the full-screen editor. Selecting an action scrolls its page panel smoothly to center it on screen (panels do not open or close).
 - **Images** — import from file or clipboard; large images are compressed automatically.
 
