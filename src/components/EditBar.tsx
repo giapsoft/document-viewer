@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import type {
   Component,
   ComponentStatus,
@@ -13,6 +13,7 @@ import { ContentEditorDialog, type ContentEditorDraft } from './ContentEditorDia
 import { ImagePickerDialog } from './ImagePickerDialog';
 import { ConfirmDialog } from './PageFileDialog';
 import { Toast } from './Toast';
+import { mdRangeFromSelection, type MdTextRange } from '../lib/mdSelection';
 
 const TYPES: ComponentType[] = ['header', 'title', 'body', 'listItem', 'img', 'md', 'action'];
 const STATUSES: ComponentStatus[] = ['undefined', 'pending', 'working', 'done', 'blocked'];
@@ -196,6 +197,52 @@ interface EditBarFormProps {
   onToggleRead?: () => void;
 }
 
+function useMdSelection(isMd: boolean, componentId: string, source: string): MdTextRange | null {
+  const [mdRange, setMdRange] = useState<MdTextRange | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
+
+  useEffect(() => {
+    if (!isMd) {
+      setMdRange(null);
+      return;
+    }
+
+    const update = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        setMdRange(null);
+        return;
+      }
+
+      const root = document.querySelector(
+        `[data-component-id="${CSS.escape(componentId)}"] .component-md`,
+      );
+      if (!root) {
+        setMdRange(null);
+        return;
+      }
+
+      const range = mdRangeFromSelection(sourceRef.current, sel, root as HTMLElement);
+      setMdRange(range);
+    };
+
+    const onSelectionChange = () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(update);
+    };
+
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => {
+      document.removeEventListener('selectionchange', onSelectionChange);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [isMd, componentId]);
+
+  return mdRange;
+}
+
 function EditBarForm({
   project,
   selection,
@@ -221,6 +268,8 @@ function EditBarForm({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const mdContent = project.mdFiles.get(component.id) ?? '';
+  const mdSelection = useMdSelection(component.type === 'md', component.id, mdContent);
 
   const openFullscreen = () => {
     setFullscreenOpen(true);
@@ -235,8 +284,6 @@ function EditBarForm({
   const patch = (changes: Partial<Omit<Component, 'id'>>) => {
     onUpdate(pageFile, component.id, changes);
   };
-
-  const mdContent = project.mdFiles.get(component.id) ?? '';
   const isAction = component.type === 'action';
   const imgFilename = component.content.trim();
   const imgLabel = imgFilename || 'select image';
@@ -388,6 +435,12 @@ function EditBarForm({
               </label>
             )}
           </div>
+
+          {component.type === 'md' && mdSelection && (
+            <span className="edit-bar-md-selection" title={mdSelection.excerpt}>
+              {mdSelection.start}–{mdSelection.end} &ldquo;{mdSelection.excerpt}&rdquo;
+            </span>
+          )}
 
           <div className="edit-bar-actions" role="toolbar" aria-label="Component actions">
             <EditBarIconButton title="Full screen editor" shortcut="E" onClick={openFullscreen}>

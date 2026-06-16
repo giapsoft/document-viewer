@@ -2630,6 +2630,18 @@ body.page-panel-resize-active .page-panel {
   min-width: 0;
 }
 
+.edit-bar-md-selection {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: #495057;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
 .edit-bar-component-id {
   font-size: 0.78rem;
   font-family: ui-monospace, Consolas, monospace;
