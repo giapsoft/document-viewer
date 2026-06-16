@@ -154,6 +154,8 @@ export interface PanelState {
   expanded: boolean;
   /** Custom width in px when set by the user (drag resize). */
   widthPx?: number;
+  /** Pinned panels stay open until the user closes them from the panel header. */
+  pinned?: boolean;
 }
 
 export interface SelectionState {
@@ -329,6 +331,9 @@ export type AppAction =
   | { type: 'OUTSTANDING_COMMENT'; commentId: string | null }
   | { type: 'SET_CONTENT_EDITOR_OPEN'; open: boolean }
   | { type: 'CLEAR_APP_TOAST'; id?: number }
+  | { type: 'SHOW_APP_TOAST'; message: string }
+  | { type: 'TOGGLE_PANEL_PIN'; pageFile: string }
+  | { type: 'CLOSE_PAGE_PANEL'; pageFile: string }
   | {
       type: 'RESTORE_WORKSPACE_FROM_URL';
       pageFiles: string[];

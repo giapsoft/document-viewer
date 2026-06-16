@@ -9,6 +9,7 @@ import type { useAppStore } from '../hooks/useAppStore';
 import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigationShortcuts';
 import { useUnreadNavigationShortcuts } from '../hooks/useUnreadNavigationShortcuts';
 import { useLinkedListPanelShortcuts } from '../hooks/useLinkedListPanelShortcuts';
+import { useSidebarShortcuts } from '../hooks/useSidebarShortcuts';
 import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
 import { useCtrlCommentLinkHold } from '../hooks/useCtrlCommentLinkHold';
 import { useMdLinkHold } from '../hooks/useMdLinkHold';
@@ -60,6 +61,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     toggleSidebar,
     expandSidebar,
     openPage,
+    closePagePanel,
+    togglePanelPin,
     selectComponent,
     jumpToComponent,
     clearSelection,
@@ -557,6 +560,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     onClose: closeGroupPanel,
   });
 
+  useSidebarShortcuts({ onToggle: toggleSidebar });
+
   const showShortcutsHint =
     !workspaceShortcutsBlocked && (Boolean(state.selection) || readShortcutsEnabled);
 
@@ -881,7 +886,9 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                       linkGroupMembers={linkGroupMembers}
                       pendingImageNames={pendingRemoteImages}
                       pendingMdComponentIds={pendingRemoteMd}
-                      onClose={() => openPage(panel.pageFile)}
+                      pinned={panel.pinned ?? false}
+                      onTogglePin={() => togglePanelPin(panel.pageFile)}
+                      onClose={() => closePagePanel(panel.pageFile)}
                       onSelect={handleComponentClick}
                       onClearSelection={clearSelection}
                       scrollToComponentId={panelScrollTarget?.componentId ?? null}

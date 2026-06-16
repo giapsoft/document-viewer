@@ -32,6 +32,7 @@ import {
   addLinkedPageToPanels,
   applyOpenPage,
   ensureFlexLastPanel,
+  NO_PANEL_SLOT_TOAST,
   preparePanelsForOpen,
 } from '../lib/pagePanels';
 import { measurePanelSlotWidth } from '../lib/panelSlotRegistry';
@@ -575,7 +576,12 @@ export function useAppStore() {
 
       if (appState.panels.some((panel) => panel.pageFile === pageFile)) {
         const opened = applyOpenPage(appState, pageFile);
-        const panels = ensureFlexLastPanel(opened.panels ?? []);
+        if (opened.blocked) {
+          dispatch({ type: 'SHOW_APP_TOAST', message: NO_PANEL_SLOT_TOAST });
+          return;
+        }
+        const { blocked: _blocked, ...openedPatch } = opened;
+        const panels = ensureFlexLastPanel(openedPatch.panels ?? []);
         dispatch({ type: 'OPEN_PAGE', pageFile, panels });
         return;
       }
@@ -583,10 +589,29 @@ export function useAppStore() {
       const prevPanels = appState.panels;
       const projectKey = resolvePanelWidthProjectKey(project);
       const opened = applyOpenPage(appState, pageFile);
-      const rawPanels = opened.panels ?? prevPanels;
+      if (opened.blocked) {
+        dispatch({ type: 'SHOW_APP_TOAST', message: NO_PANEL_SLOT_TOAST });
+        return;
+      }
+      const { blocked: _blocked, ...openedPatch } = opened;
+      const rawPanels = openedPatch.panels ?? prevPanels;
       const panels = preparePanelsForOpen(prevPanels, rawPanels, projectKey);
 
       dispatch({ type: 'OPEN_PAGE', pageFile, panels });
+    },
+    [dispatch],
+  );
+
+  const closePagePanel = useCallback(
+    (pageFile: string) => {
+      dispatch({ type: 'CLOSE_PAGE_PANEL', pageFile });
+    },
+    [dispatch],
+  );
+
+  const togglePanelPin = useCallback(
+    (pageFile: string) => {
+      dispatch({ type: 'TOGGLE_PANEL_PIN', pageFile });
     },
     [dispatch],
   );
@@ -635,6 +660,10 @@ export function useAppStore() {
             storedWidths,
             measurePanelSlotWidth,
           );
+          if (rawPanels === null) {
+            dispatch({ type: 'SHOW_APP_TOAST', message: NO_PANEL_SLOT_TOAST });
+            return;
+          }
           panels = preparePanelsForOpen(prevPanels, rawPanels, projectKey);
         }
       }
@@ -2040,6 +2069,8 @@ export function useAppStore() {
     toggleSidebar,
     expandSidebar,
     openPage,
+    closePagePanel,
+    togglePanelPin,
     selectComponent,
     jumpToComponent,
     clearSelection,

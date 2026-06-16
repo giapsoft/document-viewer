@@ -8,6 +8,39 @@ import {
 } from './panelWidthStorage';
 import { getStoredPageOrder } from './pageOrder';
 
+export const NO_PANEL_SLOT_TOAST =
+  'No room to open another page. Close or unpin a page first.';
+
+export type OpenPageResult = Partial<AppState> & { blocked?: boolean };
+
+export function getPinnedPageFiles(panels: PanelState[]): string[] {
+  return panels.filter((panel) => panel.pinned).map((panel) => panel.pageFile);
+}
+
+function isReplaceablePanel(
+  panel: PanelState,
+  pageFile: string,
+  protectedPageFile?: string | null,
+): boolean {
+  if (panel.pinned) return false;
+  if (panel.pageFile === protectedPageFile) return false;
+  if (panel.pageFile === pageFile) return false;
+  return true;
+}
+
+function findReplaceablePanelIndex(
+  panels: PanelState[],
+  pageFile: string,
+  protectedPageFile?: string | null,
+  skipIndices?: ReadonlySet<number>,
+): number {
+  return panels.findIndex(
+    (panel, index) =>
+      isReplaceablePanel(panel, pageFile, protectedPageFile) &&
+      !(skipIndices?.has(index) ?? false),
+  );
+}
+
 export function getMainSelectionPageFile(state: AppState): string | null {
   if (!state.project || !state.selection) return null;
   return state.project.index.componentToPage.get(state.selection.componentId) ?? null;
@@ -16,11 +49,15 @@ export function getMainSelectionPageFile(state: AppState): string | null {
 function protectedPageFilesForLimit(
   maxOpenPages: number,
   protectedPageFile: string | null | undefined,
+  panels: PanelState[],
   ...alsoKeep: Array<string | null | undefined>
 ): string[] {
   const keep = new Set(
     alsoKeep.filter((pageFile): pageFile is string => Boolean(pageFile)),
   );
+  for (const panel of panels) {
+    if (panel.pinned) keep.add(panel.pageFile);
+  }
   if (maxOpenPages > 1 && protectedPageFile) {
     keep.add(protectedPageFile);
   }
@@ -263,8 +300,13 @@ export function addPageToPanels(
   protectedPageFile?: string | null,
   storedWidths: Record<string, number> = {},
   measureSlotWidth: (pageFile: string) => number | undefined = () => undefined,
-): PanelState[] {
-  const keepPages = protectedPageFilesForLimit(maxOpenPages, protectedPageFile, pageFile);
+): PanelState[] | null {
+  const keepPages = protectedPageFilesForLimit(
+    maxOpenPages,
+    protectedPageFile,
+    panels,
+    pageFile,
+  );
 
   if (panels.some((panel) => panel.pageFile === pageFile)) {
     return enforcePanelLimit(
@@ -280,22 +322,16 @@ export function addPageToPanels(
   }
 
   if (maxOpenPages <= 1) {
-    return [{ pageFile, expanded: true }];
-  }
-
-  const replaceIndex = result.findIndex(
-    (panel) =>
-      panel.pageFile !== protectedPageFile &&
-      panel.pageFile !== pageFile,
-  );
-
-  if (replaceIndex < 0) {
-    const removed = result[0];
+    const replaceIndex = findReplaceablePanelIndex(result, pageFile, protectedPageFile);
+    if (replaceIndex < 0) return null;
+    const replaced = result[replaceIndex];
     return [
-      ...result.slice(1),
-      panelReplacing(pageFile, removed, storedWidths, measureSlotWidth(removed.pageFile)),
+      panelReplacing(pageFile, replaced, storedWidths, measureSlotWidth(replaced.pageFile)),
     ];
   }
+
+  const replaceIndex = findReplaceablePanelIndex(result, pageFile, protectedPageFile);
+  if (replaceIndex < 0) return null;
 
   const next = [...result];
   const replaced = next[replaceIndex];
@@ -323,7 +359,7 @@ function insertOrReplaceBesideAnchor(
   maxOpenPages: number,
   storedWidths: Record<string, number> = {},
   measureSlotWidth: (pageFile: string) => number | undefined = () => undefined,
-): PanelState[] {
+): PanelState[] | null {
   if (targetPageFile === anchorPageFile) {
     return panels.map((panel) => ({ ...panel, expanded: true }));
   }
@@ -386,34 +422,38 @@ function insertOrReplaceBesideAnchor(
   }
 
   if (insertIndex < result.length) {
-    const next = [...result];
-    const replaced = next[insertIndex];
-    next[insertIndex] = panelReplacing(
-      targetPageFile,
-      replaced,
-      storedWidths,
-      measureSlotWidth(replaced.pageFile),
-    );
-    return next;
+    const victim = result[insertIndex];
+    if (!victim.pinned) {
+      const next = [...result];
+      const replaced = next[insertIndex];
+      next[insertIndex] = panelReplacing(
+        targetPageFile,
+        replaced,
+        storedWidths,
+        measureSlotWidth(replaced.pageFile),
+      );
+      return next;
+    }
   }
 
-  const replaceIndex = result.findIndex((_panel, index) => index !== anchorIndex);
-  if (replaceIndex >= 0) {
-    const next = [...result];
-    const replaced = next[replaceIndex];
-    next[replaceIndex] = panelReplacing(
-      targetPageFile,
-      replaced,
-      storedWidths,
-      measureSlotWidth(replaced.pageFile),
-    );
-    return next;
-  }
-
-  return enforcePanelLimit(result, maxOpenPages, [
+  const skipIndices = new Set<number>([anchorIndex]);
+  const replaceIndex = findReplaceablePanelIndex(
+    result,
     targetPageFile,
-    ...(anchorPageFile ? [anchorPageFile] : []),
-  ]);
+    anchorPageFile,
+    skipIndices,
+  );
+  if (replaceIndex < 0) return null;
+
+  const next = [...result];
+  const replaced = next[replaceIndex];
+  next[replaceIndex] = panelReplacing(
+    targetPageFile,
+    replaced,
+    storedWidths,
+    measureSlotWidth(replaced.pageFile),
+  );
+  return next;
 }
 
 /** Open a linked page beside the anchor (e.g. the MD source page). */
@@ -424,7 +464,7 @@ export function addLinkedPageToPanels(
   maxOpenPages: number,
   storedWidths: Record<string, number> = {},
   measureSlotWidth: (pageFile: string) => number | undefined = () => undefined,
-): PanelState[] {
+): PanelState[] | null {
   return insertOrReplaceBesideAnchor(
     panels,
     targetPageFile,
@@ -436,10 +476,13 @@ export function addLinkedPageToPanels(
 }
 
 /** Toggle a page in or out of the panel list from the sidebar. */
-export function applyOpenPage(state: AppState, pageFile: string): Partial<AppState> {
-  const inPanels = state.panels.some((p) => p.pageFile === pageFile);
+export function applyOpenPage(state: AppState, pageFile: string): OpenPageResult {
+  const existing = state.panels.find((panel) => panel.pageFile === pageFile);
 
-  if (inPanels) {
+  if (existing) {
+    if (existing.pinned) {
+      return { currentPage: pageFile };
+    }
     const panels = removePageFromPanels(state.panels, pageFile);
     const currentPage =
       state.currentPage === pageFile ? (panels[0]?.pageFile ?? null) : state.currentPage;
@@ -452,8 +495,26 @@ export function applyOpenPage(state: AppState, pageFile: string): Partial<AppSta
     state.maxOpenPages,
     getMainSelectionPageFile(state),
   );
+  if (panels === null) return { blocked: true };
   return {
     currentPage: pageFile,
     panels,
   };
+}
+
+export function closePagePanel(state: AppState, pageFile: string): Partial<AppState> {
+  if (!state.panels.some((panel) => panel.pageFile === pageFile)) {
+    return {};
+  }
+  const panels = removePageFromPanels(state.panels, pageFile);
+  const currentPage =
+    state.currentPage === pageFile ? (panels[0]?.pageFile ?? null) : state.currentPage;
+  return { currentPage, panels };
+}
+
+export function togglePanelPin(state: AppState, pageFile: string): Partial<AppState> {
+  const panels = state.panels.map((panel) =>
+    panel.pageFile === pageFile ? { ...panel, pinned: !panel.pinned } : panel,
+  );
+  return { panels };
 }

@@ -304,11 +304,11 @@ export function orderPagesForSelection(
 }
 
 /** Drop panels past the open limit, starting from the farthest slot. */
-export function enforcePanelLimit(
-  panels: { pageFile: string; expanded: boolean }[],
+export function enforcePanelLimit<T extends { pageFile: string; expanded: boolean; pinned?: boolean }>(
+  panels: T[],
   maxPanels: number,
   keepPageFiles?: string | readonly string[],
-): { pageFile: string; expanded: boolean }[] {
+): T[] {
   let result = panels.map((panel) => ({ ...panel, expanded: true }));
   const keep = new Set(
     keepPageFiles == null
@@ -321,7 +321,7 @@ export function enforcePanelLimit(
   while (result.length > maxPanels) {
     const toRemove = [...result]
       .reverse()
-      .find((panel) => !keep.has(panel.pageFile));
+      .find((panel) => !keep.has(panel.pageFile) && !panel.pinned);
     if (!toRemove) break;
     result = result.filter((panel) => panel.pageFile !== toRemove.pageFile);
   }

@@ -42,7 +42,7 @@ export function WorkspaceTopBar({
   return (
     <>
       {sidebarCollapsed && onExpandSidebar && (
-        <button type="button" className="sidebar-expand-btn" onClick={onExpandSidebar}>
+        <button type="button" className="sidebar-expand-btn" onClick={onExpandSidebar} title="Expand sidebar (Ctrl+B)">
           Expand
         </button>
       )}

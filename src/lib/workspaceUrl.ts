@@ -110,7 +110,8 @@ export function applyWorkspaceRestore(
 
   let panels = state.panels;
   for (const pageFile of targetPageFiles) {
-    panels = addPageToPanels(panels, pageFile, state.maxOpenPages);
+    const nextPanels = addPageToPanels(panels, pageFile, state.maxOpenPages);
+    if (nextPanels) panels = nextPanels;
   }
 
   const focusPage =

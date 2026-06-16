@@ -225,7 +225,8 @@ export function applyCreatePageState(
     selection: state.linkMode ? state.selection : null,
     panels: state.panels,
   };
-  const panels = addPageToPanels(nextState.panels, fileName, state.maxOpenPages);
+  const panels =
+    addPageToPanels(nextState.panels, fileName, state.maxOpenPages) ?? nextState.panels;
   return { ...nextState, panels };
 }
 

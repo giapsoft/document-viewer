@@ -131,7 +131,7 @@ export function Sidebar({
             />
             <span className="sidebar-max-pages-value">{maxOpenPages}</span>
           </label>
-          <button type="button" className="sidebar-collapse-btn" onClick={onToggle}>
+          <button type="button" className="sidebar-collapse-btn" onClick={onToggle} title="Collapse sidebar (Ctrl+B)">
             Collapse
           </button>
         </div>

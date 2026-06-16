@@ -2068,6 +2068,48 @@ body.page-panel-resize-active .page-panel {
   color: #dc3545;
 }
 
+.panel-pin-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: transparent;
+  padding: 0;
+  color: #57606a;
+  cursor: pointer;
+}
+
+.panel-pin-btn:hover {
+  background: #f6f8fa;
+  border-color: #d0d7de;
+  color: #24292f;
+}
+
+.panel-pin-btn.is-pinned {
+  background: #ddf4ff;
+  border-color: #54aeff;
+  color: #0969da;
+}
+
+.panel-pin-btn.is-pinned:hover {
+  background: #b6e3ff;
+  border-color: #218bff;
+  color: #0550ae;
+}
+
+.panel-pin-icon {
+  display: block;
+  transition: transform 0.15s ease;
+}
+
+.panel-pin-icon:not(.is-pinned) {
+  transform: rotate(-35deg);
+}
+
 .page-panel.shrunk .panel-toggle-btn {
   padding: 0.1rem 0.25rem;
 }

@@ -268,6 +268,29 @@ function ComponentGroupLinkIcon() {
   );
 }
 
+function PagePanelPinIcon({ pinned }: { pinned: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`panel-pin-icon${pinned ? ' is-pinned' : ''}`}
+    >
+      <line x1="12" x2="12" y1="17" y2="22" />
+      <path
+        d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"
+        fill={pinned ? 'currentColor' : 'none'}
+      />
+    </svg>
+  );
+}
+
 function mdContainsActiveSelection(shell: HTMLElement): boolean {
   const md = shell.querySelector('.component-md');
   if (!md) return false;
@@ -726,6 +749,8 @@ interface PagePanelProps {
   linkGroupMembers?: Set<string>;
   pendingImageNames?: ReadonlySet<string>;
   pendingMdComponentIds?: ReadonlySet<string>;
+  pinned?: boolean;
+  onTogglePin?: () => void;
   onClose: () => void;
   onSelect: (componentId: string, pageFile: string) => void;
   onClearSelection: () => void;
@@ -775,6 +800,8 @@ export function PagePanel({
   linkGroupMembers,
   pendingImageNames,
   pendingMdComponentIds,
+  pinned = false,
+  onTogglePin,
   onClose,
   onSelect,
   onClearSelection,
@@ -1062,6 +1089,21 @@ export function PagePanel({
               title={pageHasUnread ? 'Mark all components on this page as read' : 'Mark all components on this page as unread'}
             >
               {readAllLabel}
+            </button>
+          ) : null}
+          {onTogglePin ? (
+            <button
+              type="button"
+              className={`panel-pin-btn${pinned ? ' is-pinned' : ''}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onTogglePin();
+              }}
+              title={pinned ? 'Unpin page' : 'Pin page'}
+              aria-label={pinned ? `Unpin page: ${page.pageName}` : `Pin page: ${page.pageName}`}
+              aria-pressed={pinned}
+            >
+              <PagePanelPinIcon pinned={pinned} />
             </button>
           ) : null}
           <button

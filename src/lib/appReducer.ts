@@ -39,8 +39,12 @@ import {
   addLinkedPageToPanels,
   addPageToPanels,
   applyOpenPage,
+  closePagePanel,
   ensureFlexLastPanel,
   getMainSelectionPageFile,
+  getPinnedPageFiles,
+  NO_PANEL_SLOT_TOAST,
+  togglePanelPin,
 } from './pagePanels';
 import { getPersistedGroupIndicesForComponent } from './mdVirtualGroups';
 import { getFirstHighlightedComponentId } from './selectionHighlight';
@@ -303,10 +307,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'OPEN_PAGE': {
       const opened = applyOpenPage(state, action.pageFile);
-      const panels = ensureFlexLastPanel(action.panels ?? opened.panels ?? state.panels);
+      if (opened.blocked) {
+        return { ...state, ...showAppToast(state, NO_PANEL_SLOT_TOAST) };
+      }
+      const { blocked: _blocked, ...openedPatch } = opened;
+      const panels = ensureFlexLastPanel(action.panels ?? openedPatch.panels ?? state.panels);
       const nextState: AppState = {
         ...state,
-        ...opened,
+        ...openedPatch,
         panels,
       };
 
@@ -331,6 +339,22 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       return nextState;
     }
+
+    case 'CLOSE_PAGE_PANEL': {
+      const closed = closePagePanel(state, action.pageFile);
+      return {
+        ...state,
+        ...closed,
+        panels: ensureFlexLastPanel(closed.panels ?? state.panels),
+      };
+    }
+
+    case 'TOGGLE_PANEL_PIN': {
+      return { ...state, ...togglePanelPin(state, action.pageFile) };
+    }
+
+    case 'SHOW_APP_TOAST':
+      return { ...state, ...showAppToast(state, action.message) };
 
     case 'SELECT_COMPONENT': {
       if (state.linkMode) return state;
@@ -445,14 +469,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       if (maxOpenPages === state.maxOpenPages) return state;
       persistMaxOpenPages(maxOpenPages);
       const selectionPage = getMainSelectionPageFile(state);
-      const keepPages =
-        maxOpenPages > 1
-          ? [selectionPage, state.currentPage].filter((pageFile): pageFile is string =>
-              Boolean(pageFile),
-            )
-          : state.currentPage
-            ? [state.currentPage]
-            : [];
+      const keepPages = [
+        ...new Set([
+          ...getPinnedPageFiles(state.panels),
+          ...(maxOpenPages > 1
+            ? [selectionPage, state.currentPage].filter((pageFile): pageFile is string =>
+                Boolean(pageFile),
+              )
+            : state.currentPage
+              ? [state.currentPage]
+              : []),
+        ]),
+      ];
       const panels = enforcePanelLimit(
         state.panels,
         maxOpenPages,
@@ -685,7 +713,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
         return {
           ...nextState,
-          panels: addPageToPanels(nextState.panels, pageFile, state.maxOpenPages),
+          panels:
+            addPageToPanels(nextState.panels, pageFile, state.maxOpenPages) ??
+            nextState.panels,
         };
       }
 
@@ -1263,7 +1293,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         componentId,
         nonce: (state.scrollToComponent?.nonce ?? 0) + 1,
       };
-      const panels = addPageToPanels(state.panels, pageFile, state.maxOpenPages);
+      const addedPanels = addPageToPanels(state.panels, pageFile, state.maxOpenPages);
+      if (addedPanels === null) {
+        return {
+          ...state,
+          ...bumpOutstandingComment(state, action.commentId),
+          ...showAppToast(state, NO_PANEL_SLOT_TOAST),
+        };
+      }
+      const panels = addedPanels;
 
       const base = {
         ...state,
@@ -1307,15 +1345,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       const targetWasOpen = state.panels.some((panel) => panel.pageFile === pageFile);
       const anchorPageFile = action.anchorPageFile ?? state.currentPage;
-      const panels = ensureFlexLastPanel(
+      const rawPanels =
         action.panels ??
-          addLinkedPageToPanels(
-            state.panels,
-            pageFile,
-            anchorPageFile,
-            state.maxOpenPages,
-          ),
-      );
+        addLinkedPageToPanels(
+          state.panels,
+          pageFile,
+          anchorPageFile,
+          state.maxOpenPages,
+        );
+      if (rawPanels === null) {
+        return { ...state, ...showAppToast(state, NO_PANEL_SLOT_TOAST) };
+      }
+      const panels = ensureFlexLastPanel(rawPanels);
 
       const keepCurrentPage =
         anchorPageFile && panels.some((panel) => panel.pageFile === anchorPageFile)
