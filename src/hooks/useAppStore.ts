@@ -75,6 +75,7 @@ import {
   unlockRemoteDocumentDeferred,
   fetchRemoteDocumentLock,
   verifyRemoteDocumentPassword,
+  smartReloadRemoteDocument,
   type DeferredRemoteLoad,
 } from '../lib/remoteProject';
 import {
@@ -1158,11 +1159,11 @@ export function useAppStore() {
 
     if (project.remoteDocId) {
       try {
-        beginRemoteDocumentSession();
-        const result = await loadRemoteDocumentSession(project.remoteDocId);
-        if (result.status === 'password') {
-          const password = sessionExportPasswordRef.current;
-          if (!password) {
+        // For password-encrypted documents, use the full reload path
+        if (project.passwordProtected && !sessionExportPasswordRef.current) {
+          beginRemoteDocumentSession();
+          const result = await loadRemoteDocumentSession(project.remoteDocId);
+          if (result.status === 'password') {
             setPendingUnlock({
               source: 'remote',
               docId: result.docId,
@@ -1172,18 +1173,20 @@ export function useAppStore() {
             });
             return { ok: false, error: 'Enter the document password to reload.' };
           }
-          const load = await unlockRemoteDocumentDeferred(result.docId, password, {
-            id: result.docId,
-            title: result.title,
-            publish_mode: result.publishMode,
-          });
-          dispatch({ type: 'RELOAD_PROJECT', project: load.project });
-          startRemoteBackgroundLoad(load, dispatchRemoteMd, dispatchRemoteImage);
+          dispatch({ type: 'RELOAD_PROJECT', project: result.load.project });
+          startRemoteBackgroundLoad(result.load, dispatchRemoteMd, dispatchRemoteImage);
           void hydrateReadStateRef.current();
           return { ok: true };
         }
-        dispatch({ type: 'RELOAD_PROJECT', project: result.load.project });
-        startRemoteBackgroundLoad(result.load, dispatchRemoteMd, dispatchRemoteImage);
+
+        // Smart reload: only download files changed on the server
+        cancelRemoteBackgroundLoad();
+        const load = await smartReloadRemoteDocument(project);
+        setDirty(false);
+        setSaveStatus('idle');
+        setSaveError(null);
+        dispatch({ type: 'RELOAD_PROJECT', project: load.project });
+        startRemoteBackgroundLoad(load, dispatchRemoteMd, dispatchRemoteImage);
         void hydrateReadStateRef.current();
         return { ok: true };
       } catch (err) {

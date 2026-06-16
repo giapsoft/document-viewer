@@ -28,6 +28,7 @@ import {
   relationsFromRaw,
   relationsStoragePath,
   STORAGE_BUCKET,
+  projectToRawInput,
   type RemoteImageHandler,
   type RemoteDocumentMeta,
 } from './projectBundle';
@@ -1143,6 +1144,322 @@ async function loadRemoteDocumentFromFilesDeferredInner(
     whenImagesReady,
     cancelBackgroundLoad: () => abortController.abort(),
   };
+}
+
+/**
+ * Smart reload: fetch server file list, download only files newer on the server,
+ * and preserve in-memory data for files that haven't changed. This way local
+ * unsaved changes to files the server hasn't touched are kept.
+ */
+export async function smartReloadRemoteDocument(
+  current: LoadedProject,
+): Promise<DeferredRemoteLoad> {
+  const docId = current.remoteDocId;
+  if (!docId) throw new Error('No remote document ID');
+
+  const meta = await fetchRemoteDocumentMeta(docId);
+  const serverEntries = await listRemoteDocEntries(docId);
+
+  if (serverEntries.length === 0) {
+    return emptyDeferredLoad(createStarterRemoteProject(meta, current.relations));
+  }
+
+  // Partition entries into changed (need download) vs unchanged (use in-memory)
+  const changedEntries: RemoteStorageEntry[] = [];
+  const unchangedEntries: RemoteStorageEntry[] = [];
+
+  await mapWithConcurrency(
+    serverEntries,
+    async (entry) => {
+      if (!entry.updatedAt) {
+        // No timestamp — must download
+        changedEntries.push(entry);
+        return;
+      }
+      const cached = await getRemoteCachedFile(entry.path);
+      if (!cached || cached.storageUpdatedAt !== entry.updatedAt) {
+        changedEntries.push(entry);
+      } else {
+        unchangedEntries.push(entry);
+      }
+    },
+    DEFAULT_CONCURRENCY,
+  );
+
+  // Build blobs+hashes: start with unchanged files sourced from IndexedDB cache
+  const allBlobs = new Map<string, Blob>();
+  const allHashes = new Map<string, string>();
+
+  // Load unchanged files from IndexedDB (they're already cached there)
+  await mapWithConcurrency(
+    unchangedEntries,
+    async (entry) => {
+      const cached = await getRemoteCachedFile(entry.path);
+      if (cached) {
+        allBlobs.set(entry.path, cached.blob);
+        allHashes.set(entry.path, cached.hash);
+      } else {
+        // Cache miss despite passing — download as fallback
+        changedEntries.push(entry);
+      }
+    },
+    DEFAULT_CONCURRENCY,
+  );
+
+  // Download changed files (text first, images deferred)
+  const changedText = changedEntries.filter(
+    (entry) => !isRemoteImageStoragePath(entry.path, docId),
+  );
+  const changedImages = changedEntries.filter((entry) =>
+    isRemoteImageStoragePath(entry.path, docId),
+  );
+
+  beginRemoteTextLoad();
+  try {
+    const { meta: metaEntries, pages: pageEntries } =
+      partitionRemoteTextEntries(changedText, docId);
+
+    const metaResult = await downloadRemoteEntries(metaEntries);
+    const pageResult = await downloadRemoteEntries(pageEntries);
+    for (const [p, b] of metaResult.blobs) allBlobs.set(p, b);
+    for (const [p, h] of metaResult.hashes) allHashes.set(p, h);
+    for (const [p, b] of pageResult.blobs) allBlobs.set(p, b);
+    for (const [p, h] of pageResult.hashes) allHashes.set(p, h);
+
+    // --- Build relations from merged data ---
+    // Server-changed meta files win; else fall back to current in-memory relations
+    const relPath = relationsStoragePath(docId);
+    const groupsPath = groupsStoragePath(docId);
+    const commentsPath = commentsStoragePath(docId);
+
+    let relationsMeta: RelationsFile = current.relations;
+    let groups: string[][] | null = null;
+    let comments: RelationsFile['comments'] | null = null;
+
+    if (allBlobs.has(relPath)) {
+      relationsMeta = relationsFromRaw(JSON.parse(await allBlobs.get(relPath)!.text()));
+    }
+    if (allBlobs.has(groupsPath)) {
+      groups = JSON.parse(await allBlobs.get(groupsPath)!.text()) as string[][];
+    }
+    if (allBlobs.has(commentsPath)) {
+      comments = JSON.parse(await allBlobs.get(commentsPath)!.text()) as RelationsFile['comments'];
+    }
+
+    const mergedRelations: RelationsFile = normalizeRelations({
+      ...relationsMeta,
+      groups: groups ?? current.relations.groups ?? [],
+      comments: comments ?? current.relations.comments ?? [],
+    });
+
+    // --- Build page files: server-changed pages win; else extract from current project ---
+    const currentRaw = projectToRawInput(current);
+    const currentPageMap = new Map(
+      currentRaw.pageFiles.map((pf) => [pf.name, pf]),
+    );
+
+    // All page entries from server (both changed and unchanged)
+    const allPageEntries = serverEntries.filter((entry) => {
+      const fileName = parseStorageFileName(entry.path, docId);
+      return fileName != null && isPageFileName(fileName);
+    });
+
+    const pageFiles: { name: string; content: unknown }[] = [];
+    for (const entry of allPageEntries) {
+      const fileName = parseStorageFileName(entry.path, docId)!;
+      if (allBlobs.has(entry.path)) {
+        // Downloaded from server (changed)
+        pageFiles.push({ name: fileName, content: JSON.parse(await allBlobs.get(entry.path)!.text()) });
+      } else {
+        // Unchanged — use current in-memory page
+        const existing = currentPageMap.get(fileName);
+        if (existing) pageFiles.push(existing);
+      }
+    }
+    // Also keep any in-memory pages not on server at all (new pages not yet saved)
+    const serverPageFileNames = new Set(
+      allPageEntries.map((e) => parseStorageFileName(e.path, docId)).filter(Boolean),
+    );
+    for (const pf of currentRaw.pageFiles) {
+      if (!serverPageFileNames.has(pf.name)) pageFiles.push(pf);
+    }
+
+    if (pageFiles.length === 0) {
+      return emptyDeferredLoad(createStarterRemoteProject(meta, mergedRelations));
+    }
+
+    // --- Build md files: server-changed md files win; else extract from current project ---
+    const allMdEntries = serverEntries.filter((entry) => {
+      const fileName = parseStorageFileName(entry.path, docId);
+      return fileName != null && MD_FILE_EXT.test(fileName);
+    });
+
+    // Assemble pages to know which md files are referenced
+    const assembledPages = assembleProject({
+      pageFiles,
+      relations: mergedRelations,
+      stylesPartial: null,
+      imageFiles: [],
+      mdFiles: [],
+    }).pages;
+    const referencedMdNames = referencedMdFileNamesFromPages(assembledPages);
+
+    // Split md entries into already-downloaded vs still-needed
+    const mdToFetch: RemoteStorageEntry[] = [];
+    const mdFiles: { componentId: string; content: string }[] = [];
+
+    // Include unchanged md from current in-memory project
+    for (const [componentId, content] of current.mdFiles.entries()) {
+      const fileName = mdSidecarFileName(componentId);
+      if (!referencedMdNames.has(fileName)) continue;
+      const entry = allMdEntries.find(
+        (e) => parseStorageFileName(e.path, docId) === fileName,
+      );
+      if (!entry) {
+        // not on server — keep local
+        mdFiles.push({ componentId, content });
+      } else if (allBlobs.has(entry.path)) {
+        // downloaded (changed on server)
+        const blob = allBlobs.get(entry.path)!;
+        mdFiles.push({ componentId, content: await blob.text() });
+      } else {
+        // unchanged on server — use in-memory
+        mdFiles.push({ componentId, content });
+      }
+    }
+
+    // Changed md entries that weren't in current project (new from server)
+    for (const entry of allMdEntries) {
+      const fileName = parseStorageFileName(entry.path, docId)!;
+      if (!referencedMdNames.has(fileName)) continue;
+      const componentId = componentIdFromMdFileName(fileName);
+      if (!componentId) continue;
+      if (current.mdFiles.has(componentId)) continue; // handled above
+      if (allBlobs.has(entry.path)) {
+        const blob = allBlobs.get(entry.path)!;
+        mdFiles.push({ componentId, content: await blob.text() });
+      } else {
+        // unchanged on server but not in memory — need to fetch for deferred load
+        mdToFetch.push(entry);
+      }
+    }
+
+    // Build the initial project (no images or pending md yet)
+    const project = assembleLoadedProject(
+      {
+        pageFiles,
+        relations: mergedRelations,
+        stylesPartial: null,
+        imageFiles: [],
+        mdFiles,
+        deferMdWarnings: mdToFetch.length > 0,
+      },
+      {
+        source: 'remote',
+        remoteDocId: docId,
+        remoteTitle: meta.title,
+        folderHandle: null,
+        remoteSync: { fileHashes: new Map(allHashes) },
+        remoteUpdatedAt: meta.updated_at ?? null,
+        remotePublishMode: publishModeFromRow(meta),
+      },
+    );
+
+    // Determine which image entries need loading (changed or not yet in memory)
+    const entryByPath = new Map(serverEntries.map((e) => [e.path, e]));
+    const imageEntries = [...collectReferencedImageNames(project)]
+      .map((name) => entryByPath.get(docsStoragePath(docId, name)))
+      .filter((entry): entry is RemoteStorageEntry => entry !== undefined);
+
+    // Changed images (need download) — include in background fetch
+    // Unchanged images already in current.imageBlobs — inject synchronously via onImage
+    const imagesToFetch: RemoteStorageEntry[] = [];
+    const immediateImages: { name: string; blob: Blob }[] = [];
+    for (const entry of imageEntries) {
+      if (changedImages.some((ci) => ci.path === entry.path)) {
+        imagesToFetch.push(entry);
+      } else {
+        const imgName = imageFileNameFromStoragePath(entry.path, docId);
+        if (imgName) {
+          const existingBlob = current.imageBlobs.get(imgName);
+          if (existingBlob) {
+            immediateImages.push({ name: imgName, blob: existingBlob });
+          } else {
+            imagesToFetch.push(entry);
+          }
+        }
+      }
+    }
+
+    const abortController = new AbortController();
+    let resolveMdDone!: () => void;
+    let resolveImagesDone!: () => void;
+    const whenMdReady = new Promise<void>((resolve) => { resolveMdDone = resolve; });
+    const whenImagesReady = new Promise<void>((resolve) => { resolveImagesDone = resolve; });
+
+    const startMd = (onMd: RemoteMdHandler) => {
+      if (mdToFetch.length === 0 || abortController.signal.aborted) {
+        resolveMdDone();
+        return;
+      }
+      void mapWithConcurrency(
+        mdToFetch,
+        async (entry) => {
+          if (abortController.signal.aborted) return;
+          try {
+            const { blob, hash } = await fetchRemoteStorageBlob(entry.path, entry.updatedAt, {
+              afterText: true,
+            });
+            const fileName = parseStorageFileName(entry.path, docId);
+            const componentId = fileName ? componentIdFromMdFileName(fileName) : null;
+            if (!componentId) return;
+            onMd(componentId, await blob.text(), entry.path, hash);
+          } catch {
+            // skip
+          }
+        },
+        REMOTE_MD_LOAD_CONCURRENCY,
+      ).finally(() => resolveMdDone());
+    };
+
+    const startImages = (onImage: RemoteImageHandler) => {
+      // Inject already-in-memory images immediately
+      for (const { name, blob } of immediateImages) {
+        onImage(name, blob);
+      }
+      if ((imagesToFetch.length === 0) || abortController.signal.aborted) {
+        resolveImagesDone();
+        return;
+      }
+      void mapWithConcurrency(
+        imagesToFetch,
+        async (entry) => {
+          if (abortController.signal.aborted) return;
+          try {
+            const { blob } = await fetchRemoteStorageBlob(entry.path, entry.updatedAt, {
+              afterText: true,
+            });
+            const fileName = imageFileNameFromStoragePath(entry.path, docId);
+            if (fileName) onImage(fileName, blob);
+          } catch {
+            // skip
+          }
+        },
+        REMOTE_IMAGE_LOAD_CONCURRENCY,
+      ).finally(() => resolveImagesDone());
+    };
+
+    return {
+      project,
+      startMd,
+      startImages,
+      whenMdReady,
+      whenImagesReady,
+      cancelBackgroundLoad: () => abortController.abort(),
+    };
+  } finally {
+    endRemoteTextLoad();
+  }
 }
 
 /** Load remote doc: open after text; call `startImages` once project is in state. */
