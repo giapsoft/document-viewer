@@ -195,10 +195,10 @@ export function GroupMembershipDialog({
             <>No component selected.</>
           )}
           {sortedIndices.length > 1 && !linkMode ? (
-            <span className="group-membership-dialog-hint"> Select a list, then hold Ctrl to edit.</span>
+            <span className="group-membership-dialog-hint"> Select a list, then hold Alt to edit.</span>
           ) : null}
           {linkMode ? (
-            <span className="group-membership-dialog-hint"> Hold Ctrl — click components to add or remove.</span>
+            <span className="group-membership-dialog-hint"> Hold Alt — click components to add or remove.</span>
           ) : null}
         </p>
 

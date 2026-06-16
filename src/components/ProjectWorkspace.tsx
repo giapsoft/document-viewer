@@ -11,13 +11,11 @@ import { useUnreadNavigationShortcuts } from '../hooks/useUnreadNavigationShortc
 import { useLinkedListPanelShortcuts } from '../hooks/useLinkedListPanelShortcuts';
 import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
 import { useCtrlCommentLinkHold } from '../hooks/useCtrlCommentLinkHold';
-import { useRemoteStalePoll } from '../hooks/useRemoteStalePoll';
 import { CommentPanel } from './CommentPanel';
 import { Toast } from './Toast';
 import { GroupMembershipDialog } from './GroupMembershipDialog';
 import { activeComments, canOwnComment, resolveCommentAnchorHighlightId } from '../lib/comments';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
-import { isSaveInProgress } from '../lib/saveProject';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelResizeHandle } from './PanelResizeHandle';
 import { usePagePanelResize } from '../hooks/usePagePanelResize';
@@ -104,7 +102,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     saveToLocal,
     saveToRemote,
     importLocalToRemote,
-    checkRemoteDocumentStale,
     deleteRemoteLink,
     closeProject,
     suggestNewPageName,
@@ -464,21 +461,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
   const showShortcutsHint =
     !workspaceShortcutsBlocked && (Boolean(state.selection) || readShortcutsEnabled);
 
-  const autoPullRemoteDocument = useCallback(async () => {
-    if (dirty || state.contentEditorOpen) return;
-    await reloadProject();
-  }, [dirty, state.contentEditorOpen, reloadProject]);
-
-  const remoteStaleOnServer = useRemoteStalePoll(
-    Boolean(project.remoteDocId && project.remoteUpdatedAt) &&
-      !dirty &&
-      !isSaveInProgress(saveStatus),
-    checkRemoteDocumentStale,
-    undefined,
-    project.remoteUpdatedAt,
-    autoPullRemoteDocument,
-  );
-
   const runRemoteSave = useCallback(
     async (
       title?: string,
@@ -583,21 +565,62 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     }
   }
   const sourceLabel = sourceParts.length > 0 ? sourceParts.join(' · ') : 'Unsaved draft';
-  const canReloadFromLocal = Boolean(project.folderHandle && !project.remoteDocId);
-
-  const handleReloadFromLocal = () => {
+  const handleReload = () => {
     if (state.contentEditorOpen) {
       setToolbarError('Close the content editor before reloading.');
       return;
     }
     if (dirty) {
       const proceed = window.confirm(
-        'You have unsaved changes. Reload from disk anyway? Unsaved edits will be lost.',
+        'You have unsaved changes. Reload anyway? Unsaved edits will be lost.',
       );
       if (!proceed) return;
     }
     void runToolbarAction(reloadProject);
   };
+
+  const saveShortcutStateRef = useRef({
+    canSave,
+    contentEditorOpen: state.contentEditorOpen,
+    saveDestinationOpen,
+    remoteDocId: project.remoteDocId,
+    folderHandle: project.folderHandle,
+  });
+  saveShortcutStateRef.current = {
+    canSave,
+    contentEditorOpen: state.contentEditorOpen,
+    saveDestinationOpen,
+    remoteDocId: project.remoteDocId,
+    folderHandle: project.folderHandle,
+  };
+  const runRemoteSaveRef = useRef(runRemoteSave);
+  runRemoteSaveRef.current = runRemoteSave;
+  const saveToLocalRef = useRef(saveToLocal);
+  saveToLocalRef.current = saveToLocal;
+  const runToolbarActionRef = useRef(runToolbarAction);
+  runToolbarActionRef.current = runToolbarAction;
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key !== 's') return;
+      e.preventDefault();
+      const s = saveShortcutStateRef.current;
+      if (!s.canSave || s.contentEditorOpen || s.saveDestinationOpen) return;
+      if (s.remoteDocId) {
+        void runToolbarActionRef.current(() => runRemoteSaveRef.current());
+      } else if (s.folderHandle) {
+        void runToolbarActionRef.current(async () => {
+          const result = await saveToLocalRef.current();
+          if (!result.ok && result.cancelled) return { ok: true };
+          return result.ok ? { ok: true } : { ok: false, error: result.error };
+        });
+      } else {
+        setSaveDestinationOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return (
     <>
@@ -671,21 +694,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               </div>
             )}
 
-          {remoteStaleOnServer && !dirty && project.remoteDocId && (
-            <div className="remote-stale-banner" role="status">
-              <span>
-                A newer version is on the server but could not be loaded automatically.
-              </span>
-              <button
-                type="button"
-                className="remote-stale-banner-btn"
-                onClick={() => void runToolbarAction(reloadProject)}
-                disabled={toolbarLoading}
-              >
-                Reload
-              </button>
-            </div>
-          )}
 
           <div className="workspace-top-bar">
             <WorkspaceTopBar
@@ -709,7 +717,6 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             <ProjectToolbar
               dirty={dirty}
               canSave={canSave}
-              canReloadFromLocal={canReloadFromLocal}
               editLocked={isEditLocked}
               loading={toolbarLoading}
               error={toolbarError}
@@ -717,7 +724,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               saveError={saveError}
               sourceLabel={sourceLabel}
               onSave={handleSave}
-              onReload={handleReloadFromLocal}
+              onReload={handleReload}
               onUnlockEditing={() => {
                 void runToolbarAction(async () => {
                   const result = await requestEditUnlock();

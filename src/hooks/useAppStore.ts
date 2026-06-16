@@ -37,7 +37,7 @@ import {
 import { measurePanelSlotWidth } from '../lib/panelSlotRegistry';
 import { appReducer, initialAppState } from '../lib/appReducer';
 import type { SaveStatus, ExportProtection } from '../lib/saveProject';
-import { pickSaveFolder, saveProjectToFolder, scheduleAutoSave, cancelAutoSave, setSaveStatusListener, isSaveInProgress } from '../lib/saveProject';
+import { pickSaveFolder, saveProjectToFolder, cancelAutoSave, setSaveStatusListener, isSaveInProgress } from '../lib/saveProject';
 import { importImageFromComputer, importImageFromClipboardSource, type ImportImageResult } from '../lib/importImage';
 import { clearPageScrollMemory } from '../lib/pageScrollMemory';
 import {
@@ -79,7 +79,6 @@ import {
 } from '../lib/remoteProject';
 import {
   cancelRemoteAutoSave,
-  scheduleRemoteAutoSave,
   setRemoteSaveStatusListener,
 } from '../lib/remoteAutoSave';
 import { isRemoteVersionStale } from '../lib/remoteConflict';
@@ -336,15 +335,6 @@ export function useAppStore() {
     setSaveError(null);
     if (saveStatusRef.current === 'saved') {
       setSaveStatus('idle');
-    }
-
-    const project = projectRef.current;
-    const editorOpen = appStateRef.current.contentEditorOpen;
-    if (project?.folderHandle && !project.remoteDocId) {
-      scheduleAutoSave(() => runLocalAutoSaveRef.current());
-    }
-    if (project?.remoteDocId && isSupabaseConfigured() && !editorOpen) {
-      scheduleRemoteAutoSave(() => runRemoteAutoSaveRef.current());
     }
   }, []);
 
@@ -1166,10 +1156,7 @@ export function useAppStore() {
       return { ok: false, error: 'No project is open.' };
     }
 
-    if (project.source === 'remote') {
-      if (!project.remoteDocId) {
-        return { ok: false, error: 'Remote document id is missing.' };
-      }
+    if (project.remoteDocId) {
       try {
         beginRemoteDocumentSession();
         const result = await loadRemoteDocumentSession(project.remoteDocId);
@@ -1379,7 +1366,7 @@ export function useAppStore() {
     if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
       return {
         ok: false,
-        error: 'Release Ctrl to finish linking before saving.',
+        error: 'Release Alt to finish linking before saving.',
       };
     }
     if (appStateRef.current.contentEditorOpen) {
@@ -1467,7 +1454,7 @@ export function useAppStore() {
     if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
       return {
         ok: false,
-        error: 'Release Ctrl to finish linking before saving.',
+        error: 'Release Alt to finish linking before saving.',
       };
     }
     if (appStateRef.current.contentEditorOpen) {
@@ -1571,7 +1558,7 @@ export function useAppStore() {
                 : project.remoteHasEditLock,
         });
         projectRef.current = nextProject;
-        dispatch({ type: 'RELOAD_PROJECT', project: nextProject });
+        dispatch({ type: 'PATCH_PROJECT', project: nextProject });
         setDocIdInUrl(project.remoteDocId);
         setDirty(false);
         setSaveStatus('saved');
@@ -1680,7 +1667,7 @@ export function useAppStore() {
         };
       }
       if (appStateRef.current.commentLinkCtrlActive || appStateRef.current.linkCtrlActive) {
-        return { ok: false, error: 'Release Ctrl to finish linking before importing.' };
+        return { ok: false, error: 'Release Alt to finish linking before importing.' };
       }
       if (appStateRef.current.contentEditorOpen) {
         return { ok: false, error: 'Close the content editor before importing.' };

@@ -62,9 +62,9 @@ Set a **username** (1–20 alphanumeric characters) to use comments and read/unr
 **Edit links in the UI:**
 
 1. Select a component (optional).
-2. **Hold Ctrl** — link mode starts; a preview shows current groups.
+2. **Hold Alt** — link mode starts; a preview shows current groups.
 3. Click components to add or remove them from the active group.
-4. **Release Ctrl** to save changes (or discard if unchanged).
+4. **Release Alt** to save changes (or discard if unchanged).
 
 Rules:
 
@@ -109,7 +109,7 @@ Open the **comment panel** and set your username.
 - Add a **root comment** or **reply** to an existing thread.
 - **Edit or delete** only your own comments (matched by display name).
 - **Anchor a comment** to a whole component or a **Markdown text range**:
-  - Select your comment, hold **Ctrl**, click a component or drag-select text in Markdown, release Ctrl to save the anchor.
+  - Select your comment, hold **Alt**, click a component or drag-select text in Markdown, release Alt to save the anchor.
 - Click a comment to **scroll** to its anchor (opens the target page if needed).
 
 ---
@@ -151,7 +151,7 @@ Password-protected exports store `lock.json` + `payload.enc` instead of plaintex
 | `Alt+L` | Toggle Linked lists panel (when a component is selected) |
 | `Enter` | Toggle read/unread |
 | `U` / `Shift+U` | Next / previous unread |
-| **Ctrl** (hold) | Component link mode or comment anchor mode |
+| **Alt** (hold) | Component link mode or comment anchor mode |
 | `Escape` | Close dialogs |
 
 Shortcuts are disabled while typing in inputs, in link mode, or in the full-screen editor.

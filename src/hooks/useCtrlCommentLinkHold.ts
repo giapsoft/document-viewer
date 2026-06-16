@@ -37,16 +37,22 @@ export function useCtrlCommentLinkHold({
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Control' || e.repeat) return;
-      if (isTypingTarget(e.target)) return;
-      if (ctrlActiveRef.current && !heldViaCtrlRef.current) return;
-
-      heldViaCtrlRef.current = true;
-      setCtrlActive(true);
+      if (e.key === 'Alt' && !e.repeat) {
+        if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+        if (isTypingTarget(e.target)) return;
+        if (ctrlActiveRef.current && !heldViaCtrlRef.current) return;
+        heldViaCtrlRef.current = true;
+        setCtrlActive(true);
+        return;
+      }
+      // Any other key pressed while Alt is held → cancel the session
+      if (heldViaCtrlRef.current && e.key !== 'Alt') {
+        endSession();
+      }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== 'Control') return;
+      if (e.key !== 'Alt') return;
       endSession();
     };
 

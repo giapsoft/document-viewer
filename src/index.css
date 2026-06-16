@@ -1488,6 +1488,12 @@ code {
   cursor: not-allowed;
 }
 
+.project-folder-btn-close {
+  padding: 0.35rem 0.6rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .project-folder-error {
   font-size: 0.78rem;
   color: #dc3545;
@@ -2243,7 +2249,6 @@ body.page-panel-resize-active .page-panel {
   position: relative;
   margin-bottom: 0.5rem;
   padding: 0.5rem 0.65rem;
-  padding-top: 1.75rem;
   border-radius: 6px;
   border: 2px solid transparent;
   transition: opacity 0.15s ease;
