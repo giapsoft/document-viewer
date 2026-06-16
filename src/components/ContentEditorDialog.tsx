@@ -174,14 +174,23 @@ export function ContentEditorDialog({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !actionImagePicker && !confirmDelete) {
+      if (actionImagePicker || confirmDelete) return;
+
+      if (event.key === 'Escape') {
         event.stopPropagation();
         handleCancel();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleDone();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [actionImagePicker, confirmDelete, handleCancel]);
+  }, [actionImagePicker, confirmDelete, handleCancel, handleDone]);
 
   useEffect(() => {
     if (hasTextEditor) {
@@ -251,8 +260,10 @@ export function ContentEditorDialog({
               type="button"
               className="content-editor-done-btn"
               onClick={handleDone}
+              title="Save and close (Ctrl+S)"
             >
-              Done
+              <span>Done</span>
+              <kbd className="content-editor-done-key">Ctrl+S</kbd>
             </button>
           </div>
         </header>

@@ -3060,6 +3060,9 @@ body.page-panel-resize-active .page-panel {
 }
 
 .content-editor-done-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   height: 2rem;
   padding: 0 0.9rem;
   border: 1px solid #0d6efd;
@@ -3070,6 +3073,17 @@ body.page-panel-resize-active .page-panel {
   font-weight: 600;
   color: #fff;
   cursor: pointer;
+}
+
+.content-editor-done-key {
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  line-height: 1.2;
 }
 
 .content-editor-done-btn:hover {
