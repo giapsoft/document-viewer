@@ -688,6 +688,13 @@ export function useAppStore() {
     [dispatch],
   );
 
+  const reorderPanels = useCallback(
+    (orderedPageFiles: string[]) => {
+      dispatch({ type: 'REORDER_PANELS', orderedPageFiles });
+    },
+    [dispatch],
+  );
+
   const resizePanelSplit = useCallback(
     (
       leftPageFile: string,
@@ -2075,6 +2082,7 @@ export function useAppStore() {
     jumpToComponent,
     clearSelection,
     setMaxOpenPages,
+    reorderPanels,
     resizePanelSplit,
     setPanelWidths,
     updateComponent,

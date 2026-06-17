@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import type {
   AppStyles,
   CommentAnchor,
@@ -287,6 +287,19 @@ function PagePanelPinIcon({ pinned }: { pinned: boolean }) {
         d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"
         fill={pinned ? 'currentColor' : 'none'}
       />
+    </svg>
+  );
+}
+
+function PagePanelDragHandleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="currentColor">
+      <circle cx="9" cy="6" r="1.5" />
+      <circle cx="9" cy="12" r="1.5" />
+      <circle cx="9" cy="18" r="1.5" />
+      <circle cx="15" cy="6" r="1.5" />
+      <circle cx="15" cy="12" r="1.5" />
+      <circle cx="15" cy="18" r="1.5" />
     </svg>
   );
 }
@@ -750,6 +763,9 @@ interface PagePanelProps {
   pendingImageNames?: ReadonlySet<string>;
   pendingMdComponentIds?: ReadonlySet<string>;
   pinned?: boolean;
+  canReorder?: boolean;
+  onPanelDragStart?: (event: DragEvent<HTMLButtonElement>) => void;
+  onPanelDragEnd?: () => void;
   onTogglePin?: () => void;
   onClose: () => void;
   onSelect: (componentId: string, pageFile: string) => void;
@@ -801,6 +817,9 @@ export function PagePanel({
   pendingImageNames,
   pendingMdComponentIds,
   pinned = false,
+  canReorder = false,
+  onPanelDragStart,
+  onPanelDragEnd,
   onTogglePin,
   onClose,
   onSelect,
@@ -1070,11 +1089,24 @@ export function PagePanel({
   return (
     <div
       ref={panelRef}
-      className={`page-panel expanded ${isCurrent ? 'current' : ''}`}
+      className={`page-panel expanded${isCurrent ? ' current' : ''}`}
       data-page={pageFile}
     >
       <div className="page-panel-header">
         <div className="page-panel-header-leading">
+          {canReorder ? (
+            <button
+              type="button"
+              className="page-panel-drag-handle"
+              draggable
+              title="Drag to reorder"
+              aria-label={`Reorder ${page.pageName}`}
+              onDragStart={onPanelDragStart}
+              onDragEnd={onPanelDragEnd}
+            >
+              <PagePanelDragHandleIcon />
+            </button>
+          ) : null}
           <span className="page-panel-title">{panelTitle}</span>
         </div>
         <div className="page-panel-header-actions">

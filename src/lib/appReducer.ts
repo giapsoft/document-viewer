@@ -44,6 +44,7 @@ import {
   getMainSelectionPageFile,
   getPinnedPageFiles,
   NO_PANEL_SLOT_TOAST,
+  reorderPanelsByPageFiles,
   togglePanelPin,
 } from './pagePanels';
 import { getPersistedGroupIndicesForComponent } from './mdVirtualGroups';
@@ -524,8 +525,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, panels };
     }
 
-    case 'REORDER_PANELS':
-      return state;
+    case 'REORDER_PANELS': {
+      const reordered = reorderPanelsByPageFiles(state.panels, action.orderedPageFiles);
+      if (!reordered) return state;
+      return { ...state, panels: ensureFlexLastPanel(reordered) };
+    }
 
     case 'REORDER_PAGES': {
       if (!state.project) return state;

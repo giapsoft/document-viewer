@@ -178,6 +178,21 @@ export function ensureFlexLastPanel(panels: PanelState[]): PanelState[] {
   });
 }
 
+export function reorderPanelsByPageFiles(
+  panels: PanelState[],
+  orderedPageFiles: string[],
+): PanelState[] | null {
+  if (orderedPageFiles.length !== panels.length) return null;
+  const byFile = new Map(panels.map((panel) => [panel.pageFile, panel]));
+  const next: PanelState[] = [];
+  for (const pageFile of orderedPageFiles) {
+    const panel = byFile.get(pageFile);
+    if (!panel) return null;
+    next.push(panel);
+  }
+  return next;
+}
+
 export function fixedPanelWidthForCount(trackWidth: number, pageCount: number): number {
   if (pageCount <= 1) return 0;
   const handles = Math.max(0, pageCount - 1) * PANEL_RESIZE_HANDLE_WIDTH;

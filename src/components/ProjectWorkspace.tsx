@@ -10,6 +10,7 @@ import { useSelectionNavigationShortcuts } from '../hooks/useSelectionNavigation
 import { useUnreadNavigationShortcuts } from '../hooks/useUnreadNavigationShortcuts';
 import { useLinkedListPanelShortcuts } from '../hooks/useLinkedListPanelShortcuts';
 import { useSidebarShortcuts } from '../hooks/useSidebarShortcuts';
+import { usePagePanelReorder } from '../hooks/usePagePanelReorder';
 import { useCtrlLinkModeHold } from '../hooks/useCtrlLinkModeHold';
 import { useCtrlCommentLinkHold } from '../hooks/useCtrlCommentLinkHold';
 import { useMdLinkHold } from '../hooks/useMdLinkHold';
@@ -67,6 +68,7 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     jumpToComponent,
     clearSelection,
     setMaxOpenPages,
+    reorderPanels,
     resizePanelSplit,
     updateComponent,
     updateMdContent,
@@ -493,6 +495,23 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     () => new Set(state.panels.map((panel) => panel.pageFile)),
     [state.panels],
   );
+  const openPanelPageFiles = useMemo(
+    () => state.panels.map((panel) => panel.pageFile),
+    [state.panels],
+  );
+  const {
+    canReorder: canReorderPanels,
+    dragIndex: dragPanelIndex,
+    dropIndex: dropPanelIndex,
+    handleDragStart: handlePanelDragStart,
+    handleDragOver: handlePanelDragOver,
+    handleDrop: handlePanelDrop,
+    handleDragEnd: handlePanelDragEnd,
+    handleDragLeave: handlePanelDragLeave,
+  } = usePagePanelReorder({
+    panelPageFiles: openPanelPageFiles,
+    onReorder: reorderPanels,
+  });
   const highlightedPageFiles = useMemo(() => {
     const files = new Set<string>();
     if (!state.selection) return files;
@@ -869,13 +888,21 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
               const nextPageMeta = nextPanel
                 ? project.pages.find((p) => p.fileName === nextPanel.pageFile)
                 : null;
+              const isPanelDragging = dragPanelIndex === panelIndex;
+              const isPanelDropTarget =
+                dropPanelIndex === panelIndex &&
+                dragPanelIndex !== null &&
+                dragPanelIndex !== panelIndex;
               return (
                 <Fragment key={panel.pageFile}>
                   <div
                     ref={(el) => registerPanelSlot(panel.pageFile, el)}
-                    className={`page-panel-slot${isFlexSlot ? ' page-panel-slot-fill' : ''}${!isFlexSlot && widthPx != null ? ' page-panel-slot-sized' : ''}`}
+                    className={`page-panel-slot${isFlexSlot ? ' page-panel-slot-fill' : ''}${!isFlexSlot && widthPx != null ? ' page-panel-slot-sized' : ''}${isPanelDragging ? ' page-panel-slot-dragging' : ''}${isPanelDropTarget ? ' page-panel-slot-drop-target' : ''}`}
                     style={!isFlexSlot && widthPx != null ? { width: widthPx } : undefined}
                     data-page={panel.pageFile}
+                    onDragOver={(event) => handlePanelDragOver(event, panelIndex)}
+                    onDrop={(event) => handlePanelDrop(event, panelIndex)}
+                    onDragLeave={() => handlePanelDragLeave(panelIndex)}
                   >
                     <PagePanel
                       pageFile={panel.pageFile}
@@ -887,6 +914,9 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
                       pendingImageNames={pendingRemoteImages}
                       pendingMdComponentIds={pendingRemoteMd}
                       pinned={panel.pinned ?? false}
+                      canReorder={canReorderPanels}
+                      onPanelDragStart={(event) => handlePanelDragStart(event, panelIndex)}
+                      onPanelDragEnd={handlePanelDragEnd}
                       onTogglePin={() => togglePanelPin(panel.pageFile)}
                       onClose={() => closePagePanel(panel.pageFile)}
                       onSelect={handleComponentClick}
