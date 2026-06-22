@@ -221,6 +221,13 @@ function hasPlaintextRemoteContent(entries: RemoteStorageEntry[], docId: string)
   });
 }
 
+function hasReadonlyRemoteContent(entries: RemoteStorageEntry[], docId: string): boolean {
+  return (
+    entries.some((entry) => entry.path === publicSnapshotStoragePath(docId)) ||
+    hasPlaintextRemoteContent(entries, docId)
+  );
+}
+
 async function fetchRemoteDocumentMeta(docId: string): Promise<RemoteDocumentRow> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
@@ -660,14 +667,22 @@ async function listRemoteDocEntries(docId: string): Promise<RemoteStorageEntry[]
 
 let remoteTextLoadDone: Promise<void> = Promise.resolve();
 let finishRemoteTextLoad: (() => void) | null = null;
+let remoteTextLoadGeneration = 0;
 
-function beginRemoteTextLoad(): void {
+function beginRemoteTextLoad(): number {
+  const generation = ++remoteTextLoadGeneration;
   remoteTextLoadDone = new Promise((resolve) => {
-    finishRemoteTextLoad = resolve;
+    finishRemoteTextLoad = () => {
+      if (generation === remoteTextLoadGeneration) {
+        resolve();
+      }
+    };
   });
+  return generation;
 }
 
-function endRemoteTextLoad(): void {
+function endRemoteTextLoad(generation: number): void {
+  if (generation !== remoteTextLoadGeneration) return;
   finishRemoteTextLoad?.();
   finishRemoteTextLoad = null;
 }
@@ -1009,11 +1024,11 @@ async function loadRemoteDocumentFromFilesDeferred(
   entries: RemoteStorageEntry[],
 ): Promise<DeferredRemoteLoad> {
   const docId = meta.id;
-  beginRemoteTextLoad();
+  const textLoadGeneration = beginRemoteTextLoad();
   try {
     return await loadRemoteDocumentFromFilesDeferredInner(meta, entries, docId);
   } finally {
-    endRemoteTextLoad();
+    endRemoteTextLoad(textLoadGeneration);
   }
 }
 
@@ -1214,7 +1229,7 @@ export async function smartReloadRemoteDocument(
     isRemoteImageStoragePath(entry.path, docId),
   );
 
-  beginRemoteTextLoad();
+  const textLoadGeneration = beginRemoteTextLoad();
   try {
     const { meta: metaEntries, pages: pageEntries } =
       partitionRemoteTextEntries(changedText, docId);
@@ -1458,7 +1473,7 @@ export async function smartReloadRemoteDocument(
       cancelBackgroundLoad: () => abortController.abort(),
     };
   } finally {
-    endRemoteTextLoad();
+    endRemoteTextLoad(textLoadGeneration);
   }
 }
 
@@ -1475,8 +1490,10 @@ export async function loadRemoteDocumentDeferred(docId: string): Promise<RemoteD
   const publishMode = publishModeFromRow(meta);
   const passwordProtected = remotePasswordProtectedFromRow(meta, lock);
   const hasEditLock = lock != null;
+  const readonlyAllowed = allowsReadonlyPasswordAccess(publishMode, passwordProtected);
+  const hasReadonlyContent = hasReadonlyRemoteContent(entries, docId);
 
-  if (allowsReadonlyPasswordAccess(publishMode, passwordProtected)) {
+  if (readonlyAllowed && hasReadonlyContent) {
     const load = await loadReadonlyPasswordDeferred(meta, entries);
     return {
       status: 'ready',
@@ -1487,7 +1504,11 @@ export async function loadRemoteDocumentDeferred(docId: string): Promise<RemoteD
     };
   }
 
-  if (lock && (requiresPasswordToOpen(publishMode, passwordProtected) || passwordProtected)) {
+  if (
+    lock &&
+    (requiresPasswordToOpen(publishMode, passwordProtected) ||
+      (passwordProtected && (!readonlyAllowed || !hasReadonlyContent)))
+  ) {
     return {
       status: 'password',
       docId,

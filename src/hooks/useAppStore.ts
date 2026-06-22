@@ -87,8 +87,8 @@ import { isRemoteVersionStale } from '../lib/remoteConflict';
 import { DEFAULT_PUBLISH_MODE } from '../lib/publishMode';
 import {
   defaultRemoteTitle,
-  collectReferencedImageNames,
-  collectReferencedMdComponentIds,
+  collectPendingRemoteImageNames,
+  collectPendingRemoteMdComponentIds,
   findImageReferences,
   formatImageDeleteBlockedMessage,
 } from '../lib/projectBundle';
@@ -210,6 +210,7 @@ export function useAppStore() {
     cancel: () => void;
     done: Promise<void>;
   } | null>(null);
+  const remoteDocLoadGenerationRef = useRef(0);
 
   projectRef.current = state.project;
   appStateRef.current = state;
@@ -404,8 +405,8 @@ export function useAppStore() {
       onImage: (filename: string, blob: Blob) => void,
     ) => {
       cancelRemoteBackgroundLoad();
-      setPendingRemoteMd(collectReferencedMdComponentIds(load.project));
-      setPendingRemoteImages(collectReferencedImageNames(load.project));
+      setPendingRemoteMd(collectPendingRemoteMdComponentIds(load.project));
+      setPendingRemoteImages(collectPendingRemoteImageNames(load.project));
       const cancel = load.cancelBackgroundLoad;
       remoteBackgroundLoadRef.current = {
         cancel,
@@ -1798,16 +1799,25 @@ export function useAppStore() {
     }
   }, []);
 
+  const cancelPendingRemoteDocLoad = useCallback(() => {
+    remoteDocLoadGenerationRef.current += 1;
+    cancelRemoteBackgroundLoad();
+  }, [cancelRemoteBackgroundLoad]);
+
   const loadRemoteDoc = useCallback(
     async (docId: string): Promise<PageActionResult> => {
       if (!isSupabaseConfigured()) {
         return { ok: false, error: 'Remote storage is not available on this site.' };
       }
+      const generation = ++remoteDocLoadGenerationRef.current;
       try {
         beginRemoteDocumentSession();
         sessionExportPasswordRef.current = null;
         setEditUnlocked(false);
         const result = await loadRemoteDocumentSession(docId);
+        if (generation !== remoteDocLoadGenerationRef.current) {
+          return { ok: true };
+        }
         if (result.status === 'password') {
           setPendingUnlock({
             source: 'remote',
@@ -1822,6 +1832,9 @@ export function useAppStore() {
         applyRemoteDocumentLoad(result.load);
         return { ok: true };
       } catch (err) {
+        if (generation !== remoteDocLoadGenerationRef.current) {
+          return { ok: true };
+        }
         return {
           ok: false,
           error: err instanceof Error ? err.message : 'Could not load remote document.',
@@ -2063,6 +2076,7 @@ export function useAppStore() {
     closeProject,
     loadRemoteDoc,
     loadRemoteDocForWelcome,
+    cancelPendingRemoteDocLoad,
     loadBundledHelp,
     loadBundledHelpForWelcome,
     saveToLocal,

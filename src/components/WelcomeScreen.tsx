@@ -12,6 +12,7 @@ interface WelcomeScreenProps {
   onLoaded: (project: import('../types').LoadedProject) => void;
   onCreateNewDocument: () => void;
   onLoadRemoteDoc: (docId: string) => Promise<{ ok: boolean; error?: string }>;
+  onCancelRemoteDocLoad?: () => void;
   onLoadBundledHelp: (pageFile?: string | null) => Promise<{ ok: boolean; error?: string }>;
   onPickFolder: () => Promise<{ ok: boolean; error?: string }>;
 }
@@ -31,6 +32,7 @@ function formatUpdatedAt(value: string): string {
 export function WelcomeScreen({
   onCreateNewDocument,
   onLoadRemoteDoc,
+  onCancelRemoteDocLoad,
   onLoadBundledHelp,
   onPickFolder,
 }: WelcomeScreenProps) {
@@ -61,6 +63,9 @@ export function WelcomeScreen({
   const onLoadRemoteDocRef = useRef(onLoadRemoteDoc);
   onLoadRemoteDocRef.current = onLoadRemoteDoc;
 
+  const onCancelRemoteDocLoadRef = useRef(onCancelRemoteDocLoad);
+  onCancelRemoteDocLoadRef.current = onCancelRemoteDocLoad;
+
   const onLoadBundledHelpRef = useRef(onLoadBundledHelp);
   onLoadBundledHelpRef.current = onLoadBundledHelp;
 
@@ -78,10 +83,15 @@ export function WelcomeScreen({
           setError(result.error ?? 'Could not open document from URL');
         }
         setLoading(false);
+      }).catch(() => {
+        if (cancelled) return;
+        setError('Could not open document from URL');
+        setLoading(false);
       });
 
       return () => {
         cancelled = true;
+        onCancelRemoteDocLoadRef.current?.();
       };
     }
 

@@ -14,6 +14,7 @@ function App() {
           onLoaded={store.setProject}
           onCreateNewDocument={store.createNewDocument}
           onLoadRemoteDoc={store.loadRemoteDocForWelcome}
+          onCancelRemoteDocLoad={store.cancelPendingRemoteDocLoad}
           onLoadBundledHelp={store.loadBundledHelpForWelcome}
           onPickFolder={store.selectProjectFolder}
         />

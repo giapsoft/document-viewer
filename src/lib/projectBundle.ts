@@ -170,6 +170,24 @@ export function collectReferencedMdComponentIds(project: LoadedProject): Set<str
   return ids;
 }
 
+/** Markdown sidecars still missing from an in-memory project (remote background load). */
+export function collectPendingRemoteMdComponentIds(project: LoadedProject): Set<string> {
+  const ids = new Set<string>();
+  for (const componentId of collectReferencedMdComponentIds(project)) {
+    if (!project.mdFiles.has(componentId)) ids.add(componentId);
+  }
+  return ids;
+}
+
+/** Image files still missing from an in-memory project (remote background load). */
+export function collectPendingRemoteImageNames(project: LoadedProject): Set<string> {
+  const names = new Set<string>();
+  for (const name of collectReferencedImageNames(project)) {
+    if (!project.imageBlobs.has(name)) names.add(name);
+  }
+  return names;
+}
+
 export function collectReferencedMdFiles(project: LoadedProject): Map<string, string> {
   const files = new Map<string, string>();
   for (const page of project.pages) {
