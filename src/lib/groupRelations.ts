@@ -168,6 +168,40 @@ export function removeGroupAtIndex(groups: string[][], groupIndex: number): stri
   return next;
 }
 
+export function reorderGroupMemberList(
+  memberIds: string[],
+  fromIndex: number,
+  toIndex: number,
+): string[] {
+  if (
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= memberIds.length ||
+    toIndex >= memberIds.length ||
+    fromIndex === toIndex
+  ) {
+    return memberIds;
+  }
+  const next = [...memberIds];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+export function reorderGroupMembersAtIndex(
+  groups: string[][],
+  groupIndex: number,
+  fromIndex: number,
+  toIndex: number,
+): string[][] {
+  if (groupIndex < 0 || groupIndex >= groups.length) return cloneGroups(groups);
+  const next = cloneGroups(groups);
+  const group = next[groupIndex];
+  if (!group) return next;
+  next[groupIndex] = reorderGroupMemberList(group, fromIndex, toIndex);
+  return next;
+}
+
 export function renameComponentInGroups(
   groups: string[][],
   oldId: string,

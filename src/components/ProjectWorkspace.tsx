@@ -41,6 +41,7 @@ import { getAdjacentComponentId } from '../lib/componentNavigation';
 import { findComponent } from '../lib/projectMutations';
 import { getGroupIndicesForComponent } from '../lib/groupRelations';
 import { getDisplayGroups, getPersistedGroupIndicesForComponent } from '../lib/mdVirtualGroups';
+import { exportGroupToFolder } from '../lib/exportGroupMarkdown';
 
 const APP_TOAST_MS = 2000;
 
@@ -100,6 +101,8 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
     deleteComment,
     deleteActiveGroup,
     removeComponentFromGroupAtIndex,
+    reorderGroupMembers,
+    showAppToast,
     toggleLinkComponent,
     goBackSelection,
     goNextSelection,
@@ -183,6 +186,19 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
       }
     },
     [state.linkMode, setLinkTargetGroupIndex],
+  );
+
+  const handleExportGroup = useCallback(
+    async (groupIndex: number, memberIds: string[]) => {
+      const result = await exportGroupToFolder(project, memberIds, groupIndex);
+      if (result.ok) {
+        showAppToast(`Exported ${result.fileName} to ${result.folderName}`);
+        return;
+      }
+      if ('cancelled' in result && result.cancelled) return;
+      showAppToast('error' in result ? result.error : 'Export failed.');
+    },
+    [project, showAppToast],
   );
 
   const panelGroups =
@@ -761,10 +777,14 @@ export function ProjectWorkspace({ store, supabaseReady: remoteStorageReady }: P
             groupIndices={panelGroupIndices}
             activeGroupIndex={panelActiveGroupIndex}
             linkMode={state.linkMode}
+            canReorder={!isEditLocked}
+            canExport
             onSelectGroup={handleSelectGroupInPanel}
             onRemoveMember={(groupIndex, componentId) => {
               removeComponentFromGroupAtIndex(componentId, groupIndex);
             }}
+            onReorderMember={reorderGroupMembers}
+            onExportGroup={handleExportGroup}
             onNavigateToComponent={jumpToComponent}
             onClose={closeGroupPanel}
           />

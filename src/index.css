@@ -905,9 +905,16 @@ code {
   box-shadow: inset 0 0 0 1px rgba(13, 110, 253, 0.12);
 }
 
+.group-membership-section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
 .group-membership-section-title-btn {
   display: block;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
   padding: 0;
   border: none;
@@ -929,6 +936,28 @@ code {
   color: #0d6efd;
 }
 
+.group-membership-export-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  background: #fff;
+  color: #495057;
+  cursor: pointer;
+}
+
+.group-membership-export-btn:hover {
+  border-color: #9ec5fe;
+  color: #0d6efd;
+  background: #f8fbff;
+}
+
 .group-membership-members {
   display: flex;
   flex-direction: column;
@@ -939,11 +968,49 @@ code {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
-  gap: 0.35rem;
+  gap: 0;
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid #ced4da;
   background: #fff;
+}
+
+.group-member-tile:has(.group-member-tile-drag-handle) {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.group-member-tile-dragging {
+  opacity: 0.55;
+}
+
+.group-member-tile-drop-target {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+.group-member-tile-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  padding: 0;
+  border: none;
+  border-right: 1px solid #e9ecef;
+  background: #f8f9fa;
+  color: #6c757d;
+  font-size: 0.68rem;
+  line-height: 1;
+  letter-spacing: -0.15em;
+  cursor: grab;
+}
+
+.group-member-tile-drag-handle:active {
+  cursor: grabbing;
+}
+
+.group-member-tile-drag-handle:hover {
+  background: #e9ecef;
+  color: #495057;
 }
 
 .group-member-tile-selected {

@@ -273,6 +273,7 @@ export type AppAction =
   | { type: 'END_LINK_SESSION' }
   | { type: 'DELETE_ACTIVE_GROUP' }
   | { type: 'REMOVE_COMPONENT_FROM_GROUP'; componentId: string; groupIndex: number }
+  | { type: 'REORDER_GROUP_MEMBERS'; groupIndex: number; fromIndex: number; toIndex: number }
   | { type: 'TOGGLE_LINK_COMPONENT'; componentId: string; pageFile: string }
   | { type: 'GO_BACK_SELECTION' }
   | { type: 'GO_NEXT_SELECTION' }

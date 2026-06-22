@@ -20,6 +20,8 @@ import {
   groupsEqual,
   canAddComponentToGroupByPageLimit,
   LINK_GROUP_MAX_PAGES_TOAST,
+  reorderGroupMembersAtIndex,
+  reorderGroupMemberList,
 } from './groupRelations';
 import {
   appendSelectionHistory,
@@ -900,6 +902,41 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             };
           }
         }
+      }
+
+      return nextState;
+    }
+
+    case 'REORDER_GROUP_MEMBERS': {
+      if (!state.project) return state;
+
+      const { groupIndex, fromIndex, toIndex } = action;
+      const groups = state.project.relations.groups;
+      if (groupIndex < 0 || groupIndex >= groups.length) return state;
+
+      const group = groups[groupIndex];
+      if (!group) return state;
+      const nextGroup = reorderGroupMemberList(group, fromIndex, toIndex);
+      if (nextGroup === group) return state;
+
+      const reordered = reorderGroupMembersAtIndex(groups, groupIndex, fromIndex, toIndex);
+
+      const project = rebuildProject({
+        ...state.project,
+        relations: withRelationsGroups(state.project.relations, reordered),
+      });
+
+      let nextState: AppState = { ...state, project };
+
+      if (state.selection) {
+        const selectedId = state.selection.componentId;
+        nextState = {
+          ...nextState,
+          selection: {
+            ...state.selection,
+            matchingGroupIndices: getGroupIndicesForComponent(reordered, selectedId),
+          },
+        };
       }
 
       return nextState;

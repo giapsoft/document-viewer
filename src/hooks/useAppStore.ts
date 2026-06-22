@@ -145,6 +145,7 @@ const DIRTY_ACTIONS = new Set<AppAction['type']>([
   'SET_LINK_MODE',
   'DELETE_ACTIVE_GROUP',
   'REMOVE_COMPONENT_FROM_GROUP',
+  'REORDER_GROUP_MEMBERS',
   'TOGGLE_LINK_COMPONENT',
   'CREATE_PAGE',
   'RENAME_PAGE',
@@ -849,6 +850,17 @@ export function useAppStore() {
     },
     [dispatch],
   );
+
+  const reorderGroupMembers = useCallback(
+    (groupIndex: number, fromIndex: number, toIndex: number) => {
+      dispatch({ type: 'REORDER_GROUP_MEMBERS', groupIndex, fromIndex, toIndex });
+    },
+    [dispatch],
+  );
+
+  const showAppToast = useCallback((message: string) => {
+    dispatch({ type: 'SHOW_APP_TOAST', message });
+  }, [dispatch]);
 
   const toggleLinkComponent = useCallback(
     (componentId: string, pageFile: string) => {
@@ -2132,6 +2144,8 @@ export function useAppStore() {
     deleteComment,
     deleteActiveGroup,
     removeComponentFromGroupAtIndex,
+    reorderGroupMembers,
+    showAppToast,
     toggleLinkComponent,
     goBackSelection,
     goNextSelection,
